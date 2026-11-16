@@ -13,11 +13,12 @@ class CalibrationData {
     bool load(const uint8_t *bytes, size_t length);
     bool valid() const { return valid_; }
     uint16_t crc() const { return crc_; }
+    uint16_t gainWord(unsigned channel) const { return channel < 2 ? gains_[channel] : 0; } // As stored.
     bool offsetCompare(unsigned channel, unsigned range, int position, uint16_t &compare) const;
     // The factory's 7 compare nodes of a channel and range 0..10 (row 11 duplicates range 10 and is
     // never used).
     bool offsetRow(unsigned channel, unsigned range, uint16_t (&row)[7]) const;
-    float displayGain(unsigned channel) const;
+    double displayGain(unsigned channel) const; // The gain word / 100; unwritten (0): the factory default 1.20.
     // The factory transfer of a channel at a V/div and analog position. displayGain (absolute, as the
     // factory's 1..1.99; 0: this record's calibration gain) changes voltsPerCode only: the ADC zero
     // code at the offset PWM of that position stays the calibration gain's.

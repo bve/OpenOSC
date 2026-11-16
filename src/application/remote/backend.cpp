@@ -182,5 +182,10 @@ bool InstrumentBackend::performance(PerformanceSnapshot &p) const {
     return true;
 }
 bool InstrumentBackend::memory(MemorySnapshot &m) const { return application_.uiReady_ && GuiHeap::read(m); }
+bool InstrumentBackend::factoryCalibration(FactoryCalibration &f) const {
+    const auto &factory = application_.data_.scopeCalibration().factory();
+    f = {factory.valid(), factory.crc(), {factory.gainWord(0), factory.gainWord(1)}};
+    return true;
+}
 const char *InstrumentBackend::version() const { return OPENOSC_VERSION; }
 } // namespace openosc

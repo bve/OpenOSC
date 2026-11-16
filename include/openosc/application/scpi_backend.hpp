@@ -47,6 +47,7 @@ public:
     bool remote(bool) override;
     bool performance(PerformanceSnapshot &) const override;
     bool memory(MemorySnapshot &) const override;
+    bool factoryCalibration(FactoryCalibration &) const override;
     bool recovery() override;
     uint32_t coreMhz() const override;
     int coreMhz(uint32_t mhz) override;

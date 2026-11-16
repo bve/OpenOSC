@@ -49,6 +49,17 @@ bool Engine::common(const Command &c) {
         else reply("1,%lu,%lu,%lu,%lu,%lu,%u",static_cast<unsigned long>(m.total),static_cast<unsigned long>(m.used),
                    static_cast<unsigned long>(m.peak),static_cast<unsigned long>(m.free),
                    static_cast<unsigned long>(m.largestFree),unsigned(m.fragmentationPct));
+    } else if (match("SYSTem:CALibration:FACTory")) {
+        // valid,crc16,gain1,gain2,calibrated1,calibrated2: the factory record as read at boot (gain
+        // words as stored, 0: never written) and whether the Next plan's channels have a scale from it.
+        Backend::FactoryCalibration f;
+        if (!c.query || *c.argument) error(-108,c.query);
+        else if (!backend_.factoryCalibration(f)) error(-230,true);
+        else {
+            const auto *m = backend_.configuration();
+            reply("%u,%u,%u,%u,%d,%d",unsigned(f.valid),unsigned(f.crc),unsigned(f.gain[0]),unsigned(f.gain[1]),
+                  m ? int(m->channels[0].calibrated) : -1,m ? int(m->channels[1].calibrated) : -1);
+        }
     } else if (match("SYSTem:CLOCk:MODE")) {
         if (c.query) { if (*c.argument) error(-108,true); else reply("%lu", static_cast<unsigned long>(backend_.coreMhz())); }
         else {

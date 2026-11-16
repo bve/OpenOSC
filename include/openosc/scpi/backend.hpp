@@ -75,6 +75,10 @@ public:
     virtual bool performance(PerformanceSnapshot &) const { return false; }
     // The GUI heap, read now (a pool walk); false while there is none to read.
     virtual bool memory(MemorySnapshot &) const { return false; }
+    // The factory calibration record as read at boot (SYST:CAL:FACT?): whether it is valid, its
+    // CRC-16 and the two channels' gain words as stored (0: never written).
+    struct FactoryCalibration { bool valid = false; uint16_t crc = 0, gain[2] = {0, 0}; };
+    virtual bool factoryCalibration(FactoryCalibration &) const { return false; }
     virtual bool recovery() { return false; }
     // Run mode as the core clock in MHz (0: no profile runs, the HSI fallback). The setter changes
     // it in place, as the Settings menu does, and returns 0 or the SCPI error to report.
