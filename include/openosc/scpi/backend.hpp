@@ -45,6 +45,7 @@ public:
     virtual void stop() = 0;
     virtual bool held() const = 0;
     virtual bool waiting() const = 0;
+    virtual bool triggered() const { return false; } // The last frame held its trigger edge (TRIG:STAT? TD).
     virtual const scope::FrameView *frame(bool refresh) = 0;
     virtual void releaseFrame() = 0;
     // The session ended (Engine::reset: a new session, a disconnect, a clear): its frame lease and
@@ -91,6 +92,14 @@ public:
     virtual bool interleave(bool on) { return !on; }
     // The GUI heap, read now (a pool walk); false while there is none to read.
     virtual bool memory(MemorySnapshot &) const { return false; }
+    virtual size_t stalls(char *, size_t) const { return 0; }
+    static constexpr size_t BootTextBytes = 256; // SYST:BOOT?'s reply buffer.
+    virtual size_t bootTimes(char *, size_t) const { return 0; } // SYST:BOOT? (BootTiming).
+    virtual size_t meterPacket(const uint8_t *&data) const { data = nullptr; return 0; }
+    // DISP:DATA?: the screen copied now (false: no display, or its buffer is in use), then its BMP bytes.
+    virtual bool screenCapture() { return false; }
+    virtual size_t screenRead(uint32_t, uint8_t *, size_t) const { return 0; }
+    virtual void screenEnd() {} // The stream finished or was dropped: the buffer is free.
     // The factory calibration record as this boot decoded it (SYST:CAL:FACT?, docs/SCPI.md), from the
     // record alone: no plan, user gain, display gain, channel state or calibration in progress.
     // identity: the CRC calibration files are bound to; gainWord: as decoded (0: not written, also every

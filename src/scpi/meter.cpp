@@ -86,6 +86,14 @@ bool Engine::meterHoldCommand(const Command &c) {
 bool Engine::meterCommand(const Command &c) {
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
     if (meterHoldCommand(c)) return true;
+    if (match("SYSTem:DMM:PACKet")) { // The newest raw packet in hex, for decoding annunciators.
+        const uint8_t *data = nullptr;
+        const size_t bytes = backend_.meterPacket(data);
+        char text[2 * 18 + 1] = "";
+        for (size_t i = 0; i < bytes && i < 18; ++i) std::snprintf(text + 2 * i, 3, "%02X", data[i]);
+        if (!c.query) error(-109); else if (!bytes) error(-230, true); else reply("%s", text);
+        return true;
+    }
     if (match("SYSTem:DMM:RESult")) {
         if (!c.query) { error(-109); return true; }
         const auto &result = backend_.meter();

@@ -2,6 +2,7 @@
 #include "openosc/data/decimal.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include <cstdarg>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -23,24 +24,27 @@ void Engine::endDecode() {
 }
 void Engine::discardOutput() {
     backend_.releaseFrame();
+    if (screenLease_) { screenLease_ = false; backend_.screenEnd(); }
     endDecode();
-    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = 0;
-    binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = false;
+    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = padding_ = 0;
+    binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
     completion_ = Completion::None;
 }
 void Engine::reset() {
+    if (screenLease_) { screenLease_ = false; backend_.screenEnd(); }
     parser_.reset(); errors_.clear(); backend_.endSession(); endDecode();
-    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = 0;
+    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = padding_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = inputPending_ = false;
-    waitingWaveform_ = waitingGenerator_ = false;
+    waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
     completion_ = Completion::None;
-    waveStart_ = 1; waveStop_ = 0; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
+    waveStart_ = 1; waveStop_ = 0; wavePoints_ = 0; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
     profileKnown_ = false;
     generatorFaultsKnown_ = false; // A new session reports only the generator's stops from now on.
 }
 size_t Engine::available() const {
     return responseSize_ - responseAt_ + (binary_ ? binaryCount_ - binaryAt_ : 0) + (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
-           unsigned(suffix_);
+           (screenBinary_ ? ScreenBytes - screenAt_ : 0) +
+           padding_ + unsigned(suffix_);
 }
 size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!output || !capacity) return 0;
@@ -50,8 +54,9 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
         const auto *source = backend_.frame(false);
         while (used < capacity && binaryAt_ < binaryCount_) {
             int16_t code = 0;
-            if (!source || !source->signedCode(scope::Channel(waveChannel_), binaryStart_ + binaryAt_, code)) {
-                reset(); errors_.push(-230); return used;
+            if (!source || !source->signedCode(scope::Channel(waveChannel_), binaryStart_ + binaryAt_ * binaryStride_, code)) {
+                // The block length is promised: zeros complete it, the error goes to the queue.
+                padding_ = binaryCount_ - binaryAt_; binaryAt_ = binaryCount_; errors_.push(-230); break;
             }
             output[used++] = uint8_t(code + 128); ++binaryAt_;
         }
@@ -59,12 +64,23 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
     if (decodeBinary_ && used < capacity && responseAt_ == responseSize_) {
         const size_t want = decodeTotal_ - decodeSent_ < capacity - used ? decodeTotal_ - decodeSent_ : capacity - used;
         const size_t n = want ? backend_.decodeRead(decodeTicket_, output + used, want) : 0;
-        if (want && !n) { reset(); errors_.push(-230); return used; } // Cancelled (Off, a new source).
-        used += n; decodeSent_ += uint32_t(n);
-        if (decodeSent_ == decodeTotal_ && decodeTicket_) { backend_.decodeEnd(decodeTicket_); decodeTicket_ = 0; }
+        if (want && !n) { padding_ = decodeTotal_ - decodeSent_; endDecode(); errors_.push(-230); } // Cancelled (Off, a new source).
+        else {
+            used += n; decodeSent_ += uint32_t(n);
+            if (decodeSent_ == decodeTotal_ && decodeTicket_) { backend_.decodeEnd(decodeTicket_); decodeTicket_ = 0; }
+        }
     }
-    if (used < capacity && suffix_ && (!binary_ || binaryAt_ == binaryCount_) && (!decodeBinary_ || decodeSent_ == decodeTotal_)) {
-        output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false;
+    if (screenBinary_ && used < capacity && responseAt_ == responseSize_ && screenAt_ < ScreenBytes) {
+        const size_t want = std::min<size_t>(ScreenBytes - screenAt_, capacity - used);
+        const size_t n = backend_.screenRead(screenAt_, output + used, want);
+        if (!n) { padding_ = ScreenBytes - screenAt_; screenAt_ = ScreenBytes; errors_.push(-230); }
+        else { used += n; screenAt_ += uint32_t(n); }
+        if (screenAt_ == ScreenBytes && screenLease_) { screenLease_ = false; backend_.screenEnd(); } // Every byte read.
+    }
+    while (used < capacity && padding_) { output[used++] = 0; --padding_; }
+    if (used < capacity && suffix_ && !padding_ && (!binary_ || binaryAt_ == binaryCount_) && (!decodeBinary_ || decodeSent_ == decodeTotal_) &&
+        (!screenBinary_ || screenAt_ == ScreenBytes)) {
+        output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false; screenBinary_ = false;
     }
     if (!available()) responseSize_ = responseAt_ = 0;
     outputAt_ = now_; return used;
@@ -82,7 +98,7 @@ void Engine::poll(uint32_t now) {
         parser_.reset(); inputPending_ = false; errors_.push(-102);
     }
     if (available()) {
-        if (uint32_t(now - outputAt_) >= 10000) { reset(); errors_.push(-410); }
+        if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); }
         return;
     }
     if (waitingDecode_) { // The CSV's size, a bounded slice a pass; then the definite block's header.
@@ -97,7 +113,7 @@ void Engine::poll(uint32_t now) {
         return;
     }
     if (waitingWaveform_) {
-        Command command; std::snprintf(command.header,sizeof command.header,"WAV:%s",pendingPreamble_ ? "PRE" : "DATA");
+        Command command; std::snprintf(command.header,sizeof command.header,"WAV:%s",pendingWave_);
         command.query = true; waveformCommand(command); return;
     }
     if (waitingGenerator_) {

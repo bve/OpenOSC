@@ -451,7 +451,10 @@ FrameView FrameView::withTrigger(bool found, uint32_t index) const {
     view.metadata_.clearTrigger();
     view.metadata_.triggered = found;
     view.metadata_.triggerIndex = found ? index : 0;
-    if (same) view.metadata_.triggerShift = metadata_.triggerShift;
+    if (same) {
+        view.metadata_.triggerShift = metadata_.triggerShift; view.metadata_.eventOffset = metadata_.eventOffset;
+        view.metadata_.eventKnown = metadata_.eventKnown;
+    }
     view.valid_ = view.validate();
     return view;
 }

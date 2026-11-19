@@ -3,6 +3,7 @@
 #include "openosc/settings/json_input.hpp"
 #include "openosc/settings/json_workspace.hpp"
 #include "openosc/settings/instrument_json.hpp"
+#include "openosc/acquisition/timebases.hpp"
 #include <ArduinoJson.h>
 #include <cstring>
 
@@ -91,6 +92,8 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!number(timing,"timebase_us",microseconds)) return false;
         candidate.timebaseNs=uint64_t(microseconds)*1000;
     }
+    if (candidate.timebaseNs >= 10 && candidate.timebaseNs <= 20000000000ULL)
+        candidate.timebaseNs = scope::Timebases::nearest(double(candidate.timebaseNs));
     if (root.containsKey("mode")) {
         if (!root["mode"].is<const char *>())
             return false;

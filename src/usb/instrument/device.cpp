@@ -83,7 +83,7 @@ bool InstrumentUsb::connected() const {
     return active_ && usb::instrument.configured && usbDevice.dev_state == USBD_STATE_CONFIGURED;
 }
 bool InstrumentUsb::hostActive(uint32_t now) const {
-    return connected() || hostPresent_ || uint32_t(now-busActivityAt_) < HostQuietMs;
+    return connected() || hostPresent_ || int32_t(now-busActivityAt_) < int32_t(HostQuietMs);
 }
 void InstrumentUsb::poll(uint32_t now) {
     const auto *registers = reinterpret_cast<const USB_OTG_DeviceTypeDef*>(

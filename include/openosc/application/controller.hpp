@@ -39,6 +39,7 @@
 #include "openosc/ui/editors/property_navigator.hpp"
 #include "openosc/ui/scope/display_properties.hpp"
 #include "openosc/platform/battery_monitor.hpp"
+#include "openosc/application/stall_log.hpp"
 #include "openosc/ui/scope/counter_text.hpp"
 
 namespace openosc {
@@ -58,13 +59,14 @@ public:
 private:
     friend class InstrumentBackend;
     friend class ScopeControllerProbe; // Native tests drive the key handlers directly.
-    bool setRemote(bool enabled);
+    bool setRemote(bool enabled, const char *left = nullptr); // left: the notice when Remote ends cleanly.
     ModeChange selectMode(MeasurementMode next, uint32_t now); // MODE key and SYST:MODE.
     InstrumentUsb *usb_ = nullptr;
     // remote_: USB Remote control (keys locked except MENU/REL hold exits, no idle power-off);
     // the display keeps running. uiReady_: the LVGL UI exists — every view update, render and
     // notification depends on it; false only for the headless fallback of a failed display init.
     bool remote_ = false, uiReady_ = false;
+    StallLog stalls_;
     plot::CounterText counterText_;
     bool sectionDirect_ = false; // A Display section opened from Analyze (FFT): Back returns there.
     static constexpr unsigned PanDoubling = 8;
@@ -363,6 +365,10 @@ private:
     screenshot::ImageCatalog images_;
     screenshot::ImageReader imageReader_;
     bool imageShowing_=false, imageFullSize_=false;
+    // DISP:DATA? streams from the preview buffer: held until 1 s after its last read.
+    uint32_t screenStreamAt_=0; bool screenStreaming_=false;
+    // Until the stream ends (InstrumentBackend::screenEnd); 15 s idle covers a host gone without a reset.
+    bool screenStreamBusy(uint32_t now) const { return screenStreaming_ && int32_t(now-screenStreamAt_)<15000; }
     void startScreenshot(uint32_t now);
     unsigned shotProgress_=0;
     unsigned imageProgress_=0;

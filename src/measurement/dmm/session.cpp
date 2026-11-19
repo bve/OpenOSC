@@ -37,6 +37,8 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
         return false; // A bad packet changes nothing.
     candidate.timestampUs = timestampUs;
     candidate.sequence = ++sequence_;
+    rawBytes_ = uint8_t(bytes < sizeof raw_ ? bytes : sizeof raw_);
+    std::memcpy(raw_, packet, rawBytes_);
     latest_ = candidate;
     // The hold mode sees the packet in the context it settles (before HOLD's stop: a mode's cycle never
     // freezes with the display): a packet ending the wait for a selected function counts, a local REL

@@ -69,7 +69,7 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     const bool burst = uint32_t(configuredAt - configuredAt_) < ConfigQuietMs && samplePlan(plan);
     configuredAt_ = configuredAt;
     armSequence_ = sequence_ + 1;
-    triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     captureFailed_ = false;
     if (active_ && measurement_ == MeasurementMode::Oscilloscope && !burst && !startCapture() && !captureWaiting_) {
         const auto failure = status_;
@@ -536,7 +536,7 @@ void DataAccess::holdScopeCore(bool hold) {
     forcePending_ = false; forcedSequence_ = 0; // HOLD ends a force; RUN arms without one.
     holdPending_ = false;
     if (!hold) captureFailed_ = false;
-    triggerWaiting_ = !hold && request_.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = !hold && request_.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     if (!hold) {
         heldFrame_.release();
         return;
@@ -570,7 +570,8 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
         const bool found=fresh && findTrigger(inspected_.view(),index);
         const bool accepted=fresh && triggerAccepts(inspected_.view().metadata(),found); // A forced record too.
         triggerWaiting_ = !accepted;
-        if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now; } // What a reader is now given.
+        if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now;
+            acceptedTriggered_ = inspected_.view().metadata().triggered && !inspected_.view().metadata().forced; } // What a reader is now given.
         observeInterleave(inspected_.view());
         // The measurement is a reader of the record it takes (the scope view may be hidden by Settings):
         // it consumes it, so a one-slot capture memory is free for the next record.

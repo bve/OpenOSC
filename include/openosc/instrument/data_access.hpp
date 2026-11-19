@@ -57,6 +57,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // Skips capture restarts while nothing consumes frames; a recent frame request overrides it.
     bool fullRateCapture() const { return configuration_.samplesPerSecond.value() >= FullRateSamples; }
     void pauseCapture(bool pause,uint32_t now) { capturePaused_ = pause && uint32_t(now-frameRequestedAt_)>=FrameDemandMs; }
+    bool capturePaused() const { return capturePaused_; }
+    bool captureQuieted() const { return usbQuiet_; }
     bool configureScope(const ScopeRequest &request);
     // While held: keeps the record and applies the configuration at the next RUN.
     bool stageScope(const ScopeRequest &request);
@@ -120,6 +122,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // accepted, and again once the running capture has waited TriggerWaitMs for an edge with its gate
     // Armed (followTriggerWait). Auto: never. HOLD and a finished Single read STOP (scopeHeld).
     bool scopeWaiting() const { return triggerWaiting_; }
+    bool scopeTriggered() const { return acceptedTriggered_; } // The last accepted frame held its trigger edge.
     // A physical F1-F4: one group key (dmm::MeterCommands::pressGroup), the statistics restart; what the
     // controller does is read from its packets. SCPI and the restore select a function instead.
     bool sendDmmGroup(dmm::CommandGroup group);
@@ -456,7 +459,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     uint32_t armSequence_ = 0, captureRetryAt_ = 0;
     bool captureRestartOwed_ = false; // A capture fault was taken; cleared by the next successful start.
     static constexpr uint32_t CaptureRetryMs = 50;
-    bool triggerWaiting_ = false;
+    bool triggerWaiting_ = false, acceptedTriggered_ = false;
     uint64_t dmmActivatedAtUs_ = 0, recordDeadlineUs_ = 0;
     DataStatus recordStatus_ = DataStatus::NoData;
     // followTriggerWait: since when (armedAt_) the capture armedSequence_ has been seen Armed.

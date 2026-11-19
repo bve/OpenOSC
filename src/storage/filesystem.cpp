@@ -3,12 +3,12 @@
 #include "openosc/storage/layout.hpp"
 
 namespace openosc {
-bool Filesystem::mount() {
+bool Filesystem::mount(bool count) {
     if (disk_.owner() != MediaOwner::Local) { result_ = FR_NOT_READY; return false; }
     registerFatDevice(&disk_);
     result_ = f_mount(&fs_, "", 1);
     mounted_ = result_ == FR_OK;
-    if (mounted_) refreshFree();
+    if (mounted_ && count) refreshFree();
     return mounted_;
 }
 bool Filesystem::unmount() {
@@ -20,7 +20,11 @@ bool Filesystem::unmount() {
 }
 bool Filesystem::prepareDirectories() {
     result_ = storage::prepareLayout(); // Empty factory root directories out, the whole /openosc tree in.
-    return result_ == FR_OK && refreshFree();
+    if (result_ == FR_OK) return refreshFree();
+    const FRESULT failed = result_;
+    refreshFree(); // The one free count of mountPrepared, also when the layout failed.
+    result_ = failed;
+    return false;
 }
 bool Filesystem::refreshFree() {
     if (!mounted_) return false;

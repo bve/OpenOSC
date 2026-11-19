@@ -64,7 +64,7 @@ bool DataAccess::resumeScope(const ScopeRequest &request) {
     if (!store_.cancel()) { status_ = DataStatus::Busy; return reject(); }
     heldTrigger_.forget();
     ++holdReleases_;
-    triggerWaiting_ = request.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = request.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     return true;
 }
 } // namespace openosc

@@ -1,3 +1,4 @@
+#include "openosc/application/boot_timing.hpp"
 #include "openosc/platform/watchdog.hpp"
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/stack_guard.hpp"
@@ -31,6 +32,7 @@ namespace openosc {
     const bool backend = data_.initialize(state_.mode, FactoryRecordPolicy(prefs_.scope.factoryRecordFormat));
     const auto applied = applyDataPreferences();
     restoreStartupOutput(applied); // After the saved settings were applied; never with refused ones.
+    BootTiming::mark(BootTiming::Data);
     InstrumentBackend tmcBackend(*this), serialBackend(*this);
     scpi::Engine tmcEngine(tmcBackend), serialEngine(serialBackend);
     InstrumentUsb usb(tmcEngine,serialEngine); usb_ = &usb;
@@ -53,6 +55,7 @@ namespace openosc {
     diag::InterleaveProbeControl probe(probeData, probeBackend, openosc_interleave_probe);
 #endif
     uiReady_ = display_.initialize();
+    BootTiming::mark(BootTiming::Display);
     // Settings > Files & USB > USB controller, before the first clock change (headless Remote). An
     // explicit Disabled holds also without a display; Recovery restores the setting independently.
     usb.enable(prefs_.usbController != 0, Board::milliseconds());
@@ -93,6 +96,7 @@ namespace openosc {
             view_.notify(text, Board::milliseconds());
         }
         else if (boot_diagnostics.error==4) view_.notify("High unavailable; Normal active",Board::milliseconds());
+        BootTiming::mark(BootTiming::View);
     } else { // Headless: no UI; Remote (and its 200 MHz) only if that profile really runs.
         boot_diagnostics.error = 2; display_.enabled(false); setRemote(true);
     }
@@ -112,6 +116,7 @@ namespace openosc {
     performance_.start(DWT->CYCCNT);
     InputService::enable();
     while (true) {
+        const uint32_t passStart = Board::milliseconds();
         performance_.tick(DWT->CYCCNT);
         Watchdog::heartbeat(); // The one proof that the application's loop goes on (docs/WATCHDOG.md).
         StackGuard::check();   // A stack that reached .bss resets (recorded) instead of running on (issue #8).
@@ -187,6 +192,18 @@ namespace openosc {
         }
         boot_diagnostics.action = uint32_t(state_.mode) | (state_.settingsOpen ? 0x100 : 0)
             | (state_.settingsOpen && settingsMenu_.information() ? 0x200 : 0);
+        {
+            const uint32_t end = Board::milliseconds();
+            const bool menuPause = data_.capturePaused() && uint32_t(now - hiddenAt_) < OverlaySettleMs; // Paused by design.
+            const bool expecting = state_.mode == MeasurementMode::Oscilloscope && !data_.scopeHeld() && !autoBusy() &&
+                                   data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto && !menuPause;
+            const uint8_t held = (data_.captureQuieted() ? StallLog::Quiet : 0) | (data_.capturePaused() ? StallLog::Paused : 0) |
+                                 (BatteryMonitor::supplied() ? StallLog::Supplied : 0);
+            const auto &m = data_.scopeMetadata();
+            const uint32_t recordMs = m.samplesPerSecond.valid() ? uint32_t(std::min(60000.0, m.samples * 1000.0 / m.samplesPerSecond.value())) : 0;
+            stalls_.frame(data_.scopeFrameSequence(), expecting, held, end, recordMs);
+            stalls_.pass(passStart, end);
+        }
         // Keep the foreground polling loop awake while the PIO USB core is active.
         // WFI caused reproducible EP0 stalls/re-enumeration on this ZT703S.
     }
@@ -196,6 +213,7 @@ namespace openosc {
 void ApplicationController::render() {
     rendering_ = true;
     display_.render();
+    BootTiming::mark(BootTiming::Frame);
     rendering_ = false;
     ahead_.release();
 }
@@ -267,9 +285,7 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     if (events.longPress & Keypad::Relative) { powerOff(now); return; }
     if (panel_==Panel::Zero) { zeroKeys(keys,now); return; }
     if (remote_ || !uiReady_) { // Locked: Remote, or no UI to operate (headless).
-        if ((events.longPress & Keypad::Menu) && setRemote(false)) {
-            state_.settingsOpen = true; settingsMenu_.open(); navigator_.reset(); showSettings();
-        }
+        if (events.longPress & Keypad::Menu) setRemote(false, "USB Remote off");
         return;
     }
     if (panel_ == Panel::Confirmation) { confirmationKeys(keys,now); return; }
@@ -309,6 +325,7 @@ void ApplicationController::serviceBootGuard(uint32_t now) {
     // Also not while HOLD waits for its record (scopeHoldPending): the confirmation is not consumed, the next pass writes it.
     if (!guard_ || shutdownSequence_.active() || recoveryPending_ || (usb_ && usb_->hostActive(now)) || data_.scopeHoldPending()) return;
     if (!guardConfirmation_.due(now, ClockControl::activeMode() == OverclockedRunMode, started_)) return;
+    stalls_.mark(StallLog::Guard);
     guardConfirmation_.written(guard_->confirm(), now);
     Watchdog::progress();
 }
@@ -323,12 +340,14 @@ void ApplicationController::stopBootGuard() {
 // Each save, failed or not, is a finished step (WatchdogPolicy): two saves in one pass may each end
 // only after a NOR timeout (5 s), longer together than the watchdog allows without progress.
 bool ApplicationController::SettingsStore::saveTheme() {
+    a_.stalls_.mark(StallLog::Theme);
     const bool saved = a_.themes_.savePlot(a_.view_.waveform().options());
     Watchdog::progress();
     return saved;
 }
 bool ApplicationController::SettingsStore::savePreferences() {
     usbtrace::mark(usbtrace::Tag::SaveBegin);
+    a_.stalls_.mark(StallLog::Save);
     const bool saved = a_.preferences_.save(a_.prefs_);
     usbtrace::mark(usbtrace::Tag::SaveEnd);
     Watchdog::progress();
@@ -340,7 +359,7 @@ void ApplicationController::store(uint32_t now) {
     const bool unused = idle_.quietMs(now) >= UnusedMs && !(usb_ && usb_->hostActive(now)) && !autoBusy() && !data_.zeroBusy() &&
                         !shots_.busy() && !imageReader_.busy() &&
                         !(state_.mode == MeasurementMode::Oscilloscope && data_.scopeRequest().trigger.mode == scope::TriggerMode::Single && !data_.scopeHeld());
-    fs_.service(now, unused);
+    if (fs_.service(now, unused)) stalls_.mark(StallLog::Save);
     followGeneratorOutput(now); // A confirmed OUTP ON just before a save is in it.
     // The power-off save's volume while changes wait (UI only): every minute, at once when they start or Settings opens.
     const bool pending = saves_.settingsPending() && uiReady_;

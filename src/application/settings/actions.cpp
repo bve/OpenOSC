@@ -83,6 +83,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
     case ui::SettingsAction::UsbRemote:
         if (!prefs_.usbController) view_.notify("Enable USB controller first", now); // No link to be remote over.
         else if (!setRemote(true)) view_.notify("Finish active operations first",now);
+        else view_.notify("USB Remote: hold MENU to exit",now);
         break;
     case ui::SettingsAction::CalibrateInterleave: interleaveOffsetAction(now); break; // ZT703S.
     case ui::SettingsAction::Close: closeSettings(); break;

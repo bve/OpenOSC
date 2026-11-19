@@ -83,6 +83,8 @@ public:
     // The last packet as decoded: its function, range, HOLD and REL flags for the commands, and the
     // raw stream (log, serial output). Settling readings (OverloadSettle) are here too.
     const Result &latest() const { return latest_; }
+    // The newest packet that decoded, as received (SYST:DMM:PACK?); 0 bytes before the first.
+    size_t packet(const uint8_t *&data) const { data = raw_; return rawBytes_; }
     // What the screen, the needle and SCPI show: the manual HOLD's reading, else the Delayed/Stable/
     // Auto snapshot, else the last reading shown (the latest but for settling ones). held() stays the
     // manual and the DMM's own HOLD only: the statistics, the trend and the log go on under a mode's
@@ -137,6 +139,7 @@ public:
 
 private:
     Result latest_, shown_, held_;
+    uint8_t raw_[18]{}, rawBytes_ = 0; // Packet::Bytes.
     OverloadSettle settle_;
     HoldDetector detector_;
     Statistics stats_;

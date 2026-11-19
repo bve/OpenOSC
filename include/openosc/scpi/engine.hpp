@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/screenshot/bmp.hpp"
 #include "openosc/scpi/backend.hpp"
 #include "openosc/scpi/parser.hpp"
 #include "openosc/scpi/header.hpp"
@@ -51,14 +52,16 @@ private:
     ErrorQueue errors_;
     char response_[256]{};
     size_t responseSize_ = 0, responseAt_ = 0;
-    uint32_t binaryStart_ = 0, binaryCount_ = 0, binaryAt_ = 0;
-    uint32_t waveStart_ = 1, waveStop_ = 0;
+    uint32_t binaryStart_ = 0, binaryCount_ = 0, binaryAt_ = 0, padding_ = 0, binaryStride_ = 1;
+    uint32_t waveStart_ = 1, waveStop_ = 0, wavePoints_ = 0;
     unsigned waveChannel_ = 0, preambleChannels_ = 0;
     bool binary_ = false, suffix_ = false, profile_ = false, profileKnown_ = false;
     enum class Completion { None, Wait, Event, Query };
     Completion completion_ = Completion::None;
     bool waitingOperation_ = false, waitingReading_ = false, secondary_ = false;
-    bool waitingWaveform_ = false, pendingPreamble_ = false, waitingGenerator_ = false;
+    bool waitingWaveform_ = false, waitingGenerator_ = false;
+    const char *pendingWave_ = "DATA"; // The WAV query waiting for its frame: PRE, DATA, SEQ, TIM or KEY.
+    void waitFrame(const char *query); // Up to 1 s, then -230.
     uint32_t generatorDeadline_ = 0;
     uint32_t readingSequence_ = 0, deadline_ = 0, now_ = 0, inputAt_ = 0, frameAt_ = 0, outputAt_ = 0;
     bool inputPending_ = false;
@@ -66,6 +69,10 @@ private:
     // decoder's, in its workspace): measured first (waitingDecode_), then sent as a definite block.
     uint32_t decodeTicket_ = 0, decodeTotal_ = 0, decodeSent_ = 0;
     bool decodeBinary_ = false, waitingDecode_ = false;
+    bool screenBinary_ = false; // DISP:DATA?: the BMP from Backend::screenRead, screenAt_ of ScreenBytes sent.
+    bool screenLease_ = false;  // This engine's DISP:DATA? holds the preview buffer (Backend::screenEnd).
+    uint32_t screenAt_ = 0;
+    static constexpr uint32_t ScreenBytes = BmpImage::FileBytes;
     uint8_t ese_ = 0, sre_ = 0;
     uint32_t generatorFaults_ = 0; // generator::Snapshot::faults as last seen (Engine::poll).
     bool generatorFaultsKnown_ = false;

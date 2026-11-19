@@ -6,7 +6,7 @@
 namespace openosc {
 // Remote runs at RemoteClock::Mode (a real change reconnects USB like any run-mode change); the
 // user's Standalone profile stays the setting and runs again when Remote ends.
-bool ApplicationController::setRemote(bool enabled) {
+bool ApplicationController::setRemote(bool enabled, const char *left) {
     // Without a UI the keys are locked anyway; leaving Remote then means bringing the display up.
     if (enabled == remote_ && (enabled || uiReady_)) return true;
     if (shots_.busy() || data_.scopeRecording() || data_.dmmBusy() || data_.zeroBusy()) return false;
@@ -42,6 +42,7 @@ bool ApplicationController::setRemote(bool enabled) {
         dataRefresh_ = true; view_.measurement(state_);
         if (!RemoteClock::settled(clock) || clock.active != prefs_.scope.runMode)
             view_.notify(RunModeSwitch::describe(clock.outcome), now); // Also ResumeFailed at the saved profile.
+        else if (left) view_.notify(left, now);
     }
     return true;
 }
