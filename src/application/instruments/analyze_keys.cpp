@@ -11,14 +11,14 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     Actions actions(shown);
     const auto outcome = navigator_.keys(keys, actions);
     if (outcome == Outcome::Back) { closePanel(); return; }
-    if (outcome == Outcome::Changed) { // The cursor lines, taken at once; with any shown the arrows move them.
+    if (outcome == Outcome::Changed) { // The cursor lines, taken at once.
         auto cursors = shown.cursors;
         cursors.time = actions.cursors().time; cursors.voltage = actions.cursors().voltage;
         view_.waveform().cursorLines(cursors); queuePlotSave(now);
         syncCursorFocus();
         if (cursors.time || cursors.voltage) {
             if (shown.mode == plot::Mode::XY) view_.notify("Cursors need a Y-T or FFT view", now);
-            else { enterCursors(now); closePanel(); return; }
+            else enterCursors(now); // The menu stays; the arrows move the cursors once it closes.
         }
         view_.properties(Actions(view_.waveform().options()), navigator_);
         return;

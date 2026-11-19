@@ -8,8 +8,16 @@ void ScopeScreen::status(DataStatus health, bool held) {
     const auto &m = model.metadata();
     const bool calibrated = model.hasFrame() && (!m.channels[0].enabled || m.channels[0].calibrated) &&
                             (!m.channels[1].enabled || m.channels[1].calibrated);
-    const char *text = held ? calibrated ? "HOLD" : "HOLD RAW" : calibrated ? "RUN" : "RUN RAW";
+    const char *text = held ? calibrated ? "STOP" : "STOP RAW" : calibrated ? "RUN" : "RUN RAW";
     if (!held && model.hasFrame() && m.rolling) text=calibrated ? "ROLL" : "ROLL RAW";
+    else if (!held && model.hasFrame() && triggerMode_ == scope::TriggerMode::Auto) {
+        // Auto: TRIG'D from a triggered frame until TrigdHoldMs without one, then AUTO (forced sweeps).
+        const uint32_t now = lv_tick_get();
+        if (m.triggered) { trigd_ = true; trigdAt_ = now; }
+        else if (trigd_ && now - trigdAt_ >= TrigdHoldMs) trigd_ = false;
+        text = trigd_ ? calibrated ? "TRIG'D" : "TRIG'D RAW" : calibrated ? "AUTO" : "AUTO RAW";
+    } else if (!held && model.hasFrame() && triggerMode_ == scope::TriggerMode::Normal && m.triggered)
+        text = calibrated ? "TRIG'D" : "TRIG'D RAW"; // Armed with none: WAIT below.
     if (waiting_) text = triggerMode_ == scope::TriggerMode::Single ? "SGL WAIT" : "WAIT";
     if (held && triggerMode_ == scope::TriggerMode::Single && m.triggered) text = "SINGLE";
     switch (health) {
@@ -26,8 +34,8 @@ void ScopeScreen::status(DataStatus health, bool held) {
     if (calibrating_ && (health==DataStatus::Ok || health==DataStatus::NoData)) text="CALIBRATING";
     if (status_ != text) {
         status_ = text;
-        const bool running = !std::strncmp(text,"RUN",3) || (!std::strncmp(text,"ROLL",4) && !std::strchr(text,'/'));
-        const bool stopped = !std::strncmp(text,"HOLD",4) || !std::strcmp(text,"SINGLE") || std::strstr(text,"ERROR") ||
+        const bool running = !std::strncmp(text,"RUN",3) || !std::strncmp(text,"TRIG'D",6) || (!std::strncmp(text,"ROLL",4) && !std::strchr(text,'/'));
+        const bool stopped = !std::strncmp(text,"STOP",4) || !std::strcmp(text,"SINGLE") || std::strstr(text,"ERROR") ||
                              std::strstr(text,"TIMEOUT") || std::strstr(text,"OVERFLOW");
         host_.status(text, running ? StatusTone::Good : stopped ? StatusTone::Alert : StatusTone::Warning);
     }

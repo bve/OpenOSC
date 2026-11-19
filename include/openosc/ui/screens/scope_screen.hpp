@@ -44,5 +44,8 @@ private:
     scope::TriggerMode triggerMode_ = scope::TriggerMode::Auto;
     DataStatus health_ = DataStatus::NoData;
     bool waiting_ = false, statusHeld_ = false,automatic_=false,calibrating_=false;
+    static constexpr uint32_t TrigdHoldMs = 500;
+    bool trigd_ = false;
+    uint32_t trigdAt_ = 0;
 };
 } // namespace openosc::ui

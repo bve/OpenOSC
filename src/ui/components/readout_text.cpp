@@ -9,6 +9,7 @@
 
 namespace openosc::ui {
 namespace {
+constexpr int TagGap = 3;
 struct Step { unsigned precision; bool coarse; };
 constexpr Step Steps[] = {{3, false}, {2, false}, {1, false}, {2, true}, {1, true}};
 // The short tags, where a channel's three readouts need the room (Measurements::Tags order).
@@ -99,7 +100,7 @@ bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark
         if (limit && significant(output.value) > limit) return false;
     } else std::snprintf(output.value, sizeof output.value, "--");
     std::snprintf(output.tag, sizeof output.tag, "%s%s", shape.shortTag ? ShortTags[kind] : scope::Measurements::Tags[kind], mark ? mark : "");
-    output.tagWidth = Elements::textWidth(output.tag, size);
+    output.tagWidth = Elements::textWidth(output.tag, size) + (shape.shortTag ? 0 : TagGap); // "Vpp 4.54V"; short tags stay tight.
     output.valueWidth = Elements::textWidth(output.value, size);
     return true;
 }
