@@ -9,7 +9,7 @@
 namespace openosc::ui {
 // The Scope footer row (ScopeFooterLayout): the page FooterPages plans, painted from the last
 // frame, readout result and counter snapshot it was given, so turning a page needs no new data.
-// Each channel has its panel: a faint fill and frame in its colour, its readouts (ReadoutRow)
+// Each panel: a faint fill and frame in its channel's colour, its readouts (ReadoutRow)
 // as a dimmed tag beside a bright value. The basis has no text: ReadoutIndicator lights the
 // panel's bottom rail for Full and dims values that went stale; Screen shows nothing.
 class ScopeFooter {
@@ -37,10 +37,12 @@ public:
 
 private:
     static constexpr unsigned Panels = ScopeFooterLayout::Panels, PerChannel = ScopeFooterLayout::PerChannel;
+    ReadoutRow::Held held_[ScopeFooterLayout::Panels][ReadoutRow::Items]; // Each cell's last form and prefix (hysteresis).
+    unsigned heldChannel_[ScopeFooterLayout::Panels]{};
     bool replan(); // True when the pages changed.
     void paint();
     void readoutPage();
-    void readoutPanel(unsigned channel);
+    void readoutPanel(unsigned panel);
     void scalesPage();
     void spectrumPage();
     // A panel's look: tinted in `color` (a channel's), or plain (theme grid) for no channel.

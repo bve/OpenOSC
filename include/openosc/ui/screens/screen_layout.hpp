@@ -47,7 +47,9 @@ public:
     // and meta row over the 92 px dial; measurements is MIN/MAX/AVG on one row; reading is the 64 px
     // digits with their unit.
     static constexpr int SignRow = 27, Digits = 64, DigitalReading = SignRow + Digits;
-    static constexpr int DigitalMeasurements = 89, DigitalMeterNoStatistics = 50;
+    static constexpr int DigitalMeasurements = 89, DigitalMeterNoStatistics = 50, DigitalMeterMetaOnly = 24;
+    // Primary without bar graph and statistics: the reading takes the freed rows, in up to 80 px digits.
+    static constexpr int LargeDigits = 80, DigitalReadingLarge = SignRow + LargeDigits;
     static constexpr int MetaRow = 14, DialOffset = 9, DialHeight = 92, AnalogDial = DialOffset + DialHeight;
     static constexpr int AnalogMeasurements = 14, AnalogReading = 62;
     // The generator: the frequency block is its title row, the digits with their unit and the
@@ -92,9 +94,18 @@ public:
         const int heights[] = {readouts ? Readouts : 0, Waveform, ButtonsHeight};
         stack(order, heights, spans);
     }
-    static void digital(const DigitalArrangement &order, bool statistics, BlockSpan (&spans)[DigitalArrangement::Size]) {
-        const int heights[] = {DigitalReading, statistics ? DigitalMeasurements : DigitalMeterNoStatistics, ButtonsHeight};
+    // The meta and statistics rows sit on the keys; the reading takes every spare line.
+    static void digital(const DigitalArrangement &order, bool statistics, bool bar, BlockSpan (&spans)[DigitalArrangement::Size]) {
+        const int meter = statistics ? DigitalMeasurements : bar ? DigitalMeterNoStatistics : DigitalMeterMetaOnly;
+        const int heights[] = {Body - meter - ButtonsHeight, meter, ButtonsHeight};
         stack(order, heights, spans);
+    }
+    static void digital(const DigitalArrangement &order, bool statistics, BlockSpan (&spans)[DigitalArrangement::Size]) {
+        digital(order, statistics, true, spans);
+    }
+    // The digit size a reading block of this height holds: 80, 72 or 64 px.
+    static constexpr int digitsFor(int reading) {
+        return reading >= SignRow + LargeDigits ? LargeDigits : reading >= SignRow + 72 ? 72 : Digits;
     }
     static void generator(const GeneratorArrangement &order, BlockSpan (&spans)[GeneratorArrangement::Size]) {
         const int heights[] = {GeneratorFrequency, GeneratorPreview, ButtonsHeight};
@@ -113,6 +124,8 @@ static_assert(ScreenLayout::MenuKeysY == 208 && ScreenLayout::MenuTop + ScreenLa
 static_assert(ScreenLayout::Readouts + ScreenLayout::Waveform + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "the Scope fits");
 static_assert(ScreenLayout::GeneratorFrequency + ScreenLayout::GeneratorPreview + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "the generator fits");
 static_assert(ScreenLayout::DigitalReading + ScreenLayout::DigitalMeasurements + ScreenLayout::ButtonsHeight <= ScreenLayout::Body, "digital fits");
+static_assert(ScreenLayout::DigitalReadingLarge + ScreenLayout::DigitalMeterMetaOnly + ScreenLayout::ButtonsHeight <= ScreenLayout::Body,
+              "the large reading fits");
 static_assert(ScreenLayout::AnalogDial + ScreenLayout::AnalogMeasurements + ScreenLayout::AnalogReading + ScreenLayout::ButtonsHeight <=
               ScreenLayout::Body, "analog fits");
 } // namespace openosc::ui

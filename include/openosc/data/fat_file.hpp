@@ -10,9 +10,10 @@ public:
     ~FatDataFile();
     bool begin(const char *directory, const char *prefix, const char *extension, uint64_t reserveBytes);
     bool write(const void *data, size_t bytes);
+    bool sync(); // The size so far reaches the directory: a power cut keeps the .TMP's data.
     bool commit();
     DataStatus commitStep();
-    void cancel();
+    void cancel(bool keep = false); // keep: the .TMP stays (written data survives); else it is deleted.
     const char *path() const { return final_; }
     DataStatus status() const { return status_; }
 

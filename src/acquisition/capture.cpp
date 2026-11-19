@@ -70,7 +70,11 @@ bool CaptureDma::quiesce(bool stopAdc) {
         Interrupts::detach(MDMA_IRQn);
     }
     for (unsigned i = 0; i < 4; ++i) {
+        // EN=0 raises TCIF: masked, or the ISR takes it for a finished segment mid-stop.
+        const bool enabled = NVIC_GetEnableIRQ(irqs[i]);
+        NVIC_DisableIRQ(irqs[i]);
         if (!DmaStream::disable(streams[i])) {
+            if (enabled) NVIC_EnableIRQ(irqs[i]);
             captureFault(1U << 16 | i << 8 | (streams[i]->FCR & 0x3fU));
             stopped = false;
             continue;
@@ -187,8 +191,11 @@ bool CaptureDma::start(FrameMetadata metadata, const FrontendSettings &settings,
     for (auto &cycle:cycles_) cycle=0;
     complete_ = 0;
     active_ = this;
-    if (!mailbox_.begin())
-        return false;
+    if (!mailbox_.begin()) {
+        if (freshHistory) historyLease_.release();
+        if (freshDma) lease_.release();
+        active_ = nullptr; status_ = DataStatus::Busy; return false;
+    }
     // Everything that can still fail happens before the first DMA write: a refused start leaves
     // the buffer exactly as it was (resumeScope relies on this to keep a 512 KiB HOLD record).
     // After an analog change the gate fills on until the front end has settled: every point of the
@@ -199,6 +206,8 @@ bool CaptureDma::start(FrameMetadata metadata, const FrontendSettings &settings,
                                          SamplePlan::headroom(buffer,pointRate.numerator/pointRate.denominator)) : 0;
     if (gated_ && !gate_.prepare(trigger_,metadata.samplesPerSecond,requestedSamples_,frontend_.unsettledMs(Board::milliseconds()),slack_)) {
         captureFault(1U << 18);
+        if (freshHistory) historyLease_.release();
+        if (freshDma) lease_.release();
         mailbox_.cancel(); active_=nullptr; status_=DataStatus::HardwareError; return false;
     }
     const bool bytes=buffer.format==SampleFormat::Bytes, doubleBuffered=buffer.segments()>1;

@@ -1,5 +1,8 @@
 #include "openosc/board/current.hpp"
+#include "openosc/application/boot_timing.hpp"
 #include "openosc/application/scpi_backend.hpp"
+#include "openosc/screenshot/reader.hpp"
+#include <cstring>
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/clocks.hpp"
@@ -18,11 +21,14 @@ const scope::FrameMetadata *InstrumentBackend::configuration() const {
     const auto &metadata = application_.data_.scopeMetadata();
     return metadata.valid() ? &metadata : nullptr;
 }
-bool InstrumentBackend::configureScope(const ScopeRequest &r) {
+bool InstrumentBackend::configure(const ScopeRequest &r, bool level) {
     if (application_.data_.zeroBusy()) return false;
     auto &a = application_; if (!a.cancelAuto(Board::milliseconds())) return false;
-    return a.applyFollowing(r,Board::milliseconds(),ApplicationController::ScopeApply::StageIfHeld);
+    return a.applyFollowing(r,Board::milliseconds(),ApplicationController::ScopeApply::StageIfHeld,
+                            level ? ApplicationController::LevelIntent::Set : ApplicationController::LevelIntent::Follow);
 }
+bool InstrumentBackend::configureScope(const ScopeRequest &r) { return configure(r, false); }
+bool InstrumentBackend::setTrigger(const ScopeRequest &r) { return configure(r, true); }
 void InstrumentBackend::demand() const { application_.data_.frameHosts().demand(host_, Board::milliseconds()); }
 bool InstrumentBackend::run(bool single) {
     if (application_.data_.zeroBusy()) return false;
@@ -86,6 +92,7 @@ void InstrumentBackend::stop() {
 }
 bool InstrumentBackend::held() const { return application_.data_.scopeHeld(); }
 bool InstrumentBackend::waiting() const { return application_.data_.scopeWaiting(); }
+bool InstrumentBackend::triggered() const { return application_.data_.scopeTriggered(); }
 const scope::FrameView *InstrumentBackend::frame(bool refresh) {
     if (refresh) releaseFrame();
     application_.data_.noteFrameDemand(Board::milliseconds());
@@ -218,6 +225,26 @@ bool InstrumentBackend::performance(PerformanceSnapshot &p) const {
     return true;
 }
 bool InstrumentBackend::memory(MemorySnapshot &m) const { return application_.uiReady_ && GuiHeap::read(m); }
+size_t InstrumentBackend::stalls(char *out, size_t size) const { return application_.stalls_.text(out, size); }
+static_assert(BootTiming::Count * 11 + 6 < scpi::Backend::BootTextBytes, "SYST:BOOT? buffer");
+size_t InstrumentBackend::bootTimes(char *out, size_t size) const { return BootTiming::text(out, size); }
+size_t InstrumentBackend::meterPacket(const uint8_t *&data) const { return application_.data_.meter().packet(data); }
+uint32_t InstrumentBackend::screenCapture() {
+    auto &a = application_;
+    const uint32_t now = Board::milliseconds();
+    if (!a.uiReady_ || a.shots_.busy() || a.imageShowing_ || a.imageReader_.busy()) return 0; // Owned.
+    const uint32_t ticket = a.screenLease_.take(now);
+    if (!ticket) return 0; // Another stream's.
+    lv_refr_now(nullptr);
+    a.display_.settle(); // The frame just drawn is on screen, as for a screenshot.
+    std::memcpy(screenshot::previewMemory(), a.display_.frame(), BmpImage::PixelBytes);
+    return ticket;
+}
+void InstrumentBackend::screenEnd(uint32_t ticket) { application_.screenLease_.end(ticket); }
+size_t InstrumentBackend::screenRead(uint32_t ticket, uint32_t offset, uint8_t *out, size_t size) {
+    if (!application_.screenLease_.read(ticket, Board::milliseconds())) return 0; // Gone: the engine pads (-230).
+    return BmpImage(screenshot::previewMemory()).read(offset, out, size);
+}
 bool InstrumentBackend::factoryCalibration(FactoryCalibration &f) const {
     const auto &record = application_.data_.scopeCalibration().factory();
     f = FactoryCalibration{};

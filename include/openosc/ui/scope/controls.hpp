@@ -4,6 +4,7 @@
 #include <cstddef>
 
 namespace openosc::plot {
+class Model;
 class Controls {
 public:
     enum Row : unsigned {
@@ -36,12 +37,16 @@ public:
         FftWindow,
         FftScale,
         FftDc,
+        CounterSource,
+        CounterAverage,
+        CounterPpm,
         Section,
         Count
     };
-    enum class Group { View, Capture, Cursors, History, Fft, Count };
+    enum class Group { View, Capture, Cursors, History, Fft, Counter, Count };
     Group group = Group::View;
-    // The rows of the group: Section first, then the group's own.
+    bool listing = true; // The section list (DisplayProperties); false: the group's own rows.
+    // The rows of the group (Section past the last).
     unsigned count() const;
     unsigned row(unsigned index) const;
     unsigned index(unsigned row) const;
@@ -49,6 +54,8 @@ public:
     const char *section() const;
     static const char *groupName(unsigned group);
     Options options;
+    int32_t savedPanPpb = 0; // An edit's exact pan (DisplayProperties: the list is rebuilt per key).
+    const Model *model = nullptr; // The view the Pan row steps through: a pixel (fine) or a division (TraceMove::panStep).
     unsigned channel = 0;
     bool enabled[2] = {true, true};
     // One row (Row) as a property: what it is, its name and value, its options, its steps.

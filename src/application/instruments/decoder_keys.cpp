@@ -1,5 +1,7 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/input.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -146,15 +148,15 @@ void ApplicationController::jumpToEvent(uint32_t now) {
     const auto &m = held.view().metadata();
     const auto &e = shown->event(decoderRow_);
     auto options = view_.waveform().options();
-    // The window without pan, then the pan (permille of the record) that centres the event in it.
+    // The window without pan, then the pan (ppb of the record) that centres the event in it.
     plot::Viewport base;
-    auto zero = options; zero.pan = 0;
+    auto zero = options; zero.panPpb = 0;
     const auto &shownViewport = view_.waveform().model().viewport();
     const unsigned width = shownViewport.width > 1 ? shownViewport.width : unsigned(plot::PlotFrame::PlotWidth);
     if (m.samples < 2 || !base.calculate(m, zero, width, shownViewport.height ? shownViewport.height : 1)) return;
     const int64_t centre = (int64_t(e.first) + int64_t(e.last)) * 32768; // Q16 of the middle point.
     const int64_t shift = centre - int64_t(base.spanQ16 / 2) - base.startQ16;
-    const int64_t pan = shift * 1000 / (int64_t(m.samples - 1) * 65536);
+    const double pan = std::round(double(shift) * plot::Options::PanFull / (double(m.samples - 1) * 65536));
     held.release();
     if (prefs_.scope.decoder.view == decoding::View::Table) {
         auto settings = prefs_.scope.decoder;
@@ -162,7 +164,7 @@ void ApplicationController::jumpToEvent(uint32_t now) {
         applyDecoder(settings, now);
     }
     beginHeldView(); // HOLD exploration: RUN brings the view back.
-    options.pan = int16_t(pan < -1000 ? -1000 : pan > 1000 ? 1000 : pan);
+    options.panPpb = int32_t(std::clamp<double>(pan, -plot::Options::PanFull, plot::Options::PanFull));
     view_.waveform().configure(options);
     decoderDetail_ = false;
     dataRefresh_ = true;

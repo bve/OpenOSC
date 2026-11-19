@@ -24,7 +24,8 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     // other view (unlocked, X-Y, FFT) keeps the real record's origin and the trigger's own fraction.
     const bool anchored = o.lockTrigger && m.triggered && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay);
     const int64_t origin = anchored ? int64_t(m.triggerShift) * 65536 : 0;
-    startQ16 = origin + int64_t(m.samples - 1) * 65536 * o.pan / 1000;
+    const int64_t full = int64_t(record), pan = o.panPpb; // record < 2^37: both products fit int64.
+    startQ16 = origin + full / Options::PanFull * pan + full % Options::PanFull * pan / Options::PanFull;
     if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
     if (o.lockTrigger && m.triggered)
         startQ16 += int64_t(m.triggerIndex) * 65536 - origin - int64_t(pretrigger(m, anchored));

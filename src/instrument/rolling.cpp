@@ -16,7 +16,7 @@ void DataAccess::serviceRolling(uint32_t now) {
         const uint16_t *banks[4]={ring.lanes[0],ring.lanes[1],ring.lanes[2],ring.lanes[3]};
         const scope::FrameView frame(metadata,banks,ring.wordsPerLane());
         if (!rolling_.append(frame)) {
-            stopCapture(false); captureFailed_=true; status_=DataStatus::HardwareError; return;
+            stopCapture(false); captureFailed_=true; captureRetryAt_=now+CaptureRetryMs; status_=DataStatus::HardwareError; return;
         }
         if (rolling_.size()==rolling_.capacity()) rollingLost_=false;
         status_=rollingLost_ ? DataStatus::Overflow : DataStatus::Ok;

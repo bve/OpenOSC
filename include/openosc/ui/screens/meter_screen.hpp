@@ -46,6 +46,9 @@ private:
     MeterLook look_;
     bool analog_ = false, held_ = false, styled_ = false;
     bool statistics_ = true; // The measurements block has its statistics' rows (or the trend).
+    bool recording_ = false;
+    bool bar_ = true;
+    int digits_ = ScreenLayout::Digits; // Digital: the size the reading block holds (ScreenLayout::digitsFor).
     DigitalArrangement digital_;
     AnalogArrangement analogOrder_;
     BlockSpan digitalSpans_[DigitalArrangement::Size], analogSpans_[AnalogArrangement::Size];

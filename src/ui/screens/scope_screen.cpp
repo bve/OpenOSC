@@ -87,7 +87,8 @@ void ScopeScreen::cards() {
     // F2 Position: the channel it moves, with its coupling and probe.
     std::snprintf(value, sizeof value, "CH%u %s %s", channel_ + 1, plot::DisplayScale::coupling(selected), probe);
     bar.item(1, "Position", value);
-    std::snprintf(value, sizeof value, "CH%u", unsigned(model.triggerChannel()) + 1);
+    static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
+    std::snprintf(value, sizeof value, "CH%u %s", unsigned(model.triggerChannel()) + 1, modes[unsigned(triggerMode_) % 3]);
     bar.item(2, "Trigger", value);
     if (focus_ == plot::Focus::Cursor && model.cursorFocus() != plot::CursorLine::None)
         bar.item(3, "Cursor", plot::CursorControl::lineName(model.cursorFocus(), spectrum));
@@ -109,6 +110,11 @@ void ScopeScreen::update(const scope::FrameView &frame, bool held, unsigned sele
     if (!frame.valid() || selected > 1 || host_.overlayActive()) return;
     auto &widget = host_.waveform();
     widget.held(held);
+    // A new frame for TRIG'D only when it is another record (or the first: sequence 0 included); the
+    // controller passes the same leased record again for UI refreshes, which must not renew TRIG'D.
+    const auto &m = frame.metadata();
+    newFrame_ = !frameSeen_ || m.sequence != frameSequence_ || m.timestampUs != frameTimestampUs_;
+    frameSeen_ = true; frameSequence_ = m.sequence; frameTimestampUs_ = m.timestampUs;
     widget.setFrame(frame);
     status(health, held);
 

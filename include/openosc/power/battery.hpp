@@ -10,40 +10,48 @@ struct BatteryState {
     bool measured=false;
 };
 
-// The factory's ADC scale drives its six display bands. The voltage and percentage
-// derived from it are estimates: the divider on PC4 has no independent calibration.
+// PC4 through the factory's divider scale: an estimate, not a calibrated reading. Levels are for a
+// 1S Li-ion cell under the instrument's own load. Two separate paths from each 2 s window average:
+// - bars, volts and percent follow a slow filter (about 8 s), the bars with HysteresisMv;
+// - the low verdict (LowBatteryPolicy's input) takes LowWindows consecutive raw windows under LowMv,
+//   and clears after LowWindows consecutive ones at LowMv + HysteresisMv or more. A start-up sag of one
+//   window, or the filter still settling from it, never makes the battery low.
 class BatteryGauge {
 public:
+    static constexpr uint16_t BarMv[4] = {3650, 3730, 3820, 3950}; // At or above: 2, 3, 4, 5 bars.
+    static constexpr uint16_t LowMv = 3450;
+    static constexpr uint16_t HysteresisMv = 40;
+    static constexpr uint16_t ShownStepMv = 20; // The volts/percent readout moves by at least this.
+    static constexpr unsigned Window = 20;      // Samples per average: 2 s at the 100 ms poll.
+    static constexpr uint8_t LowWindows = 3;   // 6 s of consecutive raw windows for a low verdict (and to clear it).
+
     const BatteryState &state() const { return state_; }
     void digital(bool external,bool full) {
         const uint8_t bits=uint8_t(external)|(uint8_t(full)<<1);
         if (bits!=candidate_) { candidate_=bits; stable_=1; }
         else if (stable_<11) ++stable_;
         if (stable_==11) {
-            if (state_.external!=external) resetSamples();
+            if (state_.external!=external) { sum_=0; averaged_=0; }
+            if (state_.external && !external) state_.valid=state_.measured=false; // Re-measured from scratch.
             state_.external=external; state_.full=external && full;
-            if (external) { state_.low=false; state_.valid=true; state_.bars=full ? 5 : 0; state_.measured=false; sum_=0; averaged_=0; }
+            if (external) { state_.low=false; state_.valid=true; state_.bars=full ? 5 : 0; state_.measured=false; }
+            if (state_.external || !state_.measured) { lowRun_=clearRun_=0; low_=false; }
         }
     }
     void sample(uint16_t raw) {
         if (raw>4095 || state_.external) return; // On external power PC4 does not read the battery.
-        average(raw);
-        const uint32_t scaled=uint32_t(raw)*5000;
-        const unsigned bin=scaled<=3400*4166U ? 5 : scaled<3500*4166U ? 0 :
-            scaled<3600*4166U ? 1 : scaled<3800*4166U ? 2 : scaled<4000*4166U ? 3 : 4;
-        ++histogram_[bin];
-        if (++samples_<20) return;
-        unsigned winner=0;
-        for (unsigned i=1;i<6;++i) if (histogram_[i]>histogram_[winner]) winner=i;
-        if (histogram_[winner]>=12) {
-            state_.bars=winner==5 ? 1 : winner+1;
-            state_.low=winner==5; state_.valid=true;
-        }
-        resetSamples();
+        sum_+=raw;
+        if (++averaged_<Window) return;
+        const int32_t mv=int32_t(sum_*5000/4166/Window);
+        sum_=0; averaged_=0;
+        filtered_=state_.measured ? filtered_+(mv*16-filtered_)/4 : mv*16; // 1/16 mV; about 8 s to settle.
+        if (!state_.measured) { lowRun_=clearRun_=0; low_=false; }
+        qualify(mv);
+        update(uint16_t((filtered_+8)/16));
     }
     static uint8_t percent(uint32_t millivolts) {
         static constexpr struct { uint16_t mv; uint8_t pct; } curve[]={
-            {3400,0},{3500,8},{3600,20},{3700,40},{3800,58},{3900,72},{4000,84},{4100,93},{4200,100}};
+            {3450,0},{3550,5},{3650,15},{3700,25},{3750,35},{3800,45},{3850,55},{3900,65},{3950,75},{4000,82},{4100,92},{4150,100}};
         if (millivolts<=curve[0].mv) return 0;
         for (unsigned i=1;i<sizeof curve/sizeof curve[0];++i)
             if (millivolts<curve[i].mv)
@@ -51,17 +59,37 @@ public:
         return 100;
     }
 private:
-    void average(uint16_t raw) {
-        sum_+=raw;
-        if (++averaged_<20) return;
-        const uint32_t millivolts=sum_*5000/4166/20; // 20 samples: 2 s at the 100 ms poll.
-        state_.millivolts=uint16_t(millivolts); state_.percent=percent(millivolts); state_.measured=true;
-        sum_=0; averaged_=0;
+    static uint8_t level(int32_t mv) {
+        uint8_t bars=1;
+        for (auto threshold:BarMv) if (mv>=threshold) ++bars;
+        return bars;
     }
-    void resetSamples() { samples_=0; for (auto &count:histogram_) count=0; }
+    void qualify(int32_t raw) { // The raw window's verdict, independent of the filter.
+        lowRun_=raw<LowMv ? uint8_t(lowRun_<LowWindows ? lowRun_+1 : LowWindows) : 0;
+        clearRun_=raw>=LowMv+HysteresisMv ? uint8_t(clearRun_<LowWindows ? clearRun_+1 : LowWindows) : 0;
+        if (lowRun_>=LowWindows) low_=true;
+        else if (clearRun_>=LowWindows) low_=false;
+    }
+    void update(uint16_t mv) {
+        if (!state_.valid || !state_.measured) {
+            state_.bars=level(mv);
+            state_.millivolts=mv;
+        } else {
+            const uint8_t up=level(int32_t(mv)-HysteresisMv), down=level(int32_t(mv)+HysteresisMv);
+            if (up>state_.bars) state_.bars=up;
+            else if (down<state_.bars) state_.bars=down;
+            if (mv>=state_.millivolts+ShownStepMv || mv+ShownStepMv<=state_.millivolts) state_.millivolts=mv;
+        }
+        state_.low=low_;
+        state_.percent=percent(state_.millivolts);
+        state_.valid=state_.measured=true;
+    }
     BatteryState state_;
-    uint8_t histogram_[6]{},samples_=0,candidate_=0,stable_=0,averaged_=0;
+    uint8_t candidate_=0,stable_=0,averaged_=0;
     uint32_t sum_=0;
+    int32_t filtered_=0;
+    uint8_t lowRun_=0,clearRun_=0;
+    bool low_=false;
 };
 
 class LowBatteryPolicy {

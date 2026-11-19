@@ -14,5 +14,8 @@ struct MeterContext {
     // The hold mode's word for the state pill ("DELAY 5", "WAIT", "A-HOLD": HoldDetector::indicator);
     // null or empty: none (Manual, idle, or the manual/DMM HOLD, which reads "HOLD").
     const char *hold = nullptr;
+    bool showBar = true;
+    bool recording = false; // CSV logging: " REC" on the state pill.
+    dmm::Function selecting = dmm::Function::Unknown; // Being selected (boot, restart): its sign over an empty reading.
 };
 } // namespace openosc::ui

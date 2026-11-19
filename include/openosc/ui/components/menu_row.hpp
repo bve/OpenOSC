@@ -7,9 +7,11 @@ namespace openosc::ui {
 class MenuRow {
 public:
     static constexpr int SliderWidth = 86;
+    // The row's default x, its border and horizontal padding: NameX is where its name starts in the parent.
+    static constexpr int X = 6, Border = 1, Padding = 7, NameX = X + Border + Padding;
     MenuRow() = default;
     void update(lv_obj_t *parent, int y, int height, const char *name, const char *value,
-                bool selected, const Theme &theme, uint32_t accent, int x = 6, int width = 290);
+                bool selected, const Theme &theme, uint32_t accent, int x = X, int width = 290);
     void visible(bool value) { if (root_) lv_obj_set_hidden(root_, !value); }
     MenuRow(lv_obj_t *parent, int y, int height, const char *name, const char *value,
             bool selected, const Theme &theme, uint32_t accent);

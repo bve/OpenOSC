@@ -12,7 +12,9 @@ struct TriggerSettings {
     uint16_t position=250; // Requested pre-trigger fraction, in thousandths of the record.
     // Noise reject: an edge counts only if, since the signal was last past the level, it went
     // RejectCodes beyond the level on the side it starts from (hysteresis on arming; the edge stays
-    // where it crosses the level). Off (default) counts every crossing, as before.
+    // where it crosses the level). Off counts every crossing: chatter on the opposite slope can
+    // then trigger half a period late. The instrument's default is On (ScopePreferences::triggerReject,
+    // also for files without it); a bare TriggerSettings (internal trials, tests) counts every crossing.
     bool reject = false;
     static constexpr int RejectCodes = 4;
     bool valid() const;

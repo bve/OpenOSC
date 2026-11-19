@@ -29,6 +29,7 @@ struct ReadoutParts {
     char tag[8] = "", value[24] = "";
     int tagWidth = 0, valueWidth = 0;
     unsigned size = 12;
+    int prefix = -1; // Format::quantity's prefix index (-1: none).
     int width() const { return tagWidth + valueWidth; }
 };
 // Readout texts in IBM Plex Sans 12, never clipped. fit(): the first form within a width, at
@@ -38,6 +39,9 @@ struct ReadoutParts {
 // is not known.
 class ReadoutText {
 public:
+    // Between a full tag and its value ("Vpp 4.54V"), form() with gap; short tags stay tight. ReadoutRow
+    // drops it for a whole row when it would cost a digit or a value.
+    static constexpr int TagGap = 3;
     static bool fit(const char *tag, bool valid, double value, const char *unit, int width, char *output, size_t capacity,
                     const char *suffix = "");
     // A selected measurement (Measurements::Tags/Units) as form `index` of Forms, most precise first:
@@ -52,8 +56,16 @@ public:
     // they are). No form then shows more, a coarse form's fixed decimals included ("12.35kHz" and
     // ">99.99%" are refused at 2 or 3), and ">99%" is that value's bound at two.
     static constexpr unsigned Forms = 10, Overflow = Forms - 1;
+    // The prefix to keep near its range's edge (Format::quantity; -1: none), Scope's hysteresis. Its own
+    // type, explicit: `gap` (a bool, after it) can never turn into a preferred prefix by position.
+    struct Prefer {
+        int index;
+        Prefer() : index(-1) {} // No preference (a default argument of form(), inside this class).
+        explicit Prefer(int prefix) : index(prefix) {}
+        Prefer(bool) = delete;
+    };
     static bool form(unsigned kind, bool valid, double value, const char *mark, unsigned index, ReadoutParts &output, unsigned size = 12,
-                     unsigned limit = 0);
+                     unsigned limit = 0, Prefer prefer = {}, bool gap = true);
     // How a computed value reads in any layout (footer panels, Legacy): its mark ("~": a tone from
     // the spectrum, or approximate) and its digit limit (0 without a bound: Full, Vpp, ...).
     struct Presentation { const char *mark = ""; unsigned limit = 0; };

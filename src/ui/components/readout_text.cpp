@@ -35,6 +35,7 @@ ReadoutText::Presentation ReadoutText::presentation(const scope::Measurements &v
     const bool tone = (kind == scope::Measurement::Frequency || kind == scope::Measurement::Period) &&
                       values.frequencySource() == scope::FrequencySource::Spectrum;
     if (tone || values.approximate(kind)) shown.mark = "~";
+    if (const char *clip = values.clipMark(kind)) shown.mark = clip;
     if (values.uncertainty(kind) > 0) shown.limit = values.digits(kind);
     return shown;
 }
@@ -66,14 +67,14 @@ bool ReadoutText::fit(const char *tag, bool valid, double value, const char *uni
 }
 unsigned ReadoutText::digits(unsigned index) { return index < Overflow ? Steps[Shapes[index].step].precision : 0; }
 bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark, unsigned index, ReadoutParts &output, unsigned size,
-                       unsigned limit) {
+                       unsigned limit, Prefer prefer, bool gap) {
     output = {};
     output.size = size;
     if (index >= Forms || kind >= scope::Measurements::Count || kind == unsigned(scope::Measurement::Off)) return false;
     const bool overflow = index == Overflow;
     const auto shape = overflow ? Shape{0, false} : Shapes[index];
     if (overflow) { // Only for a value no other form can write (far outside the instrument's range).
-        for (unsigned i = 0; i < Overflow; ++i) if (form(kind, valid, value, mark, i, output, size, limit)) return false;
+        for (unsigned i = 0; i < Overflow; ++i) if (form(kind, valid, value, mark, i, output, size, limit, prefer, gap)) return false;
         output = {};
         output.size = size;
         std::snprintf(output.value, sizeof output.value, "OVR");
@@ -81,7 +82,8 @@ bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark
         const auto step = Steps[shape.step];
         // Bounded: significant digits at most `limit` (a coarse form's fixed decimals are checked below).
         const unsigned precision = limit && !step.coarse ? std::min(step.precision, limit) : step.precision;
-        if (!plot::Format::quantity(value, scope::Measurements::Units[kind], output.value, sizeof output.value, precision, step.coarse))
+        if (!plot::Format::quantity(value, scope::Measurements::Units[kind], output.value, sizeof output.value, precision, step.coarse,
+                                    prefer.index, &output.prefix))
             return false;
         // A percent just under 100 that rounds to "100%" would read as DC: its bound instead, with
         // the decimals the form keeps (">99.9%" at three digits, ">99.99%" at two decimals). A form
@@ -97,7 +99,7 @@ bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark
         if (limit && significant(output.value) > limit) return false;
     } else std::snprintf(output.value, sizeof output.value, "--");
     std::snprintf(output.tag, sizeof output.tag, "%s%s", shape.shortTag ? ShortTags[kind] : scope::Measurements::Tags[kind], mark ? mark : "");
-    output.tagWidth = Elements::textWidth(output.tag, size);
+    output.tagWidth = Elements::textWidth(output.tag, size) + (gap && !shape.shortTag ? TagGap : 0);
     output.valueWidth = Elements::textWidth(output.value, size);
     return true;
 }

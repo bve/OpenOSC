@@ -90,6 +90,7 @@ public:
     void battery(const power::BatteryState &state) { battery_.update(state); }
     void batteryDisplay(uint32_t mode);
     void fps(bool visible, uint32_t value);
+    void counter(bool visible, const char *text); // The top bar's counter: FPS or the sample rate.
     WaveformWidget &waveform() { return host_.waveform(); }
     const WaveformWidget &waveform() const { return host_.waveform(); }
     const ui::MeterSummary &meterSummary() { return host_.meterSummary(); }
@@ -110,7 +111,8 @@ public:
     void notify(const char *text, uint32_t now);
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
     const char *toast() const { return toastActive_ && toast_ ? lv_label_get_text(toast_) : ""; } // On show now.
-    void powerHold(int percent) { powerHold_.show(percent); } // PowerHold::percent; -1 hides.
+    bool toastShowing() const { return toastActive_; } // A notice is on show (store(): none over another).
+    void powerHold(int percent, const char *title) { powerHold_.show(percent, title); } // PowerHold::percent; -1 hides.
     void service(uint32_t now);
 
 private:
@@ -145,11 +147,9 @@ private:
     ui::RecordOverview overview_;
     ui::PowerHoldOverlay powerHold_;
     void refreshIndicators();
-    void placeFps();
+    void placeFps(bool force = false);
     int statusRight_ = -1; // The pill edge the indicators were last laid out for.
-    int triggerX_ = 0;     // The trigger place in use (StatusBarLayout::TriggerNear or TriggerFar).
-    uint32_t fpsValue_ = 0xffffffffU;
-    bool fpsWanted_ = false, fpsVisible_ = false, triggerShown_ = false;
+    bool fpsWanted_ = false, fpsVisible_ = false;
     uint32_t toastUntil_ = 0;
     bool generatorOn_ = false, toastActive_ = false, usbConnected_ = false;
     MeasurementMode mode_ = MeasurementMode::Oscilloscope;

@@ -13,7 +13,7 @@ struct MeterPalette {
 // The reading's typeface: the largest of its sizes (up to the theme's size) in which the reading
 // fits, then the shared smaller numeric fonts.
 struct ReadingFonts {
-    static constexpr unsigned Capacity = 8;
+    static constexpr unsigned Capacity = 10;
     const lv_font_t *fonts[Capacity]{};
     unsigned count = 0;
 };

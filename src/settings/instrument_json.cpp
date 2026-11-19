@@ -222,7 +222,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
     if (!(scope.containsKey("run_mode") ? number(scope,"run_mode",s.runMode) : boolean(scope,"high_performance",s.runMode)) || !boolean(scope,"roll_auto",s.rollAuto) || !boolean(scope,"interleave",s.interleave) ||
         !choice(scope, "factory_record_format", s.factoryRecordFormat, factoryRecordFormats) ||
         !choice(meter, "display", output.meter.display, displays) ||
-        !boolean(meter, "statistics", output.meter.statistics) || !boolean(meter,"auto",output.meter.automatic) ||
+        !boolean(meter, "statistics", output.meter.statistics) || !boolean(meter, "bar_graph", output.meter.bar) || !boolean(meter,"auto",output.meter.automatic) ||
         !number(meter,"range_index",output.meter.range) || !choice(meter, "face", output.meter.face, faces) ||
         !choice(meter, "palette", output.meter.palette, palettes)) return false;
     if (meter["appearance"].is<JsonObjectConst>()) appearance(meter["appearance"].as<JsonObjectConst>(), output.meter.appearance);
@@ -311,7 +311,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     arrangement(scope, "arrangement", s.arrangement);
     ScopeAppearanceJson::encode(scope, s.appearance);
     encodeDecoder(scope, s.decoder);
-    meter["display"] = displays[values.meter.display]; meter["statistics"] = bool(values.meter.statistics);
+    meter["display"] = displays[values.meter.display]; meter["statistics"] = bool(values.meter.statistics); meter["bar_graph"] = bool(values.meter.bar);
     meter["auto"] = bool(values.meter.automatic); meter["range_index"] = values.meter.range;
     meter["face"] = faces[values.meter.face]; meter["palette"] = palettes[values.meter.palette];
     arrangement(meter, "arrangement_digital", values.meter.digitalArrangement);

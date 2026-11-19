@@ -23,6 +23,7 @@
 #include "openosc/measurement/dmm/packet.hpp"
 #include "openosc/measurement/dmm/uart_dma.hpp"
 #include "openosc/measurement/dmm/function.hpp"
+#include "openosc/measurement/dmm/link_watchdog.hpp"
 #include "openosc/measurement/dmm/meter_commands.hpp"
 #include "openosc/measurement/dmm/ranges.hpp"
 #include "openosc/calibration/zero_operation.hpp"
@@ -57,6 +58,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // Skips capture restarts while nothing consumes frames; a recent frame request overrides it.
     bool fullRateCapture() const { return configuration_.samplesPerSecond.value() >= FullRateSamples; }
     void pauseCapture(bool pause,uint32_t now) { capturePaused_ = pause && uint32_t(now-frameRequestedAt_)>=FrameDemandMs; }
+    bool capturePaused() const { return capturePaused_; }
+    bool captureQuieted() const { return usbQuiet_; }
     bool configureScope(const ScopeRequest &request);
     // While held: keeps the record and applies the configuration at the next RUN.
     bool stageScope(const ScopeRequest &request);
@@ -120,6 +123,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // accepted, and again once the running capture has waited TriggerWaitMs for an edge with its gate
     // Armed (followTriggerWait). Auto: never. HOLD and a finished Single read STOP (scopeHeld).
     bool scopeWaiting() const { return triggerWaiting_; }
+    bool scopeTriggered() const { return acceptedTriggered_; } // The last accepted frame held its trigger edge.
     // A physical F1-F4: one group key (dmm::MeterCommands::pressGroup), the statistics restart; what the
     // controller does is read from its packets. SCPI and the restore select a function instead.
     bool sendDmmGroup(dmm::CommandGroup group);
@@ -156,7 +160,11 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool serialMeter(bool enabled);
     const board::DmmSerialOutput &meterSerial() const { return serial_; }
     bool dmmBusy() const { return dmm_.busy(); }
+    // DMM chip restarts that brought it back (dmm::LinkWatchdog); its function is then lost.
+    uint32_t dmmRestarts() const { return watchdog_.restarts(); }
+    uint32_t dmmReselects() const { return watchdog_.reselects(); } // Powered again in its default function, silently.
     DataStatus dmmCommandStatus() const { return dmm_.status(); }
+    const char *dmmCommandName() const { return dmm_.operation(); }
     DataStatus dmmSelectionStatus() const { return dmm_.selectionStatus(); }
     bool recordScope(ScopeRecorder::Format format);
     ScopeRecorder &scopeRecorder() { return recorder_; }
@@ -346,6 +354,10 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // DmmCloseMs; past that, or a UART fault, the commands are abandoned and the UART stops all the same.
     void serviceDmmClose(uint32_t now);
     void stopDmmUart();
+    void serviceDmmWatchdog(uint32_t now);
+    void restartDmmUart();
+    static_assert(dmm::LinkWatchdog::OffMs <= dmm::FunctionSelector::PowerOnWaitMs, "A selection's deadline covers the power-on wait");
+    dmm::LinkWatchdog watchdog_; // Silence power-cycles, the minimum off time, the UART's bounded restarts.
     static constexpr uint32_t DmmCloseMs = 500;
     bool dmmClosing_ = false;
     uint32_t dmmCloseDeadline_ = 0;
@@ -437,6 +449,9 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     MeasurementMode measurement_ = MeasurementMode::Oscilloscope;
     DataStatus status_ = DataStatus::NoData;
     uint32_t holdReleases_ = 0;
+    // A capture fault (HardwareError, Timeout, Overflow) is owed a restart until a start succeeds: HOLD
+    // waits for that restart (holdScopeCore) also in the pass its retry came due but could not start.
+    bool captureRestartOwed_ = false;
     bool initialized_ = false, active_ = false, stopping_ = false, scopeHeld_ = false, singleDone_ = false, captureFailed_ = false,
          recordPending_ = false;
     ScopeRecorder::Format recordFormat_ = ScopeRecorder::Format::Raw;
@@ -444,7 +459,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     uint64_t timeUs_ = 0;
     uint32_t armSequence_ = 0, captureRetryAt_ = 0;
     static constexpr uint32_t CaptureRetryMs = 50;
-    bool triggerWaiting_ = false;
+    bool triggerWaiting_ = false, acceptedTriggered_ = false; // acceptedTriggered_: TRIG:STAT? TD.
     uint64_t dmmActivatedAtUs_ = 0, recordDeadlineUs_ = 0;
     DataStatus recordStatus_ = DataStatus::NoData;
     // followTriggerWait: since when (armedAt_) the capture armedSequence_ has been seen Armed.

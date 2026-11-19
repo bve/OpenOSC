@@ -75,7 +75,7 @@ RunModeSwitch::Result ApplicationController::changeRunMode(uint32_t mode, uint32
     const bool runs = result.outcome == RunModeSwitch::Outcome::Applied || result.outcome == RunModeSwitch::Outcome::Unchanged ||
                       result.outcome == RunModeSwitch::Outcome::ResumeFailed;
     if (persist && runs && result.active == mode && prefs_.scope.runMode != mode) {
-        prefs_.scope.runMode = mode; // Saved to settings.json by the usual delayed save, no restart.
+        prefs_.scope.runMode = mode; // Saved to settings.json at power-off, no restart.
         changed(now);
     }
     // Armed and now running: confirmed after its stable time, like a boot on it.

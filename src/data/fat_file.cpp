@@ -9,13 +9,20 @@
 
 namespace openosc {
 FatDataFile::~FatDataFile() { cancel(); }
-void FatDataFile::cancel() {
-    if (open_ || verifying_)
+void FatDataFile::cancel(bool keep) {
+    if (open_ || verifying_) {
         f_close(&file_);
+        if (!keep) f_unlink(temporary_);
+    }
     open_ = verifying_ = false;
 }
+bool FatDataFile::sync() {
+    if (!open_) return false;
+    if (f_sync(&file_) != FR_OK) return fail(DataStatus::IoError);
+    return true;
+}
 bool FatDataFile::fail(DataStatus status) {
-    cancel();
+    cancel(true); // An I/O error keeps what was written.
     status_ = status;
     return false;
 }
@@ -86,15 +93,17 @@ DataStatus FatDataFile::commitStep() {
     if (!verifying_)
         return status_;
     uint8_t buffer[512];
-    const UINT chunk =
-        bytes_ - verifiedBytes_ > sizeof buffer ? sizeof buffer : UINT(bytes_ - verifiedBytes_);
-    UINT count = 0;
-    if (f_read(&file_, buffer, chunk, &count) != FR_OK || count != chunk) {
-        fail(DataStatus::IoError);
-        return status_;
+    for (unsigned n = 0; n < 8 && verifiedBytes_ != bytes_; ++n) { // 4 KiB a pass: 512 B made a 1 MiB log outlast FinishMs.
+        const UINT chunk =
+            bytes_ - verifiedBytes_ > sizeof buffer ? sizeof buffer : UINT(bytes_ - verifiedBytes_);
+        UINT count = 0;
+        if (f_read(&file_, buffer, chunk, &count) != FR_OK || count != chunk) {
+            fail(DataStatus::IoError);
+            return status_;
+        }
+        verified_.update(buffer, count);
+        verifiedBytes_ += count;
     }
-    verified_.update(buffer, count);
-    verifiedBytes_ += count;
     if (verifiedBytes_ != bytes_)
         return DataStatus::Busy;
     const auto closed = f_close(&file_);

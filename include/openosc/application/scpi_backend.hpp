@@ -12,6 +12,7 @@ public:
     const ScopeRequest &scopeRequest() const override;
     const scope::FrameMetadata *configuration() const override;
     bool configureScope(const ScopeRequest &) override;
+    bool setTrigger(const ScopeRequest &) override;
     bool run(bool single) override;
     bool autoScale() override;
     bool forceTrigger() override;
@@ -19,6 +20,7 @@ public:
     void stop() override;
     bool held() const override;
     bool waiting() const override;
+    bool triggered() const override;
     const scope::FrameView *frame(bool refresh) override;
     void releaseFrame() override;
     void endSession() override;
@@ -58,6 +60,12 @@ public:
     bool remote(bool) override;
     bool performance(PerformanceSnapshot &) const override;
     bool memory(MemorySnapshot &) const override;
+    size_t stalls(char *out, size_t size) const override;
+    size_t bootTimes(char *out, size_t size) const override;
+    size_t meterPacket(const uint8_t *&data) const override;
+    uint32_t screenCapture() override;
+    void screenEnd(uint32_t ticket) override;
+    size_t screenRead(uint32_t ticket, uint32_t offset, uint8_t *out, size_t size) override;
     bool factoryCalibration(FactoryCalibration &) const override;
     bool factoryRecordFormat(FactoryRecordReading &) const override;
     bool recovery() override;
@@ -68,6 +76,7 @@ public:
     const char *serial() const override { return serial_; }
     const char *version() const override;
 private:
+    bool configure(const ScopeRequest &request, bool level); // configureScope and setTrigger: LevelIntent.
     ApplicationController &application_;
     scope::FrameLease lease_;
     decoding::RecordKey leaseKey_; // The lease's full key, frozen when it was taken (WAV:KEY?).

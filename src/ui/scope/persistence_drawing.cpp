@@ -7,7 +7,7 @@ void Painter::persistence() {
     const auto &bitmap=model_.storage().persistence;
     for (unsigned c=0; c<(o.mode==Mode::XY ? 1U : 3U); ++c) {
         if (c<2 && !o.channels[c].visible) continue;
-        if (c==2 && o.math==Math::Off) continue;
+        if (c==2 && (o.math==Math::Off || o.persistenceMs!=InfinitePersistence)) continue;
         Path path(layer_,area_,c<2 ? palette_.channels[c] : palette_.math,
             c<2 ? o.channels[c].opacity/3 : 85,1,model_.statistics());
         for (unsigned y=0; y<viewport.height; ++y) {

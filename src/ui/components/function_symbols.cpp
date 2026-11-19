@@ -61,6 +61,10 @@ void diode(const Pen &p) { // circuit-diode
     p.polyline(triangle, 4);
     p.line(16, 7, 16, 17);
 }
+void resistor(const Pen &p) { // Leads and a six-segment zigzag.
+    static constexpr float zigzag[][2] = {{1, 12}, {5, 12}, {6.5f, 8}, {9, 16}, {11.5f, 8}, {14, 16}, {16.5f, 8}, {19, 16}, {20, 12}, {23, 12}};
+    p.polyline(zigzag, sizeof zigzag / sizeof *zigzag);
+}
 void capacitor(const Pen &p) { // circuit-capacitor
     p.line(22, 12, 14, 12); p.line(2, 12, 10, 12); p.line(10, 7, 10, 17); p.line(14, 7, 14, 17);
 }
@@ -83,14 +87,15 @@ FunctionSymbols::Symbol FunctionSymbols::of(dmm::Function f, bool beeper) {
     default: return S::Unknown;
     }
 }
-int FunctionSymbols::width(Symbol s, int height) {
+int FunctionSymbols::width(Symbol s, int height, bool bare) {
     Quantity q;
+    if (bare && quantity(s, q)) return Elements::textWidth(q.ac ? "AC" : "DC", fontSize(height));
     if (quantity(s, q)) return Elements::textWidth(q.letters, fontSize(height)) + height / 8 + markWidth(height);
     if (s == S::DiodeBeeper) return 2 * height;
     if (s == S::Unknown) return Elements::textWidth("?", fontSize(height));
     return height;
 }
-void FunctionSymbols::draw(lv_layer_t *layer, Symbol s, int x, int y, int height, lv_color_t color) {
+void FunctionSymbols::draw(lv_layer_t *layer, Symbol s, int x, int y, int height, lv_color_t color, bool bare) {
     const Pen pen{layer, float(x), float(y), height / 24.f, color};
     Quantity q;
     const auto text = [&](const char *value) {
@@ -101,6 +106,8 @@ void FunctionSymbols::draw(lv_layer_t *layer, Symbol s, int x, int y, int height
         const lv_area_t area = {x, y + (height - line) / 2, x + Elements::textWidth(value, fontSize(height)), y + (height - line) / 2 + line - 1};
         lv_draw_label(layer, &d, &area);
     };
+    if (bare && quantity(s, q)) { text(q.ac ? "AC" : "DC"); return; }
+    if (bare && s == S::Ohm) { resistor(pen); return; }
     if (quantity(s, q)) {
         text(q.letters);
         // The mark right of the letters, in pixels of this height.

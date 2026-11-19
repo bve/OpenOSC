@@ -35,6 +35,9 @@ public:
     virtual const ScopeRequest &scopeRequest() const = 0;
     virtual const scope::FrameMetadata *configuration() const = 0;
     virtual bool configureScope(const ScopeRequest &) = 0;
+    // The same, with its trigger level set on purpose (TRIG:EDGE:LEV): an instrument that keeps the
+    // trigger's voltage across scales takes it as the new anchor, also as the same whole code.
+    virtual bool setTrigger(const ScopeRequest &request) { return configureScope(request); }
     virtual bool run(bool single) = 0;
     virtual bool autoScale() { return false; }
     // A forced trigger (TFORce): a record without a trigger event (DataAccess::forceScope). False:
@@ -45,6 +48,7 @@ public:
     virtual void stop() = 0;
     virtual bool held() const = 0;
     virtual bool waiting() const = 0;
+    virtual bool triggered() const { return false; } // The last frame held its trigger edge (TRIG:STAT? TD).
     virtual const scope::FrameView *frame(bool refresh) = 0;
     virtual void releaseFrame() = 0;
     // The session ended (Engine::reset: a new session, a disconnect, a clear): its frame lease and
@@ -91,6 +95,17 @@ public:
     virtual bool interleave(bool on) { return !on; }
     // The GUI heap, read now (a pool walk); false while there is none to read.
     virtual bool memory(MemorySnapshot &) const { return false; }
+    // SYST:STALl?: long main-loop passes and Auto frame gaps (StallLog::text).
+    virtual size_t stalls(char *, size_t) const { return 0; }
+    static constexpr size_t BootTextBytes = 256; // SYST:BOOT?'s reply buffer.
+    virtual size_t bootTimes(char *, size_t) const { return 0; } // SYST:BOOT? (BootTiming).
+    virtual size_t meterPacket(const uint8_t *&data) const { data = nullptr; return 0; } // SYST:DMM:PACK?
+    // DISP:DATA?: the screen copied now into the preview buffer, leased under a ticket (0: refused, no
+    // display or the buffer in use). screenRead answers 0 for a ticket that is no longer the lease
+    // (expired and taken by a screenshot, an image or another stream): the engine then pads with -230.
+    virtual uint32_t screenCapture() { return 0; }
+    virtual size_t screenRead(uint32_t, uint32_t, uint8_t *, size_t) { return 0; }
+    virtual void screenEnd(uint32_t) {} // The stream finished or was dropped: that lease is free.
     // The factory calibration record as this boot decoded it (SYST:CAL:FACT?, docs/SCPI.md), from the
     // record alone: no plan, user gain, display gain, channel state or calibration in progress.
     // identity: the CRC calibration files are bound to; gainWord: as decoded (0: not written, also every

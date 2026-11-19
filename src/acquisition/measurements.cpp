@@ -27,6 +27,11 @@ Measurements Measurements::calculate(const SignalSummary &s, const ChannelMetada
     if (!c.calibrated || !c.enabled || !c.probeDenominator || !std::isfinite(c.zeroCode) ||
         !std::isfinite(c.voltsPerCode) || c.voltsPerCode <= 0) return result;
     const double factor = c.voltsPerCode * c.probeNumerator / c.probeDenominator;
+    // ADC-clipped only where the band reaches a rail (BandEstimate drops up to Outliers columns): one
+    // bus glitch at 0x7F/0x80 (the known one-word lane outliers) marks nothing; a clipped plateau does.
+    // Without a band (a few points), the extremes themselves.
+    result.clipLow_ = (s.hasRobust ? s.robustMinimum : s.minimum) <= ClipLow;
+    result.clipHigh_ = (s.hasRobust ? s.robustMaximum : s.maximum) >= ClipHigh;
     result.values_[unsigned(Measurement::PeakToPeak)] = (s.maximum - s.minimum) * factor;
     result.values_[unsigned(Measurement::Mean)] = (s.mean - c.zeroCode) * factor;
     result.values_[unsigned(Measurement::Minimum)] = (s.minimum - c.zeroCode) * factor;
@@ -59,6 +64,15 @@ int Measurements::supported(Measurement kind) const {
 }
 unsigned Measurements::digits(Measurement kind) const {
     return unsigned(std::clamp(supported(kind), int(MinimumDigits), int(MaximumDigits)));
+}
+const char *Measurements::clipMark(Measurement kind) const {
+    switch (kind) {
+    case Measurement::PeakToPeak: case Measurement::Amplitude: return clipLow_ || clipHigh_ ? ">" : nullptr;
+    case Measurement::Maximum: case Measurement::Top: return clipHigh_ ? ">" : nullptr;
+    case Measurement::Minimum: case Measurement::Bottom: return clipLow_ ? "<" : nullptr;
+    case Measurement::Mean: case Measurement::Rms: case Measurement::AcRms: return clipLow_ || clipHigh_ ? "?" : nullptr;
+    default: return nullptr;
+    }
 }
 bool Measurements::approximate(Measurement kind) const { return supported(kind) < int(MinimumDigits); }
 bool CounterCheck::suspect(const CounterReading &counter, const Measurements &record, uint64_t recordTimestampUs) {

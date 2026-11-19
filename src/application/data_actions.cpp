@@ -57,6 +57,7 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     if (!data_.select(next)) return ModeChange::Refused; // The menu and its edit stay as they are.
     dropEdit(now);
     state_.mode = next;
+    ++counterEpoch_; // The counter overlay averages a Scope visit only.
     state_.settingsOpen = false;
     panel_ = Panel::None;
     if (previousMeasurement != data_.measurementMode() && usb_) usb_->profileChanged(now);
@@ -76,8 +77,7 @@ bool ApplicationController::applyScope(const ScopeRequest &request, uint32_t now
         : mode == ScopeApply::StageIfHeld && data_.scopeHeld() ? data_.stageScope(request) : data_.configureScope(request);
     if (!applied) return false;
     const auto &active = data_.scopeRequest();
-    const unsigned source = unsigned(active.trigger.channel);
-    triggerFollow_.observe(active.trigger.level, source, active.frontend.position[source]);
+    triggerFollow_.observe(triggerPlace(active));
     const auto previous = prefs_;
     InstrumentState::capture(active, prefs_);
     state_.scope.timebaseNs = prefs_.timebaseNs;
@@ -86,30 +86,46 @@ bool ApplicationController::applyScope(const ScopeRequest &request, uint32_t now
     dataRefresh_ = true;
     return true;
 }
-// A move of the analog zero is a move of the whole trace, the trigger on it included.
-// Applies to whoever moves it, the keys or a remote host; a refused request leaves no trace.
-bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode) {
+scope::TriggerFollow::Place ApplicationController::triggerPlace(const ScopeRequest &r) {
+    const unsigned c = unsigned(r.trigger.channel) & 1U;
+    return {int16_t(r.trigger.level), int16_t(r.frontend.position[c]), uint8_t(c), uint8_t(r.frontend.range[c])};
+}
+// A change of the trigger channel's scale (V/div) or analog zero moves its codes, so the trigger keeps
+// its input voltage (TriggerFollow, GitHub #26). Applies to whoever changes them, the keys, the editors
+// or a remote host; an explicit new level (TRIG:LEV, the trigger keys, 50 %) is applied as given, the
+// other channel changes nothing, and a refused request leaves no trace (the anchor before it stays).
+bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode, LevelIntent intent) {
     const auto &current=data_.scopeRequest();
     const unsigned c=unsigned(request.trigger.channel);
     scope::TriggerFollow::Proposal proposal;
     bool following=false;
-    if (request.trigger.channel==current.trigger.channel && request.trigger.level==current.trigger.level &&
-        request.frontend.position[c]!=current.frontend.position[c]) {
+    if (intent==LevelIntent::Follow && c<2 && request.trigger.channel==current.trigger.channel && request.trigger.level==current.trigger.level) {
         const auto before=data_.scopeChannelFor(current,c), after=data_.scopeChannelFor(request,c);
-        if ((following=before.calibrated && after.calibrated)) {
-            proposal=triggerFollow_.propose(current.trigger.level,c,current.frontend.position[c],request.frontend.position[c],before.zeroCode,after.zeroCode);
+        if ((following=before.calibrated && after.calibrated && before.voltsPerCode>0 && after.voltsPerCode>0 &&
+                       (before.voltsPerCode!=after.voltsPerCode || before.zeroCode!=after.zeroCode))) {
+            proposal=triggerFollow_.propose(triggerPlace(current),request.frontend.position[c],request.frontend.range[c],
+                                            {before.zeroCode,before.voltsPerCode},{after.zeroCode,after.voltsPerCode});
             request.trigger.level=proposal.level;
         }
     }
     if (!applyScope(request,now,mode)) return false;
-    if (following) triggerFollow_.commit(proposal);
+    if (intent==LevelIntent::Set) triggerFollow_.forget();
+    if (following) {
+        triggerFollow_.commit(proposal);
+        if (proposal.limited && uiReady_) view_.notify("Trigger level at its limit", now); // The voltage is out of reach.
+    }
     return true;
 }
 // Editors change the next acquisition even while stopped: HOLD keeps its record, and
 // a finished Single shot, which is no user stop, arms the edited configuration.
-bool ApplicationController::applyEdited(ScopeRequest request, uint32_t now) {
+bool ApplicationController::applyEdited(ScopeRequest request, uint32_t now, LevelIntent intent) {
     plot::XyMode::constrain(view_.waveform().options(),request);
-    return applyFollowing(request,now,data_.scopeSingleDone() ? ScopeApply::Resume : ScopeApply::StageIfHeld);
+    return applyFollowing(request,now,data_.scopeSingleDone() ? ScopeApply::Resume : ScopeApply::StageIfHeld,intent);
+}
+bool ApplicationController::applyFound(const ScopeRequest &request, uint32_t now) {
+    if (!applyScope(request,now)) return false;
+    triggerFollow_.forget();
+    return true;
 }
 // What a held record contains decides what can be examined; a running view follows the next capture.
 bool ApplicationController::channelShown(unsigned channel) {
@@ -134,7 +150,7 @@ bool ApplicationController::triggerMidpoint(uint32_t now) {
     }
     frame.release(); // Applying restarts capture, which needs every frame lease back.
     auto request=data_.scopeRequest(); request.trigger=triggerEditor_.settings();
-    if (!applyEdited(request,now)) { view_.notify("Finish data transfer first",now); return false; }
+    if (!applyEdited(request,now,LevelIntent::Set)) { view_.notify("Finish data transfer first",now); return false; }
     return true;
 }
 bool ApplicationController::restoreStartupOutput(const PreferencesResult &applied) {
@@ -185,6 +201,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
 }
 void ApplicationController::dataKeys(uint32_t keys, uint32_t now, bool fine) {
     if (!keys) return;
+    analyzeRow_ = ~0U; // No panel open (also after MODE, which drops it without closePanel).
     switch (state_.mode) {
     case MeasurementMode::Oscilloscope: if (decoderScreen()) decoderKeys(keys, now); else scopeKeys(keys, now, fine); break;
     case MeasurementMode::Multimeter: meterKeys(keys, now); break;

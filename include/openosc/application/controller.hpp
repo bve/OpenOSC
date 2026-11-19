@@ -39,6 +39,9 @@
 #include "openosc/ui/editors/property_navigator.hpp"
 #include "openosc/ui/scope/display_properties.hpp"
 #include "openosc/platform/battery_monitor.hpp"
+#include "openosc/application/stall_log.hpp"
+#include "openosc/application/screen_lease.hpp"
+#include "openosc/ui/scope/counter_text.hpp"
 
 namespace openosc {
 class InstrumentBackend;
@@ -57,13 +60,20 @@ public:
 private:
     friend class InstrumentBackend;
     friend class ScopeControllerProbe; // Native tests drive the key handlers directly.
-    bool setRemote(bool enabled);
+    bool setRemote(bool enabled, const char *left = nullptr); // left: the notice when Remote ends cleanly.
     ModeChange selectMode(MeasurementMode next, uint32_t now); // MODE key and SYST:MODE.
     InstrumentUsb *usb_ = nullptr;
     // remote_: USB Remote control (keys locked except MENU/REL hold exits, no idle power-off);
     // the display keeps running. uiReady_: the LVGL UI exists — every view update, render and
     // notification depends on it; false only for the headless fallback of a failed display init.
     bool remote_ = false, uiReady_ = false;
+    StallLog stalls_;
+    plot::CounterText counterText_;
+    uint32_t counterEpoch_ = 0; // Each instrument mode change: the counter overlay's mean starts again.
+    bool sectionDirect_ = false; // A Display section opened from Analyze (FFT): Back returns there.
+    static constexpr unsigned PanDoubling = 8;
+    unsigned panRepeats_ = 0;
+    int panSign_ = 0; // The direction panRepeats_ counts for.
     PerformanceCounter performance_;
     void onKeys(const KeyEvents &events, uint32_t now);
     void settingsKeys(uint32_t keys, uint32_t now);
@@ -150,8 +160,13 @@ private:
     void followGeneratorOutput(uint32_t now);
     enum class ScopeApply : uint8_t { Configure, StageIfHeld, Resume };
     bool applyScope(const ScopeRequest &request, uint32_t now, ScopeApply mode = ScopeApply::Configure);
-    bool applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode);
-    bool applyEdited(ScopeRequest request, uint32_t now);
+    // Follow: a request whose trigger level stands (a scale, a zero, anything else) keeps the trigger's
+    // voltage; Set: its level is set on purpose and becomes the anchor, even as the same whole code.
+    enum class LevelIntent : uint8_t { Follow, Set };
+    bool applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode, LevelIntent intent = LevelIntent::Follow);
+    static scope::TriggerFollow::Place triggerPlace(const ScopeRequest &request); // TriggerFollow's key.
+    bool applyEdited(ScopeRequest request, uint32_t now, LevelIntent intent = LevelIntent::Follow);
+    bool applyFound(const ScopeRequest &request, uint32_t now); // AUTO's result: its level is set (LevelIntent::Set).
     bool changePlotMode(plot::Options &options, plot::Mode before, uint32_t now);
     bool channelShown(unsigned channel);
     // Moves the scale/position selection off a channel that is not shown; true when it moved.
@@ -165,6 +180,7 @@ private:
     void beginHeldView();
     void followNextTimebase(); // A held record is shown at the next capture's time/div (issue #7).
     void moveTrace(uint32_t keys, uint32_t now, bool fine);
+    void resetPan(uint32_t now); // In HOLD the explored view only, as moveTrace: RUN restores, nothing saved.
     void moveCursor(uint32_t keys, uint32_t now, bool fine);
     bool triggerMidpoint(uint32_t now);
     bool centerChannels(uint32_t now); // Analyze -> Center channels, F2 hold.
@@ -274,6 +290,8 @@ private:
     ui::PropertyNavigator navigator_;
     void openPanel(Panel panel, const ui::PropertyList &list, unsigned row = 0);
     void closePanel();
+    void backPanel(); // Back: an Analyze sub-menu returns to Analyze on its row, any other panel closes.
+    unsigned analyzeRow_ = ~0U; // The Analyze row the open sub-menu came from (~0: none).
     // Settings or a panel left by another key than its own (MODE, Remote, power off): an edit ends
     // as on F4. A Settings number (brightness, applied live) returns to the value it began with;
     // a panel's unfinished number goes with the panel (its steps were never applied). True if a
@@ -287,8 +305,8 @@ private:
     // The Channel/Acquisition editor's committed field to the instrument; the editor then shows what
     // the instrument took (or, refused, what it has).
     void commitScopeEditor(ui::ScopeEditor &editor, uint32_t now);
-    void commitTrigger(uint32_t now);
-    void triggerSource(uint32_t now); // F3 again in Trigger focus: the other enabled channel.
+    void commitTrigger(uint32_t now, bool level); // level: the Level row or 50 % (LevelIntent::Set).
+    void triggerModeStep(uint32_t now); // Each short F3: the trigger focus and Auto, Normal, Single (held: staged).
     // DISPLAY's committed field (row Count) or its Reference/Clear action row, with every draft;
     // refused, the drafts return to the view in force.
     bool applyDisplay(unsigned row, uint32_t now);
@@ -306,6 +324,14 @@ private:
     bool autoCancelled_ = false;
     bool recordWatched_ = false, loggerWatched_ = false, serialWatched_=false;
     MeterRestore meterRestore_; // The DMM entry's range restore (meter_restore.hpp).
+    uint32_t dmmRestarts_ = 0, dmmReselects_ = 0;
+    // REL hold (Preferences::holdMs) and Scope AUTO hold (AutoHoldMs): AUTO fires auto setup; its release then is not a short press.
+    static constexpr uint32_t AutoHoldMs = 2000;
+    uint32_t autoHeldAt_ = 0, autoUpAt_ = 0;
+    bool powerFired_ = false, autoDown_ = false, autoFired_ = false, autoArmed_ = false;
+    bool autoShown_ = false; // The AUTO countdown appeared: its release is a cancelled hold, not a short AUTO.
+    void powerOff(uint32_t now);
+    int autoHold(uint32_t now, bool powerHeld); // PowerHold::percent of the AUTO hold.
     // An explicit DMM command (keys, SCPI): accepted, it supersedes the entry's pending restore.
     bool meterCommand(bool accepted) { if (accepted) meterRestore_.cancel(); return accepted; }
     // *OPC?'s view of that restore (InstrumentBackend::busy): owed and still able to happen.
@@ -346,12 +372,14 @@ private:
     screenshot::ImageCatalog images_;
     screenshot::ImageReader imageReader_;
     bool imageShowing_=false, imageFullSize_=false;
+    // DISP:DATA? streams the screen from the preview buffer under a lease ticket (ScreenLease).
+    ScreenLease screenLease_;
     void startScreenshot(uint32_t now);
     unsigned shotProgress_=0;
     unsigned imageProgress_=0;
     ui::SettingsMenu settingsMenu_;
     DeviceInfo settingsInfo_;
-    PendingSaves saves_; // Theme/plot and settings files to write (background or once at shutdown).
+    PendingSaves saves_; // Theme/plot and settings files to write once, at shutdown.
     BootGuard *guard_ = nullptr;                // Without it (tests) the 360 MHz profile is refused.
     BootGuard::Start bootStart_{0, false, nullptr};
     BootConfirmation guardConfirmation_;
@@ -371,8 +399,10 @@ private:
         ApplicationController &a_;
     };
     static constexpr uint32_t OverlaySettleMs = 60;
+    static constexpr uint32_t UnusedMs = 10000; // No key this long: the block cache may flush (BlockDevice::service).
     uint32_t hiddenAt_ = 0xffff0000U;
-    uint32_t fpsAt_ = 0, fpsFlushes_ = 0;
+    uint32_t fpsAt_ = 0, fpsFlushes_ = 0, fps_ = 0;
+    double counterRate_ = -1; bool counterStale_ = true; // The top bar's counter as last drawn.
     uint32_t dataAt_ = 0, lastScopeSequence_ = 0, lastMeterSequence_ = 0;
     uint32_t meterBarAt_ = 0;
     unsigned selectedChannel_ = 0;
@@ -381,7 +411,13 @@ private:
     DataStatus lastMeterStatus_ = DataStatus::NoData;
     DataStatus lastScopeStatus_ = DataStatus::NoData;
     bool lastMeterHold_ = false, lastScopeHold_ = false;
+    dmm::Function lastMeterSelecting_ = dmm::Function::Unknown;
+    dmm::Function meterSelecting() const;
     char lastMeterHoldWord_[16] = ""; // The hold mode's state pill word as last shown.
+    const char *saveProblem_ = nullptr, *saveWarned_ = nullptr; // store(): the power-off save's volume, its notice.
+    uint32_t saveCheckedAt_ = 0U - 60000U, saveWarnedAt_ = 0U - 600000U; // Due at once if changes wait from boot.
+    bool saveShownPending_ = false; // The open Settings page's status line, as drawn.
+    bool saveSettingsOpen_ = false; // store(): settingsOpen at the last pass (a recheck when Settings opens).
     void meterHoldWord(char *output, size_t capacity) const; // "" under the manual/DMM HOLD or idle.
     plot::Options heldView_;
     bool heldViewActive_ = false;

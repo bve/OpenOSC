@@ -37,6 +37,7 @@ public:
     struct State { bool dimmed,warning,powerOff; };
     void configure(const IdleSettings &settings,uint32_t now) { settings_=settings; activity(now); }
     void activity(uint32_t now) { activityAt_=offAt_=now; dimmed_=warned_=offSent_=false; }
+    uint32_t quietMs(uint32_t now) const { return now-activityAt_; } // Since the last key.
     State poll(uint32_t now,bool inhibitPowerOff) {
         State state{};
         if (inhibitPowerOff) { offAt_=now; warned_=offSent_=false; }

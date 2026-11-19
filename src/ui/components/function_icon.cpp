@@ -23,6 +23,6 @@ void FunctionIcon::draw(lv_event_t *event) {
     lv_area_t area;
     lv_obj_get_coords(self.object_, &area);
     FunctionSymbols::draw(lv_event_get_layer(event), FunctionSymbols::of(self.function_, self.beeper_), area.x1, area.y1,
-                          Height, lv_color_hex(self.color_));
+                          Height, lv_color_hex(self.color_), true);
 }
 } // namespace openosc::ui

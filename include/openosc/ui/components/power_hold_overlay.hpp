@@ -9,13 +9,13 @@ namespace openosc::ui {
 class PowerHoldOverlay {
 public:
     ~PowerHoldOverlay() { clear(); }
-    void clear() { if (root_) lv_obj_delete(root_); root_ = bar_ = nullptr; shown_ = -1; }
+    void clear() { if (root_) lv_obj_delete(root_); root_ = bar_ = title_ = nullptr; shown_ = -1; }
     void theme(const Theme &theme) { clear(); theme_ = &theme; }
-    void show(int percent); // -1 hides.
+    void show(int percent, const char *title); // -1 hides.
 private:
     void create();
     const Theme *theme_ = nullptr;
-    lv_obj_t *root_ = nullptr, *bar_ = nullptr;
+    lv_obj_t *root_ = nullptr, *bar_ = nullptr, *title_ = nullptr;
     int shown_ = -1;
 };
 } // namespace openosc::ui

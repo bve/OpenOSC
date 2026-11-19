@@ -14,7 +14,7 @@ bool UsbMassStorage::start() {
     usbHostClaimed = false;
     usbLastActivity = Board::milliseconds();
     ejectedSince_ = 0;
-    disk_.setOwner(MediaOwner::Host);
+    if (!disk_.setOwner(MediaOwner::Host)) return false; // The cached block first.
     setUsbStorage(&disk_);
     if (USBD_Init(&usbDevice, &recoveryDescriptors, 0) != USBD_OK
         || USBD_RegisterClass(&usbDevice, &USBD_MSC) != USBD_OK

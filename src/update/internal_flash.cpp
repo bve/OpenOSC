@@ -5,6 +5,7 @@
 namespace openosc {
 namespace {
 constexpr uint32_t Controller = 0x52002000, ErrorMask = 0x17ee0000;
+constexpr uint32_t EccErrors = 0x06000000; // SNECCERR, DBECCERR: raised by reads, not by an erase or write.
 volatile uint32_t& reg(uint32_t address) { return *reinterpret_cast<volatile uint32_t*>(address); }
 uint32_t controller(uint32_t destination) { return Controller + (destination >= 0x08100000 ? 0x100 : 0); }
 bool valid(uint32_t address, size_t size) {
@@ -22,7 +23,7 @@ bool InternalFlash::wait(uint32_t address) {
     const uint32_t status = reg(base + 0x10);
     boot_diagnostics.flashStatus = status;
     reg(base + 0x14) = status & (ErrorMask | 0x10000);
-    return !(status & ErrorMask) || fail("INTERNAL FLASH STATUS ERROR");
+    return !(status & ErrorMask & ~EccErrors) || fail("INTERNAL FLASH STATUS ERROR");
 }
 bool InternalFlash::unlock(uint32_t address) {
     const uint32_t base = controller(address);
@@ -31,6 +32,7 @@ bool InternalFlash::unlock(uint32_t address) {
         reg(base + 4) = 0xcdef89ab;
     }
     if (reg(base + 0x0c) & 1) return fail("INTERNAL FLASH IS LOCKED");
+    if (!(reg(base + 0x10) & 7)) reg(base + 0x14) = ErrorMask | 0x10000; // Flags left by earlier reads.
     return wait(address);
 }
 bool InternalFlash::eraseSector(uint32_t address) {

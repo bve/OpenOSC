@@ -3,6 +3,7 @@
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/handoff.hpp"
 #include "openosc/platform/recovery_request.hpp"
+#include "openosc/platform/reset_record.hpp"
 #include "openosc/recovery/controller.hpp"
 #include "openosc/update/crc32.hpp"
 
@@ -12,7 +13,9 @@ int main() {
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     Board::delay(30);
     const bool requestedByApp = RecoveryRequest::take();
-    const bool recoveryRequested = (Keypad::read() & Keypad::F2) || requestedByApp;
+    // Recovery itself faulted last time: its menu, not an auto-start into the same fault (taken once).
+    const bool faulted = ResetRecord::takeRecoveryFault(ResetRecord::retained());
+    const bool recoveryRequested = (Keypad::read() & Keypad::F2) || requestedByApp || faulted;
     Display screen;
     UpdateOperation update(screen);
 #ifndef OPENOSC_RAM_TEST

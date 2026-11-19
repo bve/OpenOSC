@@ -20,8 +20,9 @@ private:
     // Edges of a channel within its band, and the period most of them agree on (if any).
     struct Periodicity { uint32_t edges=0; double hertz=0; bool coherent=false; };
     // Edges without a period from this many on are noise or an aperiodic signal; fewer, a signal
-    // slower than the record (EdgeScanner logs a period from every edge after the first).
-    static constexpr uint32_t SlowEdges=4;
+    // slower than the record (EdgeScanner logs a period from every edge after the first). With 2 or
+    // more, timing() first waits for FCNT if enabled (aliasing also shows edges without a period).
+    static constexpr uint32_t SlowEdges=4, CounterWaitMs=1500;
     static Periodicity periodicity(const FrameView &frame,Channel channel,const SignalBand &band);
     bool timing(const SignalBand &band,const Periodicity &raw,double sampleRate,uint32_t now,const CounterSnapshot *counters);
     // A timebase showing about three periods of `hertz`.
@@ -33,7 +34,10 @@ private:
     ScopeRequest original_, trial_;
     State state_ = State::Idle;
     unsigned channel_ = 0, attempts_ = 0;
-    uint32_t deadline_=0,totalDeadline_=0,sequence_=0,appliedAt_=0;
+    uint32_t deadline_=0,totalDeadline_=0,sequence_=0,appliedAt_=0,counterWaitAt_=0;
+    enum class CounterWait : uint8_t { None, Waiting, Done }; // A trial change restarts Waiting; Done holds per search and source.
+    CounterWait counterWait_=CounterWait::None;
+    uint32_t recordMs() const { return uint32_t(trial_.timebaseNs/100000); } // A trial record's duration.
     // timing_: the level is set for this source; verified_: the level was checked once more on a
     // record at the timebase found, before completing.
     // provisional_: the timebase is FCNT's, taken without a raw period, to be confirmed by one on

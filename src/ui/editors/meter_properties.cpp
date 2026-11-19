@@ -16,7 +16,7 @@ PropertyKind MeterProperties::kind(unsigned row) const {
     }
 }
 void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Relative",
+    static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Bar graph", "Relative",
                                             "Hold", "Reset statistics", "CSV logging", "Serial 115200"};
     std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
 }
@@ -36,6 +36,7 @@ unsigned MeterProperties::option(unsigned row) const {
     case Colors: return palette_;
     case Digits: return face_;
     case Statistics: return statistics_;
+    case BarGraph: return bar_;
     case Relative: return relative_;
     case Logging: return logging_;
     case SerialOutput: return serial_;
@@ -70,6 +71,7 @@ bool MeterProperties::choose(unsigned row, unsigned index) {
     case Colors: palette_ = index; break;
     case Digits: face_ = index; break;
     case Statistics: statistics_ = index; break;
+    case BarGraph: bar_ = index; break;
     case Relative: relative_ = index; break;
     case Logging: logging_ = index; break;
     case SerialOutput: serial_ = index; break;
@@ -80,7 +82,8 @@ bool MeterProperties::choose(unsigned row, unsigned index) {
 bool MeterProperties::ranged() const { return dmm::Ranges::selectable(dmm::Functions::identify(result_)); }
 bool MeterProperties::optionSwatch(unsigned row, unsigned index, uint32_t &rgb) const {
     if (row != Colors || !theme_ || index >= MeterStyles::Schemes) return false;
-    rgb = MeterStyles::palette(index, *theme_).background;
+    const auto palette = MeterStyles::palette(index, *theme_);
+    rgb = index == MeterStyles::Amber ? palette.ink : palette.background; // Dark and Amber backgrounds are both near black.
     return true;
 }
 } // namespace openosc::ui

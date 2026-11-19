@@ -1,6 +1,8 @@
 #include "openosc/scpi/engine.hpp"
 #include "openosc/data/decimal.hpp"
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 
 namespace openosc::scpi {
 bool Engine::common(const Command &c) {
@@ -49,6 +51,22 @@ bool Engine::common(const Command &c) {
         else reply("1,%lu,%lu,%lu,%lu,%lu,%u",static_cast<unsigned long>(m.total),static_cast<unsigned long>(m.used),
                    static_cast<unsigned long>(m.peak),static_cast<unsigned long>(m.free),
                    static_cast<unsigned long>(m.largestFree),unsigned(m.fragmentationPct));
+    } else if (match("DISPlay:DATA") || match("HCOPy:DATA")) {
+        if (!c.query || *c.argument) error(-108,c.query);
+        else if (endScreen(), !(screenTicket_ = backend_.screenCapture())) error(-200,true);
+        else {
+            char count[16]; std::snprintf(count,sizeof count,"%lu",(unsigned long)ScreenBytes);
+            reply("#%u%s",unsigned(std::strlen(count)),count);
+            screenBinary_ = true; screenAt_ = 0;
+        }
+    } else if (match("SYSTem:STALl")) {
+        char text[sizeof response_ - 1]; // Whole entries that fit the reply (StallLog::text).
+        if (!c.query || *c.argument) error(-108,c.query);
+        else { backend_.stalls(text,sizeof text); reply("%s",text); }
+    } else if (match("SYSTem:BOOT")) { // ms at start,mounted,settings,guard,clocks,data,display,view,frame,crc,nor,disk,fat.
+        char text[Backend::BootTextBytes];
+        if (!c.query || *c.argument) error(-108,c.query);
+        else { backend_.bootTimes(text,sizeof text); reply("%s",text); }
     } else if (match("SYSTem:CALibration:FACTory")) {
         // valid,identity_crc,gainword1,gainword2,factory_scale1,factory_scale2: the record alone (docs/SCPI.md).
         Backend::FactoryCalibration f;

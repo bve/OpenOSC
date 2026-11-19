@@ -27,11 +27,11 @@ void MenuRow::update(lv_obj_t *parent, int y, int height, const char *name, cons
     lv_obj_set_size(root_, width, height);
     lv_obj_set_scrollable(root_, false);
     lv_obj_set_style_radius(root_, 2, 0);
-    lv_obj_set_style_border_width(root_, 1, 0);
+    lv_obj_set_style_border_width(root_, Border, 0);
     lv_obj_set_style_border_color(root_, lv_color_hex(selected ? accent : theme.panel), 0);
     lv_obj_set_style_bg_color(root_, lv_color_hex(selected ? theme.grid : theme.panel), 0);
     lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
-    lv_obj_set_style_pad_hor(root_, 7, 0);
+    lv_obj_set_style_pad_hor(root_, Padding, 0);
     lv_obj_set_style_pad_ver(root_, 0, 0);
     lv_obj_set_style_pad_column(root_, 6, 0);
     static const int32_t columns[] = {LV_GRID_FR(1), 105, LV_GRID_TEMPLATE_LAST};

@@ -69,7 +69,7 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     const bool burst = uint32_t(configuredAt - configuredAt_) < ConfigQuietMs && samplePlan(plan);
     configuredAt_ = configuredAt;
     armSequence_ = sequence_ + 1;
-    triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     captureFailed_ = false;
     if (active_ && measurement_ == MeasurementMode::Oscilloscope && !burst && !startCapture() && !captureWaiting_) {
         const auto failure = status_;
@@ -478,6 +478,7 @@ bool DataAccess::startCapture() {
         arena_.release(captureRegion_); captureRegion_ = 0;
         return refused(capture_.status());
     }
+    captureRestartOwed_ = false; // The fault's restart is made.
     configuration_=capture_.metadata();
 #ifdef OPENOSC_INTERLEAVE_PROBE
     probe_.started(metadata.sequence, frontend.interleave ? scope::ProbeMode::Interleave
@@ -535,7 +536,7 @@ void DataAccess::holdScopeCore(bool hold) {
     forcePending_ = false; forcedSequence_ = 0; // HOLD ends a force; RUN arms without one.
     holdPending_ = false;
     if (!hold) captureFailed_ = false;
-    triggerWaiting_ = !hold && request_.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = !hold && request_.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     if (!hold) {
         heldFrame_.release();
         return;
@@ -545,7 +546,7 @@ void DataAccess::holdScopeCore(bool hold) {
     // capture finish into HOLD instead of holding nothing, for a bounded time. The same wait when the
     // last capture failed and its retry is due (captureFailed_): the frame on show is gone with it.
     const bool capturing = captureRegion_ && capture_.state() == scope::FrameMailbox::State::Capturing;
-    const bool retrying = captureFailed_ && !staged_ && !request_.rolling() && capture_.state() == scope::FrameMailbox::State::Idle;
+    const bool retrying = (captureFailed_ || captureRestartOwed_) && !staged_ && !request_.rolling() && capture_.state() == scope::FrameMailbox::State::Idle;
     if (!heldFrame_.valid() && !rollingActive_ && (capturing || retrying)) {
         const double record = configuration_.samplesPerSecond.valid() ? 1000.0 * configuration_.samples / configuration_.samplesPerSecond.value() : 0;
         holdPending_ = true;
@@ -569,7 +570,8 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
         const bool found=fresh && findTrigger(inspected_.view(),index);
         const bool accepted=fresh && triggerAccepts(inspected_.view().metadata(),found); // A forced record too.
         triggerWaiting_ = !accepted;
-        if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now; } // What a reader is now given.
+        if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now; // What a reader is now given.
+            acceptedTriggered_ = inspected_.view().metadata().triggered && !inspected_.view().metadata().forced; }
         observeInterleave(inspected_.view());
         // The measurement is a reader of the record it takes (the scope view may be hidden by Settings):
         // it consumes it, so a one-slot capture memory is free for the next record.
@@ -633,7 +635,9 @@ void DataAccess::serviceScopeCapture(uint32_t now) {
     inspected_.release();
     releaseCaptureRegion();
     if (!active_ || stopping_ || measurement_ != MeasurementMode::Oscilloscope || (scopeHeld_ && !holdPending_)) return;
+    // Taken again every pass while it stands (a stop not yet proven keeps re-arming the back-off).
     if (capture_.status() == DataStatus::HardwareError || capture_.status() == DataStatus::Timeout || capture_.status()==DataStatus::Overflow) {
+        captureRestartOwed_ = true;
         status_ = capture_.status();
         if (!captureFailed_) captureRetryAt_ = now + CaptureRetryMs;
         captureFailed_ = true;

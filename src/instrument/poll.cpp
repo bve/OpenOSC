@@ -1,14 +1,48 @@
 #include "openosc/instrument/data_access.hpp"
 #include "openosc/generator/control_bits.hpp"
+#include <algorithm>
 #include <utility>
 
 namespace openosc {
 void DataAccess::followMeterGenerator() {
-    if (!active_ || stopping_ || measurement_ != MeasurementMode::Multimeter) return;
+    if (!active_ || stopping_ || watchdog_.off() || measurement_ != MeasurementMode::Multimeter) return;
     const uint16_t bits = generator::controlBits(generator_.offConfirmed());
     if (bits == meterGeneratorBits_) return;
     meterGeneratorBits_ = bits;
     frontend_.multimeter(bits);
+}
+// The UART stopped and started again in the foreground (dmm::LinkWatchdog's bounded retries).
+void DataAccess::restartDmmUart() {
+    dmm_.abandon();
+    framer_.reset();
+    if (!uart_.stop() || !uart_.start()) { status_ = DataStatus::HardwareError; return; }
+    receiveErrors_ = uart_.errors();
+    receiveOverflows_ = uart_.overflows();
+}
+// dmm::LinkWatchdog's decision carried out: a silent chip power-cycled, a deferred power-on, a UART restart.
+void DataAccess::serviceDmmWatchdog(uint32_t now) {
+    using Action = dmm::LinkWatchdog::Action;
+    switch (watchdog_.service(now, timeUs_, dmmActivatedAtUs_, uart_.status() == DataStatus::HardwareError,
+                              uart_.txStatus() == DataStatus::Busy)) {
+    case Action::None: return;
+    case Action::RestartUart: restartDmmUart(); return;
+    case Action::PowerOn:
+        meterGeneratorBits_ = generator::controlBits(generator_.offConfirmed());
+        frontend_.multimeter(meterGeneratorBits_);
+        framer_.reset();
+        dmmActivatedAtUs_ = std::min(dmmActivatedAtUs_, timeUs_);
+        if (!uart_.start()) { status_ = uart_.status(); return; } // HardwareError: the bounded retries.
+        receiveErrors_ = uart_.errors();
+        receiveOverflows_ = uart_.overflows();
+        return;
+    case Action::PowerOff:
+        if (!uart_.stop()) { watchdog_.stopFailed(timeUs_); status_ = DataStatus::HardwareError; return; }
+        dmm_.abandon();
+        frontend_.multimeterOff();
+        dmmActivatedAtUs_ = timeUs_ + uint64_t(dmm::LinkWatchdog::OffMs) * 1000;
+        status_ = DataStatus::NoData;
+        return;
+    }
 }
 // The streams: no FAT, no UI and no LVGL. Also run while a refresh waits on DMA2D.
 void DataAccess::serviceStreams(uint32_t now) {
@@ -40,13 +74,17 @@ void DataAccess::poll(uint32_t now) {
             status_ = DataStatus::Overflow;
         }
         uint8_t byte, packet[dmm::Packet::Bytes];
-        for (unsigned n = 0; n < 256 && uart_.read(byte); ++n)
-            if (framer_.push(byte, packet) && meter_.accept(packet, sizeof packet, timeUs_)) {
+        for (unsigned n = 0; n < 256 && uart_.read(byte); ++n) {
+            if (!framer_.push(byte, packet)) continue;
+            watchdog_.packet(timeUs_);
+            if (meter_.accept(packet, sizeof packet, timeUs_)) {
                 status_ = meter_.latest().primary.status;
                 if (logger_.active())
                     logger_.append(meter_.latest(), meter_.userHeld());
             }
+        }
         meter_.service(timeUs_); // The hold mode's countdown and freshness, with or without packets.
+        serviceDmmWatchdog(now);
     }
     if (active_ && !stopping_ && measurement_ == MeasurementMode::Multimeter) dmm_.service(uart_, meter_.latest(), now);
     if (dmmClosing_) serviceDmmClose(now); // Shutdown: the owed 21 before the UART stops.

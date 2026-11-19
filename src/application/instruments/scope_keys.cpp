@@ -49,6 +49,14 @@ void ApplicationController::moveCursor(uint32_t keys, uint32_t now, bool fine) {
     view_.waveform().cursorLines(cursors);
     queuePlotSave(now);
 }
+void ApplicationController::resetPan(uint32_t now) {
+    if (!view_.waveform().options().panPpb) return;
+    const bool held = data_.scopeHeld();
+    if (held) beginHeldView();
+    auto options = view_.waveform().options(); options.panPpb = 0;
+    view_.waveform().configure(options);
+    if (!held) queuePlotSave(now);
+}
 void ApplicationController::beginHeldView() {
     if (heldViewActive_) return;
     heldView_ = view_.waveform().options();
@@ -80,9 +88,18 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
     if (held) beginHeldView();
     auto request = data_.scopeRequest();
     auto options = view_.waveform().options();
+    // "Move waveform": Right shows earlier samples (X-Y: the axis shift keeps its sign).
+    int horizontal = axis(keys, Keypad::Left, Keypad::Right) * (prefs_.panReverse && options.mode != plot::Mode::XY ? -1 : 1);
+    // A held key (S09): x1, x2, x4, x8, doubling every PanDoubling repeats; a new press or the other
+    // direction starts again at x1.
+    const int sign = (horizontal > 0) - (horizontal < 0);
+    panRepeats_ = fine || !sign || sign != panSign_ ? 0 : panRepeats_ + 1;
+    panSign_ = sign;
+    if (options.mode != plot::Mode::XY) horizontal *= 1 << std::min(3U, panRepeats_ / PanDoubling);
     const auto change = focus_ == plot::Focus::Trigger
-        ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, axis(keys, Keypad::Left, Keypad::Right))}
-        : plot::TraceMove::apply(request, options, selectedChannel_, held, axis(keys, Keypad::Left, Keypad::Right), axis(keys, Keypad::Up, Keypad::Down), fine);
+        ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &view_.waveform().model(), false)}
+        : plot::TraceMove::apply(request, options, selectedChannel_, held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
+                                 &view_.waveform().model());
     if (change.request && !applyEdited(request, now)) view_.notify("Finish data transfer first", now);
     if (change.view) {
         view_.waveform().configure(options);
@@ -97,8 +114,9 @@ bool ApplicationController::holdKeys(uint32_t keys, uint32_t now) {
 }
 void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     followShownChannel(); // Before any key acts on the selection.
-    if (keys & Keypad::AutoRange) {
-        if (autoBusy()) cancelAuto(now); else startAuto(now);
+    if (keys & Keypad::AutoRange) { // Held: auto setup (autoHold). Short: cancel it, or back to the trigger point.
+        if (!autoFired_) { if (autoBusy()) cancelAuto(now); else if (!autoShown_) resetPan(now); } // Shown: a cancelled hold.
+        autoFired_ = autoShown_ = false;
         return;
     }
     if (autoBusy()) {
@@ -114,9 +132,9 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         triggerEditor_.calibration(data_.scopeMetadata());
         openPanel(Panel::Trigger, triggerEditor_);
     };
-    if (keys & Keypad::F3) { // As F1/F2 with their channel: a press again switches the trigger source.
-        if (focus_ == plot::Focus::Trigger) { triggerSource(now); return; }
-        setScopeFocus(plot::Focus::Trigger);
+    if (keys & Keypad::F3) { // Each press: the trigger focus and the next mode (plan S01); the source is in its menu.
+        if (focus_ != plot::Focus::Trigger) setScopeFocus(plot::Focus::Trigger);
+        triggerModeStep(now);
         return;
     }
     if (keys & Keypad::Menu) {
@@ -153,7 +171,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     if (focus_ == plot::Focus::Trigger && (keys & (Keypad::Up | Keypad::Down))) { // Up raises the level, as on the factory firmware.
         auto request = data_.scopeRequest();
         request.trigger.level = std::clamp<int>(request.trigger.level + ((keys & Keypad::Up) ? 1 : -1), -128, 127);
-        if (!applyEdited(request, now)) view_.notify("Finish data transfer first", now);
+        if (!applyEdited(request, now, LevelIntent::Set)) view_.notify("Finish data transfer first", now);
         return;
     }
     if (focus_ == plot::Focus::Position || focus_ == plot::Focus::Trigger) { // Left/Right move the record in both, as on the factory firmware.
@@ -187,6 +205,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     if ((keys & Keypad::Down) && range) --range;
     stepTimebase(request, keys);
     plot::XyMode::constrain(view_.waveform().options(), request);
-    if (!applyScope(request, now)) view_.notify("Finish data transfer first", now);
+    // The trigger on this channel keeps its voltage across the new V/div (GitHub #26).
+    if (!applyFollowing(request, now, ScopeApply::Configure)) view_.notify("Finish data transfer first", now);
 }
 } // namespace openosc

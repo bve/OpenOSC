@@ -16,5 +16,12 @@ struct Timebases {
         }
         return current;
     }
+    // Nearest listed value on a log scale.
+    static uint64_t nearest(double ns) {
+        uint64_t best = Values[0];
+        for (unsigned i = 1; i < sizeof Values / sizeof *Values; ++i)
+            if (ns * ns >= double(Values[i - 1]) * double(Values[i])) best = Values[i];
+        return best;
+    }
 };
 } // namespace openosc::scope

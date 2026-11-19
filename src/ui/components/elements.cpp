@@ -13,6 +13,11 @@ void Elements::textColor(lv_obj_t *object, uint32_t color) {
     const auto value = lv_color_hex(color);
     if (!lv_color_eq(lv_obj_get_style_text_color(object, LV_PART_MAIN), value)) lv_obj_set_style_text_color(object, value, 0);
 }
+bool Elements::setText(lv_obj_t *label, const char *text) {
+    if (!std::strcmp(lv_label_get_text(label), text)) return false;
+    lv_label_set_text(label, text);
+    return true;
+}
 const lv_font_t *Elements::font(unsigned size) {
     switch (size) {
     case 11: return &openosc_ui_11c; // Condensed: only where IBM Plex Sans 12 has no room (ScopeFooter).

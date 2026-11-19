@@ -54,7 +54,8 @@ void Watchdog::start() {
     if (!ok) { // Fail closed: an unconfirmed prescaler, reload or window is not a takeover.
         status_ = UpdateTimeout | Halted; boot_diagnostics.watchdog = status_;
         policy_.halt();
-        record(ResetRecord::Cause::InitFailure, 0, StartFailure);
+        // The previous run's cause is not yet captured: kept, not overwritten.
+        if (!ResetRecord::valid(ResetRecord::retained())) record(ResetRecord::Cause::InitFailure, 0, StartFailure);
         SystemReset::now();
     }
     IWDG1->KR = KeyRefresh;

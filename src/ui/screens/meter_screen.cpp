@@ -1,4 +1,5 @@
 #include "openosc/ui/screens/meter_screen.hpp"
+#include <algorithm>
 #include <cstdio>
 #include "openosc/ui/format/meter.hpp"
 #include "openosc/ui/components/meter_reading.hpp"
@@ -81,7 +82,7 @@ void MeterScreen::layout(bool analog) {
     auto *value = elements.get(ElementId::Reading), *unitLabel = elements.get(ElementId::Unit);
     const auto place = [](lv_obj_t *object, int x, int y, int w, int h) { lv_obj_set_pos(object, x, y); lv_obj_set_size(object, w, h); };
     host_.functionIcon().visible(true);
-    host_.meterSummary().bar(!analog);
+    host_.meterSummary().bar(!analog && bar_);
     MeterReading::release(line);
     Elements::textColor(line, look_.color(MeterRole::Details));
     if (analog) {
@@ -102,9 +103,11 @@ void MeterScreen::layout(bool analog) {
         lv_obj_set_hidden(value, false);
         host_.buttons(analogSpans_[unsigned(AnalogBlock::Buttons)].y);
     } else {
-        ScreenLayout::digital(digital_, statistics_, digitalSpans_);
+        ScreenLayout::digital(digital_, statistics_, bar_, digitalSpans_);
         const auto &body = digitalSpans_[unsigned(DigitalBlock::Reading)], &meter = digitalSpans_[unsigned(DigitalBlock::Measurements)];
-        const int dy = body.y - ThemeBodyTop;
+        digits_ = ScreenLayout::digitsFor(body.height);
+        const int grown = digits_ - ScreenLayout::Digits;
+        const int dy = body.y + (body.height - ScreenLayout::DigitalReading - grown) / 2 - ThemeBodyTop; // Centred in its block.
         host_.functionIcon().place(reading.x, unit.y + dy);
         place(summary, rows.x, meter.y, rows.width, meter.height);
         host_.meterSummary().compact(false);
@@ -112,7 +115,8 @@ void MeterScreen::layout(bool analog) {
         place(line, details.x, details.y + dy, details.width, details.height);
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, details.font), 0);
         lv_obj_set_style_text_align(line, LV_TEXT_ALIGN_LEFT, 0);
-        place(value, reading.x, reading.y + dy, reading.width, reading.height);
+        place(value, reading.x, reading.y + dy, reading.width,
+              reading.height + grown);
         place(unitLabel, unit.x, unit.y + dy, unit.width, unit.height);
         lv_obj_set_style_text_align(unitLabel, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_hidden(value, !reading.visible);
@@ -138,7 +142,9 @@ void MeterScreen::reading(const char *text) {
     const auto &box = theme[unsigned(ElementId::Reading)];
     auto &elements = host_.elements();
     auto *label = elements.get(ElementId::Reading);
-    const auto fonts = MeterStyles::reading(look_.face, box.font); // The Reading override, else Digits.
+    // The theme's default Digits takes the block's size (digitsFor); a larger Reading font is kept up to it.
+    const int font = analog_ || box.font < ScreenLayout::Digits ? box.font : box.font == ScreenLayout::Digits ? digits_ : std::min<int>(box.font, digits_);
+    const auto fonts = MeterStyles::reading(look_.face, decltype(box.font)(font));
     const bool changed = std::strcmp(lv_label_get_text(label), text) != 0;
     if (!analog_) MeterReading::show(label, text, fonts);
     else {
@@ -150,7 +156,7 @@ void MeterScreen::reading(const char *text) {
     // reaches the soft keys next to the reading block, the keys are redrawn whole with it: a card
     // cut by the margin's edge would not repaint exactly as a whole redraw (its sign lines).
     if (!changed) return;
-    static constexpr int DrawMargin = 16; // Over the faces' extra draw size at 64 px (14).
+    static constexpr int DrawMargin = 20; // Over the faces' extra draw size at 80 px.
     lv_obj_update_layout(label);
     lv_area_t reach, keys;
     lv_obj_get_coords(label, &reach);
@@ -169,7 +175,7 @@ void MeterScreen::feed(const dmm::Result &result, DataStatus status, const dmm::
             host_.dial().scale(result.primary.valid() ? dmm::Resolution::decimals(result) : result.decimals, MeterText::unit(result.unit), bar.scale);
         host_.dial().reading(bar, held_);
     }
-    else host_.meterSummary().bar(result, status, look_.color(MeterRole::Bar), relative);
+    else if (bar_) host_.meterSummary().bar(result, status, look_.color(MeterRole::Bar), relative);
 }
 void MeterScreen::fastBar(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative, uint32_t now) {
     if (host_.overlayActive()) return; // Under a menu: neither the bar nor the needle (hidden) is fed.
@@ -195,8 +201,8 @@ void MeterScreen::status(const dmm::Result &result, bool held, DataStatus status
                       : StatusTone::Good;
     const bool prefix = held || armed;
     char text[48];
-    std::snprintf(text, sizeof text, "%s%s%s%s", prefix ? word : "", prefix && *state ? " / " : "", state,
-                  relative || result.peerRelative ? " REL" : ""); // "HOLD / STALE REL", "WAIT", "LIVE".
+    std::snprintf(text, sizeof text, "%s%s%s%s%s", prefix ? word : "", prefix && *state ? " / " : "", state,
+                  relative || result.peerRelative ? " REL" : "", recording_ ? " REC" : ""); // "HOLD / STALE REL", "LIVE REC".
     host_.status(text, tone);
 }
 void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status,
@@ -204,6 +210,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     // A menu over the DMM: only the state pill follows the readings. The body (its look, places,
     // reading, cards) waits for the DMM to show again, so nothing hidden comes back over the menu
     // and the menu's soft keys stay where it put them; the session and its statistics run on.
+    recording_ = context.recording;
     if (host_.overlayActive()) {
         this->status(result, held, status, context.relative && context.relative->matches(result), context.hold);
         return;
@@ -214,8 +221,9 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     // The measurements block's rows: MIN/MAX/AVG when shown (Statistics On, the statistics page) or
     // the trend; without them it shrinks (digital) or is absent (analog) and the rest closes up.
     const bool statisticsRows = context.display == 2 || context.showStatistics || context.display == 1;
-    if ((context.display == AnalogDisplay) != analog_ || statisticsRows != statistics_) {
+    if ((context.display == AnalogDisplay) != analog_ || statisticsRows != statistics_ || context.showBar != bar_) {
         statistics_ = statisticsRows;
+        bar_ = context.showBar;
         layout(context.display == AnalogDisplay);
     }
     const bool relative = context.relative && context.relative->matches(result);
@@ -236,7 +244,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
         const double value = ((mean ? statistics->average() : result.primary.si) - reference) / factor;
         if (!Decimal::fixed(value, decimals, text, sizeof text)) Decimal::number(value, text, sizeof text, 6);
     }
-    const auto function = dmm::Functions::identify(result);
+    const auto function = context.selecting != dmm::Function::Unknown ? context.selecting : dmm::Functions::identify(result);
     const char *terminals = dmm::Terminals::forFunction(function);
     // The function as its sign; the row says only what the sign cannot: MEAN, RMS, the jacks.
     host_.functionIcon().show(function, result.kind == dmm::Kind::DiodeWithBeeper, look_.color(MeterRole::Function));

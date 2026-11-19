@@ -2,6 +2,7 @@
 #include "openosc/data/decimal.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include <cstdarg>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -21,37 +22,44 @@ void Engine::endDecode() {
     decodeTicket_ = decodeTotal_ = decodeSent_ = 0;
     decodeBinary_ = waitingDecode_ = false;
 }
+void Engine::endScreen() {
+    if (screenTicket_) backend_.screenEnd(screenTicket_);
+    screenTicket_ = 0;
+}
 void Engine::discardOutput() {
     backend_.releaseFrame();
-    endDecode();
-    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = 0;
-    binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = false;
+    endDecode(); endScreen();
+    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = padding_ = screenAt_ = 0;
+    binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
     completion_ = Completion::None;
 }
 void Engine::reset() {
-    parser_.reset(); errors_.clear(); backend_.endSession(); endDecode();
-    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = 0;
+    parser_.reset(); errors_.clear(); backend_.endSession(); endDecode(); endScreen();
+    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = padding_ = screenAt_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = inputPending_ = false;
-    waitingWaveform_ = waitingGenerator_ = false;
+    waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
     completion_ = Completion::None;
-    waveStart_ = 1; waveStop_ = 0; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
+    waveStart_ = 1; waveStop_ = 0; wavePoints_ = 0; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
     profileKnown_ = false;
     generatorFaultsKnown_ = false; // A new session reports only the generator's stops from now on.
 }
 size_t Engine::available() const {
     return responseSize_ - responseAt_ + (binary_ ? binaryCount_ - binaryAt_ : 0) + (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
-           unsigned(suffix_);
+           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + padding_ + unsigned(suffix_);
 }
 size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!output || !capacity) return 0;
     size_t used = 0;
     while (used < capacity && responseAt_ < responseSize_) output[used++] = response_[responseAt_++];
-    if (binary_ && used < capacity) {
+    // A definite block keeps its announced length: if its source goes while it is sent, zeros complete
+    // it (padding_), the LF ends it and -230 is queued; the lease goes back once, the session stays.
+    if (binary_ && used < capacity && binaryAt_ < binaryCount_) {
         const auto *source = backend_.frame(false);
         while (used < capacity && binaryAt_ < binaryCount_) {
             int16_t code = 0;
-            if (!source || !source->signedCode(scope::Channel(waveChannel_), binaryStart_ + binaryAt_, code)) {
-                reset(); errors_.push(-230); return used;
+            if (!source || !source->signedCode(scope::Channel(waveChannel_), binaryStart_ + binaryAt_ * binaryStride_, code)) {
+                padding_ = binaryCount_ - binaryAt_; binaryAt_ = binaryCount_;
+                backend_.releaseFrame(); errors_.push(-230); break;
             }
             output[used++] = uint8_t(code + 128); ++binaryAt_;
         }
@@ -59,12 +67,24 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
     if (decodeBinary_ && used < capacity && responseAt_ == responseSize_) {
         const size_t want = decodeTotal_ - decodeSent_ < capacity - used ? decodeTotal_ - decodeSent_ : capacity - used;
         const size_t n = want ? backend_.decodeRead(decodeTicket_, output + used, want) : 0;
-        if (want && !n) { reset(); errors_.push(-230); return used; } // Cancelled (Off, a new source).
-        used += n; decodeSent_ += uint32_t(n);
-        if (decodeSent_ == decodeTotal_ && decodeTicket_) { backend_.decodeEnd(decodeTicket_); decodeTicket_ = 0; }
+        if (want && !n) { padding_ = decodeTotal_ - decodeSent_; endDecode(); errors_.push(-230); } // Cancelled (Off, a new source).
+        else {
+            used += n; decodeSent_ += uint32_t(n);
+            if (decodeSent_ == decodeTotal_ && decodeTicket_) { backend_.decodeEnd(decodeTicket_); decodeTicket_ = 0; }
+        }
     }
-    if (used < capacity && suffix_ && (!binary_ || binaryAt_ == binaryCount_) && (!decodeBinary_ || decodeSent_ == decodeTotal_)) {
-        output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false;
+    // DISP:DATA?: the leased BMP; a lease that went (expired and taken) pads the block like a lost frame.
+    if (screenBinary_ && used < capacity && responseAt_ == responseSize_ && screenAt_ < ScreenBytes) {
+        const size_t want = std::min<size_t>(ScreenBytes - screenAt_, capacity - used);
+        const size_t n = screenTicket_ ? backend_.screenRead(screenTicket_, screenAt_, output + used, want) : 0;
+        if (!n) { padding_ = ScreenBytes - screenAt_; screenAt_ = ScreenBytes; errors_.push(-230); }
+        else { used += n; screenAt_ += uint32_t(n); }
+        if (screenAt_ == ScreenBytes) endScreen(); // Every byte sent (or owed as padding): the buffer is free.
+    }
+    while (used < capacity && padding_) { output[used++] = 0; --padding_; }
+    if (used < capacity && suffix_ && !padding_ && (!binary_ || binaryAt_ == binaryCount_) && (!decodeBinary_ || decodeSent_ == decodeTotal_) &&
+        (!screenBinary_ || screenAt_ == ScreenBytes)) {
+        output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false; screenBinary_ = false;
     }
     if (!available()) responseSize_ = responseAt_ = 0;
     outputAt_ = now_; return used;
@@ -82,7 +102,7 @@ void Engine::poll(uint32_t now) {
         parser_.reset(); inputPending_ = false; errors_.push(-102);
     }
     if (available()) {
-        if (uint32_t(now - outputAt_) >= 10000) { reset(); errors_.push(-410); }
+        if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
         return;
     }
     if (waitingDecode_) { // The CSV's size, a bounded slice a pass; then the definite block's header.
@@ -97,7 +117,7 @@ void Engine::poll(uint32_t now) {
         return;
     }
     if (waitingWaveform_) {
-        Command command; std::snprintf(command.header,sizeof command.header,"WAV:%s",pendingPreamble_ ? "PRE" : "DATA");
+        Command command; std::snprintf(command.header,sizeof command.header,"WAV:%s",pendingWave_);
         command.query = true; waveformCommand(command); return;
     }
     if (waitingGenerator_) {
@@ -160,10 +180,10 @@ bool Engine::boolean(const Command &c, bool &value) {
     if (!Header::boolean(c.argument, value)) { error(*c.argument ? -224 : -109, c.query); return false; }
     return true;
 }
-bool Engine::apply(const ScopeRequest &request) {
+bool Engine::apply(const ScopeRequest &request, bool level) {
     backend_.releaseFrame();
     preambleChannels_ = 0;
-    if (!backend_.configureScope(request)) { error(-222); return false; }
+    if (!(level ? backend_.setTrigger(request) : backend_.configureScope(request))) { error(-222); return false; }
     return true;
 }
 const scope::FrameView *Engine::frame(bool refresh) {

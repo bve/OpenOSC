@@ -139,7 +139,7 @@ Reason LocalControl::start(unsigned stage, uint32_t now, const PerformanceSnapsh
     request.trigger.level = int16_t(std::lround(code));
     request.timebaseNs = TimebaseNs;
     request.recordPoints = scope::RecordBudget::covering(Stages[stage].requestPoints, request.channels());
-    if (!request.recordPoints || !backend_.configureScope(request) || !backend_.held()) return Reason::Configure;
+    if (!request.recordPoints || !backend_.setTrigger(request) || !backend_.held()) return Reason::Configure; // Its level is set.
     const auto *plan = backend_.configuration();
     if (!plan || plan->samples != Stages[stage].planSamples || !plan->samplesPerSecond.valid() ||
         uint64_t(plan->samplesPerSecond.numerator) != uint64_t(Rate) * plan->samplesPerSecond.denominator)

@@ -26,6 +26,15 @@ struct ResetRecord {
         return r.magic == Magic && r.check == checksum(r) && r.cause >= uint32_t(Cause::Fault) &&
                r.cause <= uint32_t(Cause::StackOverflow);
     }
+    // Recovery's start (PR #29): Recovery itself faulted last time (a fault or an unexpected interrupt,
+    // e.g. on an ECC-broken header after a cut update), so its menu comes up instead of an auto-start into
+    // the same fault. Taken once: the record is consumed, the next start launches as before.
+    static bool takeRecoveryFault(volatile ResetRecord &r) {
+        const bool faulted = valid(r) && r.source == uint32_t(Source::Recovery) &&
+                             (r.cause == uint32_t(Cause::Fault) || r.cause == uint32_t(Cause::Interrupt));
+        if (faulted) r.magic = 0;
+        return faulted;
+    }
 #if defined(__arm__) || defined(__thumb__)
     static volatile ResetRecord &retained() { return *reinterpret_cast<volatile ResetRecord *>(Address); }
 #else

@@ -21,7 +21,7 @@ public:
     static constexpr int SideMargin = 18, LabelOffset = 11; // The arc's ends from the sides; numbers above the arc.
     static constexpr int SignX = SideMargin + 12, SignWidth = 24; // The minus at the bottom left, inside the arc's end; the caption after it.
     static constexpr int MarkingY = 6, MarkingHeight = 15, MarkingFont = 12; // The marking's row in the top right corner.
-    static constexpr uint32_t FrameMs = 16;                 // At most ~60 needle redraws per second.
+    static constexpr uint32_t FrameMs = 13;                 // Two LTDC scans (6.5 ms each): even needle steps.
     enum class State : uint8_t { Live, Overload, NoData, Stale };
     lv_obj_t *create(lv_obj_t *parent);
     void place(int x, int y, int width, int height);

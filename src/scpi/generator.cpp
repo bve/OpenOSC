@@ -74,7 +74,7 @@ bool Engine::generatorCommand(const Command &c) {
         }
         settings.frequencyHz = generator::Frequency::rational(uint64_t(millihertz));
     } else if (amplitude) {
-        double value; if (!argument(c, value)) return true;
+        double value; if (!argument(c, value, Header::Unit::Voltage)) return true; // 2, 2V, 2000mV.
         const long millivolts = std::lround(value * 1000);
         if (millivolts < 0 || millivolts % generator::ModuleCapabilities::AmplitudeStepMillivolts ||
             millivolts > Caps::amplitudeLimitMillivolts(settings.shape, generator::Frequency::millihertz(settings.frequencyHz))) {

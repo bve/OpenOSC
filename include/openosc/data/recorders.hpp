@@ -11,7 +11,7 @@ public:
     explicit ScopeRecorder(Filesystem &fs) : file_(fs) {}
     bool begin(scope::FrameLease &&lease, Format format);
     void service();
-    void cancel();
+    void cancel(bool keep = false);
     bool busy() const { return busy_; }
     DataStatus status() const { return status_; }
     const char *path() const { return file_.path(); }
@@ -34,7 +34,7 @@ public:
     bool append(const dmm::Result &result, bool userHold);
     void finish() { finishing_ = active_; }
     void service();
-    void cancel();
+    void cancel(bool keep = false);
     bool active() const { return active_; }
     DataStatus status() const { return status_; }
     const char *path() const { return file_.path(); }
@@ -43,7 +43,8 @@ private:
     FatDataFile file_;
     HeldPolicy heldPolicy_ = HeldPolicy::Exclude;
     uint64_t bytes_ = 0, maximum_ = 0;
-    uint32_t sequence_ = 0;
+    static constexpr uint32_t SyncMs = 60000; // Each sync erases the directory and FAT blocks again: NOR wear.
+    uint32_t sequence_ = 0, syncedAt_ = 0;
     bool active_ = false, finishing_ = false, hasSequence_ = false;
     DataStatus status_ = DataStatus::NoData;
 };

@@ -15,7 +15,11 @@ struct Preferences {
     uint64_t timebaseNs = 1000000;
     uint32_t millivolts[2] = {500, 500}, meterFunction = 0;
     uint32_t useBuiltinTheme = 0;
-    uint32_t showFps = 1, batteryDisplay = 0; // batteryDisplay: 0 icon, 1 volts, 2 percent.
+    uint32_t showFps = 1, batteryDisplay = 0; // showFps: 0 off, 1 FPS, 2 sample rate (scope). batteryDisplay: 0 icon, 1 volts, 2 percent.
+    uint32_t panReverse = 0;                  // Left/Right pan: 0 moves the view, 1 the waveform.
+    uint32_t holdTime = 2;                    // REL power-off hold: HoldTimes index.
+    static constexpr uint32_t HoldTimes[] = {1000, 1500, 2000};
+    uint32_t holdMs() const { return HoldTimes[holdTime < 3 ? holdTime : 2]; }
     // Settings > Files & USB > USB controller: 1 enabled (USB data where the clock allows it, 200 MHz),
     // 0 disabled (the OTG controller stays off; Recovery's USB disk is not affected). Older files: enabled.
     uint32_t usbController = 1;
@@ -36,7 +40,8 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 1 && batteryDisplay < 3 && usbController <= 1 && generatorShape < 6 &&
+               useBuiltinTheme <= 1 && showFps <= 2 && batteryDisplay < 3 && panReverse < 2 && holdTime < 3 && usbController <= 1 &&
+               generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&
                generatorDutyPermille >= generator::Capabilities::MinimumDutyPermille &&

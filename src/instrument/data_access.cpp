@@ -6,12 +6,18 @@
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/interrupts.hpp"
 #include <algorithm>
+#include <type_traits>
 
 namespace openosc {
 namespace {
 // The ZT703S DAC stream announces its start; the ZT706S module (UART, no DMA) has nothing to announce.
+#if OPENOSC_BOARD == 703
+static_assert(std::is_same_v<board::GeneratorOutput, generator::Output>, "ZT703S: the DAC generator driver");
 void attachBus(generator::Output &output, generator::BusClient &client) { output.attach(client); }
+#else
+static_assert(std::is_same_v<board::GeneratorOutput, generator::ModuleOutput>, "ZT706S: the module generator driver");
 void attachBus(generator::ModuleOutput &, generator::BusClient &) {}
+#endif
 } // namespace
 DataAccess::DataAccess(Filesystem &fs)
     : resources_(PeripheralResources::StorageDma), zeroFile_(fs),pwmFile_(fs,calibration_),gainFile_(fs,calibration_),interleaveFile_(fs,calibration_),zeroOperation_(*this), frontend_(scopeCalibration_), capture_(resources_, frontend_), counters_(resources_), uart_(resources_),
@@ -70,6 +76,7 @@ bool DataAccess::select(MeasurementMode view) {
     }
     counters_.stop();
     const auto previous = measurement_;
+    if (previous == MeasurementMode::Multimeter && view != previous) watchdog_.left(Board::milliseconds());
     const bool restore = active_;
     active_ = false;
     if (activate(view))
@@ -80,6 +87,7 @@ bool DataAccess::select(MeasurementMode view) {
             status_ = DataStatus::HardwareError;
         else
             status_ = failure;
+        if (previous == MeasurementMode::Multimeter) watchdog_.reselect(); // Its function, if it was power-cycled.
     }
     return false;
 }
@@ -90,6 +98,16 @@ bool DataAccess::activate(MeasurementMode view) {
     framer_.reset();
     captureFailed_ = false;
     measurement_ = view;
+    if (view == MeasurementMode::Multimeter) meter_.expire(timeUs_); // A reading from before is not current.
+    uint32_t remainingMs = 0;
+    if (view != MeasurementMode::Multimeter) watchdog_.deactivate();
+    else if (watchdog_.activate(Board::milliseconds(), timeUs_, remainingMs)) { // Powered on by serviceDmmWatchdog.
+        frontend_.multimeterOff();
+        dmmActivatedAtUs_ = timeUs_ + uint64_t(remainingMs) * 1000; // A selection waits for the power-on.
+        active_ = true;
+        status_ = DataStatus::NoData;
+        return true;
+    }
     if (view == MeasurementMode::Multimeter) {
         dmmActivatedAtUs_ = timeUs_;
         meterGeneratorBits_ = generator::controlBits(generator_.offConfirmed());
@@ -168,20 +186,22 @@ bool DataAccess::acquireScopeWait(scope::FrameLease &lease,uint32_t timeoutMs) {
     return true;
 }
 bool DataAccess::sendDmmGroup(dmm::CommandGroup group) {
-    if (unsigned(group) >= 5 || !active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (unsigned(group) >= 5 || !active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() ||
         !dmm_.pressGroup(group, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     meter_.reselect(); // No function is awaited: the packets show which one the key gave.
     return true;
 }
-bool DataAccess::selectDmmFunction(dmm::Function function) {
+bool DataAccess::selectDmmFunction(dmm::Function function) { // Also while off: it waits for packets.
+    // Held off (dmm::LinkWatchdog::OffMs): its deadline runs from the power-on.
+    const uint32_t waitMs = dmmActivatedAtUs_ > timeUs_ ? uint32_t(std::min<uint64_t>((dmmActivatedAtUs_ - timeUs_) / 1000, dmm::FunctionSelector::PowerOnWaitMs)) : 0;
     if (!active_ || measurement_ != MeasurementMode::Multimeter ||
-        !dmm_.selectFunction(function, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
+        !dmm_.selectFunction(function, meter_.latest(), Board::milliseconds() + waitMs, dmmActivatedAtUs_)) return false;
     // Accepted (a refusal above changes nothing): the statistics period starts with this function.
-    meter_.restart(function, timeUs_ + uint64_t(dmm::FunctionSelector::DeadlineMs) * 1000);
+    meter_.restart(function, timeUs_ + (uint64_t(dmm::FunctionSelector::DeadlineMs) + waitMs) * 1000);
     return true;
 }
 bool DataAccess::pressDmmRange() {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() ||
         !dmm_.pressRange(meter_.latest(), Board::milliseconds(), timeUs_, dmmActivatedAtUs_)) return false;
     meter_.rangeCommand();
     return true;
@@ -190,7 +210,7 @@ bool DataAccess::releaseDmmRange(bool sendRelease) { return dmm_.releaseRange(se
 bool DataAccess::holdDmmRange() { return dmm_.holdRange(Board::milliseconds()); }
 void DataAccess::closeDmmRange() { if (dmm_.rangeOpen()) dmm_.close(Board::milliseconds()); }
 bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() ||
         !dmm_.requestKey(action, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     using Action = dmm::KeyCommand::Action;
     if (action == Action::NextRange || action == Action::Auto || action == Action::Manual) meter_.rangeCommand();
@@ -219,7 +239,7 @@ bool DataAccess::relativeMeter(bool enabled) {
     return meter_.relative(enabled);
 }
 bool DataAccess::setDmmRange(unsigned index) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() ||
         !dmm_.setRange(index, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     meter_.rangeCommand(); // A new scale: a hold mode's window starts again.
     return true;

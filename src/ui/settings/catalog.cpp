@@ -13,8 +13,9 @@ constexpr SettingsEntry root[] = {
 };
 constexpr SettingsEntry display[] = {
     {"Brightness", Action::Brightness},
-    {"FPS counter", Action::ShowFps},
+    {"Top bar counter", Action::ShowFps},
     {"Battery", Action::BatteryDisplay},
+    {"Pan direction", Action::PanDirection},
     {"Generator layout", Action::GeneratorLayout},
     {"Appearance", Action::None, Page::Appearance},
     {"Back", Action::Back},
@@ -60,6 +61,7 @@ constexpr SettingsEntry power[] = {
     {"Backlight timeout",Action::BacklightTimeout},
     {"Idle backlight",Action::BacklightIdleLevel},
     {"Auto power off",Action::PowerOffTimeout},
+    {"Power-off hold",Action::HoldTime},
     {"Generator at startup",Action::GeneratorStartup},
     {"Back",Action::Back},
 };

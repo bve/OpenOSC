@@ -1,10 +1,24 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/decode/table_text.hpp"
 #include "openosc/ui/scope/column_cache.hpp"
+#include "openosc/ui/scope/format.hpp"
+#include "openosc/platform/clocks.hpp"
 #include <cstdio>
 #include <cstring>
 
 namespace openosc {
+namespace {
+// While a selected function is awaited (boot, restore, SCPI), the chip's old reading is not shown.
+const dmm::Result &shownReading(const dmm::Session &meter, dmm::Function selecting) {
+    static const dmm::Result none{};
+    return selecting != dmm::Function::Unknown ? none : meter.displayed();
+}
+} // namespace
+// The function a running selection awaits, unless a HOLD keeps a reading.
+dmm::Function ApplicationController::meterSelecting() const {
+    const auto &meter = data_.meter();
+    return data_.dmmSelectionStatus() == DataStatus::Busy && !meter.holding() ? meter.awaited() : dmm::Function::Unknown;
+}
 // Full-rate capture restarts under a large redraw, or while a host enumerates, have coincided with
 // USB33RDY dips and bus resets on the device (cause not established). A hidden trace needs no new
 // frames, and such a record takes under a millisecond when one is asked for, so those restarts wait.
@@ -90,11 +104,22 @@ void ApplicationController::prepareColumns() {
 }
 void ApplicationController::displayData(uint32_t now) {
     refreshSoftKeys();
-    if (uint32_t(now-fpsAt_)>=1000) {
+    const bool rolled = uint32_t(now-fpsAt_) >= 1000; // FPS over each second, whatever is shown.
+    if (rolled) {
         const uint32_t flushes=display_.flushes();
-        view_.fps(prefs_.showFps,(flushes-fpsFlushes_)*1000/uint32_t(now-fpsAt_));
+        fps_ = (flushes-fpsFlushes_)*1000/uint32_t(now-fpsAt_);
         fpsFlushes_=flushes; fpsAt_=now;
     }
+    if (prefs_.showFps == 2) { // The sample rate in Scope, redrawn when it changes (a time/div at once).
+        const auto rate = data_.scopeMetadata().samplesPerSecond;
+        const double shown = state_.mode == MeasurementMode::Oscilloscope && rate.valid() ? rate.value() : 0;
+        if (shown != counterRate_ || counterStale_) {
+            char text[20];
+            const bool ok = shown > 0 && plot::Format::quantity(shown, "S/s", text, sizeof text, 3);
+            view_.counter(ok, ok ? text : "");
+            counterRate_ = shown; counterStale_ = false;
+        }
+    } else if (rolled || counterStale_) { view_.fps(prefs_.showFps != 0, fps_); counterStale_ = false; }
     view_.generatorActive(data_.generator().enabled());
     // The DAC stream halves the capture's maximum rate: said once as it starts (output on, PWM to DAC,
     // a Dedicated square below 1 kHz, a startup restore); the Scope's GEN note keeps ", ADC max /2".
@@ -112,10 +137,11 @@ void ApplicationController::displayData(uint32_t now) {
         uint32_t(now - meterBarAt_) >= 8) {
         meterBarAt_ = now;
         const auto &meter = data_.meter();
-        view_.multimeterBar(meter.displayed(), meter.status(data_.nowUs(),2000000), &meter.relative(), now);
+        view_.multimeterBar(shownReading(meter, meterSelecting()), meter.status(data_.nowUs(),2000000), &meter.relative(), now);
     }
     if (state_.mode != MeasurementMode::Oscilloscope) readouts_.reset(data_); // Left the Scope: nothing kept.
-    const unsigned interval = state_.mode == MeasurementMode::Oscilloscope && panel_ == Panel::None ? 16 : 40;
+    const unsigned interval = panel_ != Panel::None ? 40 : state_.mode == MeasurementMode::Oscilloscope ? 16
+                              : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
     if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
@@ -125,7 +151,7 @@ void ApplicationController::displayData(uint32_t now) {
             const auto &meter = data_.meter();
             char word[sizeof lastMeterHoldWord_];
             meterHoldWord(word, sizeof word);
-            view_.multimeterStatus(meter.displayed(), meter.holding(), meter.status(data_.nowUs(), 2000000), meter.relative().active(), word);
+            view_.multimeterStatus(shownReading(meter, meterSelecting()), meter.holding(), meter.status(data_.nowUs(), 2000000), meter.relative().active(), word);
         } else view_.generatorStatus(data_.generator().snapshot());
         return;
     }
@@ -162,6 +188,15 @@ void ApplicationController::displayData(uint32_t now) {
             syncCursorFocus();
         }
         view_.scopeGenerator(data_.generator().snapshot(), captureHalved);
+        {
+            const auto &options = view_.waveform().options();
+            char text[40];
+            // A new clock profile or Scope entry (counterEpoch_) starts the mean again (S13).
+            counterText_.update(data_.scopeCounters(), options.counter, text, sizeof text, ClockControl::activeMode() | counterEpoch_ << 8);
+            const unsigned source = options.counter.source ? options.counter.source - 1U : 0;
+            const bool room = options.mode == plot::Mode::Time; // X-Y and FFT label that corner.
+            view_.waveform().counter(room ? text : "", view_.waveform().palette().channels[source]);
+        }
         if (!view_.traceDrawn()) { // A menu over the Scope, or Decoder only (plan §4.4).
             // No projection and no readouts without a trace; the decoder still takes the record.
             readouts_.suspend(data_); dataAt_=now;
@@ -203,18 +238,21 @@ void ApplicationController::displayData(uint32_t now) {
         // sound; a countdown second redraws only the pill.
         char word[sizeof lastMeterHoldWord_];
         meterHoldWord(word, sizeof word);
-        if (dataRefresh_ || lastMeterSequence_ != meter.displayed().sequence ||
+        const auto selecting = meterSelecting(); // Its sign over an empty reading (shownReading).
+        if (dataRefresh_ || (selecting == dmm::Function::Unknown && lastMeterSequence_ != meter.displayed().sequence) || lastMeterSelecting_ != selecting ||
             lastMeterHold_ != meter.holding() || lastMeterStatus_ != status) {
             const ui::MeterContext context{&meter.statistics(), &meter.history(), &meter.relative(), prefs_.meter.display,
                                           bool(prefs_.meter.statistics), prefs_.meter.face, prefs_.meter.palette,
-                                          &prefs_.meter.appearance, word};
-            view_.multimeter(meter.displayed(), meter.holding(), status, context);
+                                          &prefs_.meter.appearance, word, bool(prefs_.meter.bar), data_.meterLogger().active(),
+                                          selecting};
+            view_.multimeter(shownReading(meter, selecting), meter.holding(), status, context);
+            lastMeterSelecting_ = selecting;
             lastMeterSequence_ = meter.displayed().sequence;
             lastMeterStatus_ = status;
             lastMeterHold_ = meter.holding();
         } else if (std::strcmp(word, lastMeterHoldWord_))
-            view_.multimeterStatus(meter.displayed(), meter.holding(), status,
-                                   meter.relative().matches(meter.displayed()), word);
+            view_.multimeterStatus(shownReading(meter, selecting), meter.holding(), status,
+                                   meter.relative().matches(shownReading(meter, selecting)), word);
         std::snprintf(lastMeterHoldWord_, sizeof lastMeterHoldWord_, "%s", word);
     } else {
         dataAt_ = now;

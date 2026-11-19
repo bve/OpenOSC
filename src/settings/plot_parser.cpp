@@ -15,6 +15,15 @@ template <class T> bool integer(JsonObjectConst object, const char *key, T &outp
     output = T(value);
     return true;
 }
+// "pan_ppb", else an older "pan_permille" (Options::valid bounds both).
+bool pan(JsonObjectConst object, int32_t &output) {
+    if (object.containsKey("pan_ppb")) return integer(object, "pan_ppb", output);
+    int16_t permille = 0;
+    if (!object.containsKey("pan_permille")) return true;
+    if (!integer(object, "pan_permille", permille) || permille < -1000 || permille > 1000) return false;
+    output = int32_t(permille) * 1000000;
+    return true;
+}
 bool flag(JsonObjectConst object, const char *key, bool &output) {
     if (!object.containsKey(key))
         return true;
@@ -53,7 +62,7 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
     if (!choice(object, "mode", o.mode, modes) || !choice(object, "style", o.style, styles) ||
         !choice(object, "grid", o.grid, grids) || !choice(object, "math", o.math, math) ||
         !choice(object,"reduction",o.reduction,reductions) || !choice(object,"interpolation",o.interpolation,interpolations) ||
-        !integer(object, "zoom", o.zoom) || !integer(object, "pan_permille", o.pan) ||
+        !integer(object, "zoom", o.zoom) || !pan(object, o.panPpb) ||
         !legacyTriggerPosition(object) ||
         !integer(object, "persistence_ms", o.persistenceMs) || !integer(object, "averaging", o.averaging) ||
         !flag(object, "lock_trigger", o.lockTrigger) || !flag(object, "show_trigger", o.showTrigger) ||
@@ -66,6 +75,11 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
         constexpr const char *windows[]={"rectangular","hann","hamming","blackman"}, *scales[]={"linear","dbfs"};
         if (!integer(input,"channel",o.spectrum.channel) || !choice(input,"window",o.spectrum.window,windows) ||
             !choice(input,"scale",o.spectrum.scale,scales) || !flag(input,"remove_dc",o.spectrum.removeDc)) return false;
+    }
+    if (object.containsKey("counter")) {
+        if (!object["counter"].is<JsonObjectConst>()) return false;
+        const auto input=object["counter"].as<JsonObjectConst>();
+        if (!integer(input,"source",o.counter.source) || !integer(input,"average",o.counter.average) || !integer(input,"ppm",o.counter.ppm)) return false;
     }
     if (object.containsKey("channels")) {
         auto channels = object["channels"].as<JsonArrayConst>();

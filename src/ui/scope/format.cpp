@@ -5,7 +5,8 @@
 #include <cstring>
 
 namespace openosc::plot {
-bool Format::quantity(double value, const char *unit, char *output, size_t capacity, unsigned precision, bool coarse) {
+bool Format::quantity(double value, const char *unit, char *output, size_t capacity, unsigned precision, bool coarse, int prefer,
+                      int *used) {
     if (!output || !capacity || !unit || !std::isfinite(value) || !precision || precision>8)
         return false;
     constexpr double powers[] = {1e-12, 1e-9, 1e-6, 1e-3, 1, 1e3, 1e6, 1e9};
@@ -22,7 +23,11 @@ bool Format::quantity(double value, const char *unit, char *output, size_t capac
     if (index < 7 && std::strcmp(unit, "%")) { // 999.97n rounds to 1000n: that is 1u.
         const unsigned whole = scaled >= 100 ? 3 : scaled >= 10 ? 2 : 1;
         const double step = std::pow(10.0, double(whole) - double(precision));
-        if (whole >= precision && std::floor(scaled / step + .5) * step >= 1000) { ++index; scaled = magnitude / powers[index]; }
+        if (std::floor(scaled / step + .5) * step >= 1000) { ++index; scaled = magnitude / powers[index]; }
+    }
+    if (!coarse && magnitude > 0 && prefer >= 0 && prefer < 8 && std::strcmp(unit, "%") &&
+        ((prefer == int(index) - 1 && magnitude / powers[prefer] < 1050) || (prefer == int(index) + 1 && magnitude / powers[prefer] >= .95))) {
+        index = unsigned(prefer); scaled = magnitude / powers[index];
     }
     char number[32];
     if (coarse && !std::strcmp(unit, "%") && magnitude < 10000) { // Percent has no prefix: fixed decimals instead.
@@ -45,7 +50,7 @@ bool Format::quantity(double value, const char *unit, char *output, size_t capac
             return false;
         index = 4;
     } else {
-        const unsigned digits=scaled>=100 ? 3 : scaled>=10 ? 2 : 1;
+        const unsigned digits=scaled>=1000 ? 4 : scaled>=100 ? 3 : scaled>=10 ? 2 : 1; // 4: a kept prefix ("1020k").
         unsigned decimals=precision>digits ? precision-digits : 0;
         if (scaled>0 && scaled<1) {
             double significant=scaled; unsigned leading=0;
@@ -64,6 +69,7 @@ bool Format::quantity(double value, const char *unit, char *output, size_t capac
         }
     }
     const bool sign = value < 0 && number[0] != '-';
+    if (used) *used = int(index);
     const int n = std::snprintf(output, capacity, "%s%s%s%s", sign ? "-" : "", number, prefixes[index], unit);
     return n > 0 && size_t(n) < capacity;
 }

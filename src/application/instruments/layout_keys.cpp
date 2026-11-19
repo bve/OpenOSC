@@ -10,7 +10,7 @@ void ApplicationController::applyLooks() {
     view_.meterArrangement(prefs_.meter.digitalArrangement, prefs_.meter.analogArrangement);
     view_.scopeAppearance(prefs_.scope.appearance);
 }
-void ApplicationController::buildView() { view_.build(themes_.theme()); applyLooks(); }
+void ApplicationController::buildView() { view_.build(themes_.theme()); applyLooks(); counterStale_ = true; }
 // One LAYOUT list's keys: a committed position is saved and restyles the screen (applyLooks); the
 // other rows already show the shifted order. True on Back (the caller opens the parent panel).
 template<class Block> bool ApplicationController::layoutKeys(uint32_t keys, ui::ArrangementProperties<Block> &editor,

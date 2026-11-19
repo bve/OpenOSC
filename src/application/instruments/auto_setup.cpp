@@ -52,7 +52,7 @@ void ApplicationController::serviceAuto(uint32_t now) {
     auto result = autoSetup_.state();
     if (result == State::Complete) {
         data_.scopeTrials(false); // The found settings capture records again.
-        if (!applyScope(autoSetup_.request(), now)) { data_.scopeTrials(true); autoSetup_.fail(); result = State::ApplyError; }
+        if (!applyFound(autoSetup_.request(), now)) { data_.scopeTrials(true); autoSetup_.fail(); result = State::ApplyError; }
     }
     if (result != State::Complete) {
         if (!restoreAuto()) return;

@@ -14,16 +14,20 @@ struct Layout {
     static constexpr const char *Screenshots = "/openosc/SCREENSHOTS";
     static constexpr const char *Captures = "/openosc/CAPTURES";
     static constexpr const char *Logs = "/openosc/LOGS";
+    static constexpr const char *SettingsCopyDirectory = "/openosc/SETCOPY";
     // Decoded events (CSV, docs/SCOPE_PROTOCOL_DECODERS_CSV.md): created by the application when it first
     // saves one (DecodeCsvFile), not by prepare(): Recovery and the formatter never need it.
     static constexpr const char *Decode = "/openosc/DECODE";
     // Parents before children: the order prepare() creates them in.
-    static constexpr const char *Directories[] = {Root, Update, Backup, Settings, Ui, Calibration, Screenshots, Captures, Logs};
+    static constexpr const char *Directories[] = {Root, Update, Backup, Settings, SettingsCopyDirectory, Ui, Calibration, Screenshots, Captures, Logs};
     // Empty directories the factory startup creates in the root after every reset. Not OpenOSC data:
     // prepare() removes exactly these, only while empty, so the root holds only /openosc.
     static constexpr const char *FactoryRootDirectories[] = {"/firmware", "/Application", "/log", "/pic", "/data"};
 
     static constexpr const char *SettingsFile = "/openosc/SETTINGS/settings.json";
+    // Its own directory (own 4 KiB block): a cut erase spares SETTINGS and BACKUP's factory boot copy.
+    static constexpr const char *SettingsCopy = "/openosc/SETCOPY/settings.json";
+    static constexpr const char *SettingsCopyOld = "/openosc/BACKUP/settings.json"; // Test builds 9-12: read only.
     // The 360 MHz start guard (BootGuard): "starting" before that profile runs, "ok" once confirmed.
     static constexpr const char *BootGuardFile = "/openosc/SETTINGS/boot.json";
     static constexpr const char *BootGuardPrevious = "/openosc/SETTINGS/boot.previous.json";

@@ -3,6 +3,7 @@
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/interrupts.hpp"
 #include "openosc/platform/critical_section.hpp"
+#include <algorithm>
 
 namespace openosc::scope {
 TriggerGate *TriggerGate::active_=nullptr;
@@ -12,7 +13,8 @@ bool TriggerGate::prepare(const TriggerSettings &settings,Rational rate,uint32_t
         phase_!=Phase::Idle || lease_.valid()) return false;
     clock_=TimerClock::apb1();
     const uint32_t pre=uint64_t(samples-1)*settings.position/1000;
-    if (!TriggerDelayPlan::sampleTicks(pre+slack,rate,clock_,preTicks_) ||
+    if (!TriggerDelayPlan::sampleTicks(samples-1,rate,clock_,recordTicks_) || // The Auto timeout: the record, no slack.
+        !TriggerDelayPlan::sampleTicks(pre+slack,rate,clock_,preTicks_) ||
         !TriggerDelayPlan::sampleTicks(samples-1-pre+slack,rate,clock_,postTicks_) ||
         !resources_.acquire(PeripheralResources::ScopeTrigger,lease_)) return false;
     preTicks_+=uint64_t(clock_)*settleMs/1000;
@@ -78,7 +80,8 @@ void TriggerGate::elapsed() {
         else EXTI->RTSR1|=line_;
         EXTI->PR1=line_;
         EXTI->IMR1|=line_;
-        if (settings_.mode==TriggerMode::Auto) delay(clock_/50); // 20ms Auto timeout.
+        // Auto timeout: one record (an edge a period away is still found), 20 ms to 1 s.
+        if (settings_.mode==TriggerMode::Auto) delay(std::clamp<uint64_t>(recordTicks_,clock_/50,clock_));
     } else if (phase_==Phase::Armed) event(false);
     else if (phase_==Phase::Post) { phase_=Phase::Complete; if (sink_) sink_->freezeRecord(); }
 }

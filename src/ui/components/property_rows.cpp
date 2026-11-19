@@ -19,5 +19,12 @@ void PropertyRows::draw(MenuContent &content, lv_obj_t *parent, const PropertyLi
             row.slider(unsigned(list.number(i) - minimum), 0, unsigned(maximum - minimum));
         if (uint32_t rgb; list.valueSwatch(i, rgb)) row.valueSwatch(rgb); // Colour rows only.
     }
+    // Another page follows: said under the last row, where the menu has room for it.
+    const int below = top + int(visible) * pitch;
+    if (start + visible < list.count() && below + 14 <= lv_obj_get_height(parent)) {
+        auto *more = content.text(parent, "More \u2193", MenuRow::NameX, below); // In line with the row names.
+        lv_obj_set_size(more, 100, 14);
+        lv_obj_set_style_text_color(more, lv_color_hex(accent), 0);
+    }
 }
 } // namespace openosc::ui

@@ -57,7 +57,7 @@ void BatteryIndicator::update(const power::BatteryState &state) {
     cached_=code;
     if (mode_) {
         char text[12];
-        if (state.external) std::snprintf(text,sizeof text,"%s",state.full ? "FULL" : "CHG");
+        if (state.external) std::snprintf(text,sizeof text,"%s",!state.full ? "CHG" : mode_==1 ? "FULL" : "100%"); // Percent: 100%.
         else if (!state.measured) std::snprintf(text,sizeof text,mode_==1 ? "--V" : "--%%");
         else if (mode_==1) std::snprintf(text,sizeof text,"%u.%02uV",state.millivolts/1000U,(state.millivolts%1000U)/10U);
         else std::snprintf(text,sizeof text,"%u%%",state.percent);

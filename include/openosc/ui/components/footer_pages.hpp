@@ -4,12 +4,11 @@
 #include <cstdint>
 
 namespace openosc::ui {
-// Which footer page shows what (no LVGL: the plan alone). The selected readouts of each channel,
-// Off slots skipped, go three per page into the channel's panel, so the first page holds the
-// first three of both channels (f, Vpp and RMS by default) and REL brings the fourth; a channel
-// that is off shows "CHn Off" there instead. A Scales page (both channels' coupling, probe and V/div) follows while the
-// display shows scales, and FFT puts its spectrum page (peak, Hz/div) first. REL turns the pages; dots show how
-// many there are.
+// The footer's pages (no LVGL), in fixed cells: with both channels on, each channel's readouts 1-2 in
+// its panel, REL then 3-4 (a second page only when one is chosen); with one channel on, its four
+// readouts in the four cells of one page. An Off readout leaves its cell empty, the others keep
+// theirs; every readout Off, no readout page. A Scales page while scales show, FFT's page first. REL
+// turns the pages.
 class FooterPages {
 public:
     enum class Kind : uint8_t { Spectrum, Readouts, Scales };
@@ -31,8 +30,9 @@ public:
     Cell cell(unsigned page, unsigned index) const;
 
 private:
-    uint8_t slots_[2][scope::ReadoutSelection::PerChannel]{}, active_[2]{};
+    bool chosen_[2][scope::ReadoutSelection::PerChannel]{}; // The selection's non-Off readouts.
     bool enabled_[2]{}, spectrum_ = false, scales_ = false;
+    bool wide() const { return enabled_[0] != enabled_[1]; }
     unsigned readoutPages_ = 0, count_ = 0, page_ = 0;
 };
 } // namespace openosc::ui

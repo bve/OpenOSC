@@ -11,8 +11,11 @@ public:
         for (auto &row:rows_) row.visible(false);
         for (auto *label:labels_) if (label) lv_obj_set_hidden(label,true);
     }
+    // Texts of one draw: title, path or notice, header, page counter, "More" (Settings uses five). Past
+    // Labels the last one is reused rather than writing beyond the array.
+    static constexpr unsigned Labels=6;
     lv_obj_t *text(lv_obj_t *parent,const char *value,int x,int y) {
-        auto *&label=labels_[nextLabel_++];
+        auto *&label=labels_[nextLabel_<Labels ? nextLabel_++ : Labels-1];
         if (!label) label=Elements::label(parent,value,x,y);
         else if (std::strcmp(lv_label_get_text(label),value)) lv_label_set_text(label,value);
         lv_obj_set_pos(label,x,y); lv_obj_set_hidden(label,false);
@@ -28,7 +31,7 @@ public:
     }
 private:
     MenuRow rows_[5];
-    lv_obj_t *labels_[5]{};
+    lv_obj_t *labels_[Labels]{};
     unsigned nextRow_=0,nextLabel_=0;
 };
 }
