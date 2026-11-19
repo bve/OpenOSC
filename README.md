@@ -39,6 +39,22 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">Multimeter with statistics</td>
   </tr>
   <tr>
+    <td><img src=".github/images/scope-readouts.png" width="320" alt="Oscilloscope: two readouts per channel, time cursors and the STOP status word"></td>
+    <td><img src=".github/images/multimeter-large.png" width="320" alt="Multimeter: large 80 px reading under the analog dial"></td>
+  </tr>
+  <tr>
+    <td align="center">Two readouts per channel, time cursors</td>
+    <td align="center">Multimeter, large reading</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/interleave-703.png" width="320" alt="Performance settings: Interleave CH1 on, 200 MS/s"></td>
+    <td><img src=".github/images/interleave-offset.png" width="320" alt="Scope calibration: interleave offset of +9.8 codes saved for 200 MHz"></td>
+  </tr>
+  <tr>
+    <td align="center">CH1 interleave on the ZT703S (experimental)</td>
+    <td align="center">Interleave offset calibration</td>
+  </tr>
+  <tr>
     <td><img src=".github/images/decoder-split.png" width="320" alt="Protocol decoder, split view: SPI waveform above, decoded table below"></td>
     <td><img src=".github/images/decoder-can.png" width="320" alt="Protocol decoder: CAN frames table with IDs, data and status"></td>
   </tr>
@@ -111,8 +127,9 @@ Captured on a ZT703S running OpenOSC.
 - Two channels, 20 mV/div to 10 V/div, timebase from 10 ns/div to 20 s/div
 - Trigger modes Auto, Normal and Single, with adjustable pre/post-trigger position
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
-- Auto Setup for both channels
-- Configurable on-screen measurements, hardware frequency counter, time and level cursors
+- Auto Setup for both channels (hold **AUTO** for 2 s; a short press resets the pan)
+- Configurable on-screen measurements, two per channel in the footer, time and level cursors
+- Hardware frequency counter with an averaged on-screen overlay
 - XY, MATH and reference waveforms; sin(x)/x and spline interpolation, infinite persistence
 - FFT up to 2048 points with four window functions, dBFS or linear scale
 - Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
@@ -120,6 +137,7 @@ Captured on a ZT703S running OpenOSC.
 - Zero offset calibration of both channels, stored as a file and never written to the factory calibration
 - Selectable performance profiles: 200/100, 280/140 and 360/90 (core MHz / MS/s per channel),
   switched instantly without a restart
+- ZT703S, experimental: CH1 interleave over both ADCs, up to 280 MS/s on CH1 alone at 10/25 ns/div
 - Save waveforms as RAW or CSV
 
 **Multimeter**
@@ -129,6 +147,7 @@ Captured on a ZT703S running OpenOSC.
 - HOLD modes (**MENU → Measurement → Hold**): Manual, Delayed (after a countdown), Stable (waits
   for a stable reading) and Auto (holds every new stable reading)
 - Statistics, trend chart and CSV logging
+- Large 72/80 px reading when the bar graph and statistics are off
 - Bar graph and analog dial scaled to the meter's range: 25,000 counts on ZT703S, 66,000 on ZT706S
 
 **Signal generator**
@@ -164,9 +183,10 @@ Captured on a ZT703S running OpenOSC.
 - Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
   plus custom RGB colors for individual elements. Multimeter colors can be customized as well
 - BMP screenshots with a built-in viewer
-- Settings and the color theme are stored as JSON files on the external SPI Flash. The
-  microcontroller's internal Flash holds only the firmware, so frequent saves do not wear it. You can edit the files from a computer, and a corrupted file is renamed and
-  replaced with defaults.
+- Settings and the color theme are stored as JSON files on the external SPI Flash and saved when
+  you switch the device off, restart it or enter Recovery. The microcontroller's internal Flash
+  holds only the firmware. You can edit the files from a computer; a damaged settings file is
+  restored from its previous version or from a copy in `/openosc/SETCOPY/`.
 - Hold-to-power-off with a progress bar
 - Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
 
