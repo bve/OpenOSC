@@ -26,7 +26,9 @@ public:
     void autoSetup(bool active) { automatic_=active; status(health_,statusHeld_); }
     void calibrating(bool active) { calibrating_=active; status(health_,statusHeld_); }
     void triggerState(scope::TriggerMode mode, bool waiting) {
+        const bool label = triggerMode_ != mode;
         triggerMode_ = mode; waiting_ = waiting; status(health_, statusHeld_);
+        if (label) cards();
     }
 
 private:

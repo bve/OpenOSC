@@ -478,6 +478,7 @@ bool DataAccess::startCapture() {
         arena_.release(captureRegion_); captureRegion_ = 0;
         return refused(capture_.status());
     }
+    captureRestartOwed_ = false;
     configuration_=capture_.metadata();
 #ifdef OPENOSC_INTERLEAVE_PROBE
     probe_.started(metadata.sequence, frontend.interleave ? scope::ProbeMode::Interleave
@@ -545,7 +546,7 @@ void DataAccess::holdScopeCore(bool hold) {
     // capture finish into HOLD instead of holding nothing, for a bounded time. The same wait when the
     // last capture failed and its retry is due (captureFailed_): the frame on show is gone with it.
     const bool capturing = captureRegion_ && capture_.state() == scope::FrameMailbox::State::Capturing;
-    const bool retrying = captureFailed_ && !staged_ && !request_.rolling() && capture_.state() == scope::FrameMailbox::State::Idle;
+    const bool retrying = (captureFailed_ || captureRestartOwed_) && !staged_ && !request_.rolling() && capture_.state() == scope::FrameMailbox::State::Idle;
     if (!heldFrame_.valid() && !rollingActive_ && (capturing || retrying)) {
         const double record = configuration_.samplesPerSecond.valid() ? 1000.0 * configuration_.samples / configuration_.samplesPerSecond.value() : 0;
         holdPending_ = true;
@@ -633,8 +634,10 @@ void DataAccess::serviceScopeCapture(uint32_t now) {
     inspected_.release();
     releaseCaptureRegion();
     if (!active_ || stopping_ || measurement_ != MeasurementMode::Oscilloscope || (scopeHeld_ && !holdPending_)) return;
-    if (capture_.status() == DataStatus::HardwareError || capture_.status() == DataStatus::Timeout || capture_.status()==DataStatus::Overflow) {
-        status_ = capture_.status();
+    const DataStatus fault = capture_.status();
+    if (!captureRestartOwed_ && (fault == DataStatus::HardwareError || fault == DataStatus::Timeout || fault == DataStatus::Overflow)) {
+        captureRestartOwed_ = true;
+        status_ = fault;
         if (!captureFailed_) captureRetryAt_ = now + CaptureRetryMs;
         captureFailed_ = true;
     }

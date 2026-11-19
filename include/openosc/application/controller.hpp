@@ -39,6 +39,7 @@
 #include "openosc/ui/editors/property_navigator.hpp"
 #include "openosc/ui/scope/display_properties.hpp"
 #include "openosc/platform/battery_monitor.hpp"
+#include "openosc/ui/scope/counter_text.hpp"
 
 namespace openosc {
 class InstrumentBackend;
@@ -64,6 +65,10 @@ private:
     // the display keeps running. uiReady_: the LVGL UI exists — every view update, render and
     // notification depends on it; false only for the headless fallback of a failed display init.
     bool remote_ = false, uiReady_ = false;
+    plot::CounterText counterText_;
+    bool sectionDirect_ = false; // A Display section opened from Analyze (FFT): Back returns there.
+    static constexpr unsigned PanDoubling = 8;
+    unsigned panRepeats_ = 0;
     PerformanceCounter performance_;
     void onKeys(const KeyEvents &events, uint32_t now);
     void settingsKeys(uint32_t keys, uint32_t now);
@@ -165,6 +170,7 @@ private:
     void beginHeldView();
     void followNextTimebase(); // A held record is shown at the next capture's time/div (issue #7).
     void moveTrace(uint32_t keys, uint32_t now, bool fine);
+    void resetPan(uint32_t now); // In HOLD the explored view only, as moveTrace: RUN restores, nothing saved.
     void moveCursor(uint32_t keys, uint32_t now, bool fine);
     bool triggerMidpoint(uint32_t now);
     bool centerChannels(uint32_t now); // Analyze -> Center channels, F2 hold.
@@ -274,6 +280,8 @@ private:
     ui::PropertyNavigator navigator_;
     void openPanel(Panel panel, const ui::PropertyList &list, unsigned row = 0);
     void closePanel();
+    void backPanel(); // Back: an Analyze sub-menu returns to Analyze on its row, any other panel closes.
+    unsigned analyzeRow_ = ~0U; // The Analyze row the open sub-menu came from (~0: none).
     // Settings or a panel left by another key than its own (MODE, Remote, power off): an edit ends
     // as on F4. A Settings number (brightness, applied live) returns to the value it began with;
     // a panel's unfinished number goes with the panel (its steps were never applied). True if a
@@ -288,7 +296,7 @@ private:
     // the instrument took (or, refused, what it has).
     void commitScopeEditor(ui::ScopeEditor &editor, uint32_t now);
     void commitTrigger(uint32_t now);
-    void triggerSource(uint32_t now); // F3 again in Trigger focus: the other enabled channel.
+    void triggerModeStep(uint32_t now); // F3 again in Trigger focus: Auto, Normal, Single.
     // DISPLAY's committed field (row Count) or its Reference/Clear action row, with every draft;
     // refused, the drafts return to the view in force.
     bool applyDisplay(unsigned row, uint32_t now);
@@ -306,6 +314,13 @@ private:
     bool autoCancelled_ = false;
     bool recordWatched_ = false, loggerWatched_ = false, serialWatched_=false;
     MeterRestore meterRestore_; // The DMM entry's range restore (meter_restore.hpp).
+    // REL hold (Preferences::holdMs) and Scope AUTO hold (AutoHoldMs): AUTO fires auto setup; its release then is not a short press.
+    static constexpr uint32_t AutoHoldMs = 2000;
+    uint32_t autoHeldAt_ = 0, autoUpAt_ = 0;
+    bool powerFired_ = false, autoDown_ = false, autoFired_ = false, autoArmed_ = false;
+    bool autoShown_ = false; // The AUTO countdown appeared: its release is a cancelled hold, not a short AUTO.
+    void powerOff(uint32_t now);
+    int autoHold(uint32_t now, bool powerHeld); // PowerHold::percent of the AUTO hold.
     // An explicit DMM command (keys, SCPI): accepted, it supersedes the entry's pending restore.
     bool meterCommand(bool accepted) { if (accepted) meterRestore_.cancel(); return accepted; }
     // *OPC?'s view of that restore (InstrumentBackend::busy): owed and still able to happen.
@@ -372,7 +387,8 @@ private:
     };
     static constexpr uint32_t OverlaySettleMs = 60;
     uint32_t hiddenAt_ = 0xffff0000U;
-    uint32_t fpsAt_ = 0, fpsFlushes_ = 0;
+    uint32_t fpsAt_ = 0, fpsFlushes_ = 0, fps_ = 0;
+    double counterRate_ = -1; bool counterStale_ = true; // The top bar's counter as last drawn.
     uint32_t dataAt_ = 0, lastScopeSequence_ = 0, lastMeterSequence_ = 0;
     uint32_t meterBarAt_ = 0;
     unsigned selectedChannel_ = 0;

@@ -16,7 +16,7 @@ bool Model::projectSpectrum(const scope::FrameView &frame, bool recalculate) {
     }
     if (!s.result.valid) return true;
     binSpan_=double(s.result.bins-1)/options_.zoom;
-    firstBin_=std::clamp<int>(options_.pan,0,1000)/1000.0*(s.result.bins-1-binSpan_);
+    firstBin_=std::clamp<int32_t>(options_.panPpb,0,Options::PanFull)/double(Options::PanFull)*(s.result.bins-1-binSpan_);
     trace.enabled=true;
     for (unsigned x=0;x<viewport_.width;++x) {
         const double a=firstBin_+binSpan_*x/(viewport_.width-1);

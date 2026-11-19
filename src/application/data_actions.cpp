@@ -185,6 +185,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
 }
 void ApplicationController::dataKeys(uint32_t keys, uint32_t now, bool fine) {
     if (!keys) return;
+    analyzeRow_ = ~0U; // No panel open (also after MODE, which drops it without closePanel).
     switch (state_.mode) {
     case MeasurementMode::Oscilloscope: if (decoderScreen()) decoderKeys(keys, now); else scopeKeys(keys, now, fine); break;
     case MeasurementMode::Multimeter: meterKeys(keys, now); break;

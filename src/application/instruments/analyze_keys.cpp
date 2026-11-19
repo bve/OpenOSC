@@ -26,6 +26,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     if (outcome != Outcome::Activate && outcome != Outcome::Open) { view_.properties(actions, navigator_); return; }
     for (unsigned c=0; c<2; ++c) plotControls_.enabled[c]=channelShown(c);
     const unsigned row = navigator_.row();
+    analyzeRow_ = row; // A sub-menu's Back returns here.
     switch (row) {
     case Actions::Spectrum:
         plotControls_.options=view_.waveform().options();
@@ -42,6 +43,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
             plotControls_.options.cursors.channel=plotControls_.channel;
             if (!applyDisplay(plot::Controls::Count, now)) return;
         }
+        sectionDirect_ = true; // Back returns to Analyze.
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_), plotControls_.index(plot::Controls::FftSource)); return;
     case Actions::Measurements:
         measurementEditor_.begin(prefs_.scope.measurements);
@@ -49,8 +51,8 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     case Actions::Display:
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
         plotControls_.options.cursors.channel = selectedChannel_;
-        plotControls_.group = plot::Controls::Group::View;
-        openPanel(Panel::Display, ui::DisplayProperties(plotControls_)); return;
+        plotControls_.listing = true; sectionDirect_ = false;
+        openPanel(Panel::Display, ui::DisplayProperties(plotControls_), unsigned(plotControls_.group)); return;
     case Actions::Layout:
         scopeLayout_ = ui::ArrangementProperties<ScopeBlock>("SCOPE LAYOUT", prefs_.scope.arrangement);
         openPanel(Panel::ScopeLayout, scopeLayout_); return;
@@ -65,10 +67,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     case Actions::CenterChannels:
         if (!centerChannels(now)) return;
         break;
-    case Actions::ResetPan: {
-        auto options=view_.waveform().options(); options.pan=0;
-        view_.waveform().configure(options); queuePlotSave(now); break;
-    }
+    case Actions::ResetPan: resetPan(now); break;
     case Actions::TriggerMidpoint:
         if (!triggerMidpoint(now)) return;
         break;

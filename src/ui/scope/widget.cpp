@@ -16,7 +16,7 @@ lv_obj_t *WaveformWidget::create(lv_obj_t *parent) {
     lv_obj_add_event_cb(object_, cover, LV_EVENT_COVER_CHECK, this);
     lv_obj_add_event_cb(object_, geometry, LV_EVENT_SIZE_CHANGED, this);
     lv_obj_add_event_cb(object_, geometry, LV_EVENT_DELETE, this);
-    note_ = lv_label_create(object_);
+    note_ = lv_label_create(object_); noteLow_ = false;
     lv_obj_remove_style_all(note_);
     lv_obj_set_style_text_font(note_, ui::Elements::font(12), 0);
     lv_obj_set_style_bg_opa(note_, LV_OPA_70, 0);
@@ -24,6 +24,13 @@ lv_obj_t *WaveformWidget::create(lv_obj_t *parent) {
     // Inside the plot's top right corner, clear of the XY/REF marks there.
     lv_obj_align(note_, LV_ALIGN_TOP_RIGHT, -(plot::PlotFrame::Right + 30), plot::PlotFrame::Top + 1);
     lv_obj_set_hidden(note_, true);
+    counter_ = lv_label_create(object_);
+    lv_obj_remove_style_all(counter_);
+    lv_obj_set_style_text_font(counter_, ui::Elements::font(14), 0);
+    lv_obj_set_style_bg_opa(counter_, LV_OPA_70, 0);
+    lv_obj_set_style_pad_hor(counter_, 2, 0);
+    lv_obj_align(counter_, LV_ALIGN_TOP_LEFT, plot::PlotFrame::Left + 1, plot::PlotFrame::Top + 1);
+    lv_obj_set_hidden(counter_, true);
     return object_;
 }
 void WaveformWidget::colors(const Theme &theme) {
@@ -75,14 +82,25 @@ void WaveformWidget::cursorFocus(plot::CursorLine line) {
     model_.cursorFocus(line);
     if (object_) lv_obj_invalidate(object_);
 }
-void WaveformWidget::note(const char *text, uint32_t color) {
-    if (!note_) return;
-    if (std::strcmp(lv_label_get_text(note_), text)) lv_label_set_text(note_, text);
-    ui::Elements::textColor(note_, color);
-    if (!lv_color_eq(lv_obj_get_style_bg_color(note_, LV_PART_MAIN), lv_color_hex(palette_.background)))
-        lv_obj_set_style_bg_color(note_, lv_color_hex(palette_.background), 0);
-    lv_obj_set_hidden(note_, !*text);
+// A label over the plot on the plot's background; empty hides it.
+static void overlayLabel(lv_obj_t *label, const char *text, uint32_t color, uint32_t background) {
+    if (!label) return;
+    if (std::strcmp(lv_label_get_text(label), text)) lv_label_set_text(label, text);
+    ui::Elements::textColor(label, color);
+    if (!lv_color_eq(lv_obj_get_style_bg_color(label, LV_PART_MAIN), lv_color_hex(background)))
+        lv_obj_set_style_bg_color(label, lv_color_hex(background), 0);
+    lv_obj_set_hidden(label, !*text);
 }
+void WaveformWidget::note(const char *text, uint32_t color) {
+    const bool low = options().mode == plot::Mode::SpectrumOverlay;
+    if (note_ && low != noteLow_) {
+        noteLow_ = low;
+        if (low) lv_obj_align(note_, LV_ALIGN_BOTTOM_LEFT, plot::PlotFrame::Left + 1, -(plot::PlotFrame::Bottom + 1));
+        else lv_obj_align(note_, LV_ALIGN_TOP_RIGHT, -(plot::PlotFrame::Right + 30), plot::PlotFrame::Top + 1);
+    }
+    overlayLabel(note_, text, color, palette_.background);
+}
+void WaveformWidget::counter(const char *text, uint32_t color) { overlayLabel(counter_, text, color, palette_.background); }
 void WaveformWidget::setFrame(const scope::FrameView &frame) {
     if (!object_)
         return;
@@ -96,7 +114,7 @@ void WaveformWidget::setFrame(const scope::FrameView &frame) {
 }
 void WaveformWidget::service(uint32_t now) {
     if (!object_ || held_ || !lv_obj_is_visible(object_) || !model_.options().persistenceMs ||
-        !model_.hasFrame())
+        model_.options().persistenceMs == plot::InfinitePersistence || !model_.hasFrame())
         return;
     if (uint32_t(now - fadeAt_) < 50)
         return;
@@ -154,7 +172,7 @@ void WaveformWidget::cover(lv_event_t *event) {
 void WaveformWidget::geometry(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     if (lv_event_get_code(event) == LV_EVENT_DELETE)
-        self.object_ = self.note_ = nullptr;
+        self.object_ = self.note_ = self.counter_ = nullptr;
     else {
         self.model_.clear();
         lv_obj_invalidate(self.object_);

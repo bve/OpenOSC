@@ -14,7 +14,8 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     constexpr const char *interpolations[]={"linear","sinc","spline"};
     root["interpolation"]=interpolations[unsigned(o.interpolation)];
     root["zoom"] = o.zoom;
-    root["pan_permille"] = o.pan;
+    root["pan_ppb"] = o.panPpb;
+    root["pan_permille"] = (o.panPpb + (o.panPpb < 0 ? -500000 : 500000)) / 1000000; // For older firmware.
     root["persistence_ms"] = o.persistenceMs;
     root["averaging"] = o.averaging;
     root["lock_trigger"] = o.lockTrigger;
@@ -29,6 +30,8 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     spectrum["window"]=windows[unsigned(o.spectrum.window)];
     spectrum["scale"]=o.spectrum.scale==scope::SpectrumScale::Dbfs ? "dbfs" : "linear";
     spectrum["remove_dc"]=o.spectrum.removeDc;
+    auto counter=root.createNestedObject("counter");
+    counter["source"]=o.counter.source; counter["average"]=o.counter.average; counter["ppm"]=o.counter.ppm;
     auto channels = root.createNestedArray("channels");
     for (const auto &c : o.channels) {
         auto item = channels.createNestedObject();

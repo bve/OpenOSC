@@ -6,12 +6,18 @@
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/interrupts.hpp"
 #include <algorithm>
+#include <type_traits>
 
 namespace openosc {
 namespace {
 // The ZT703S DAC stream announces its start; the ZT706S module (UART, no DMA) has nothing to announce.
+#if OPENOSC_BOARD == 703
+static_assert(std::is_same_v<board::GeneratorOutput, generator::Output>, "ZT703S: the DAC generator driver");
 void attachBus(generator::Output &output, generator::BusClient &client) { output.attach(client); }
+#else
+static_assert(std::is_same_v<board::GeneratorOutput, generator::ModuleOutput>, "ZT706S: the module generator driver");
 void attachBus(generator::ModuleOutput &, generator::BusClient &) {}
+#endif
 } // namespace
 DataAccess::DataAccess(Filesystem &fs)
     : resources_(PeripheralResources::StorageDma), zeroFile_(fs),pwmFile_(fs,calibration_),gainFile_(fs,calibration_),interleaveFile_(fs,calibration_),zeroOperation_(*this), frontend_(scopeCalibration_), capture_(resources_, frontend_), counters_(resources_), uart_(resources_),

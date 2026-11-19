@@ -19,7 +19,7 @@ bool Model::projectXY(const scope::FrameView &frame) {
             continue;
         const int delta = axes_[0].origin - axes_[0].pixel(values[0]);
         // A higher line on the Y-T screen is a higher CH1 voltage: on the X axis, further right.
-        const int64_t x = int64_t(viewport_.width - 1) * (1000 - axes_[0].basePermille + options_.channels[0].positionPermille - 500) / 1000 +
+        const int64_t x = int64_t(viewport_.width - 1) * (1500 - axes_[0].basePermille - options_.channels[0].positionPermille) / 1000 +
                           int64_t(delta) * (viewport_.width - 1) * 8 / ((viewport_.height - 1) * 10);
         point.x = int16_t(std::clamp<int64_t>(x, -4096, 4096));
         point.y = axes_[1].pixel(values[1]);

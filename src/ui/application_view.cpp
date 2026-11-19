@@ -53,19 +53,18 @@ void ApplicationView::build(const Theme &theme) {
     lv_obj_set_hidden(usbIndicator_,true); usbConnected_ = false;
     overview_.create(screen, theme);
     edge_ = lv_line_create(screen);
-    lv_obj_set_pos(edge_,Layout::edge(Layout::TriggerNear).x,5);
+    lv_obj_set_pos(edge_,Layout::edge(Layout::Trigger).x,5);
     lv_obj_set_style_line_color(edge_,lv_color_hex(theme.muted),0);
     lv_obj_set_style_line_width(edge_,1,0);
-    trigger_ = label(screen,"",Layout::level(Layout::TriggerNear).x,4);
+    trigger_ = label(screen,"",Layout::level(Layout::Trigger).x,4);
     lv_obj_set_size(trigger_,Layout::LevelWidth,14);
     lv_obj_set_style_text_font(trigger_,ui::Elements::font(12),0);
-    triggerX_ = Layout::TriggerNear.x;
     fps_ = label(screen,"",Layout::Fps.x,4);
     lv_obj_set_size(fps_,Layout::Fps.width,14);
     lv_obj_set_style_text_font(fps_,ui::Elements::font(12),0);
     lv_obj_set_style_text_align(fps_,LV_TEXT_ALIGN_RIGHT,0);
     lv_obj_set_style_text_color(fps_,lv_color_hex(theme.muted),0);
-    lv_obj_set_hidden(fps_,true); fpsWanted_ = fpsVisible_ = false; fpsValue_ = 0xffffffffU;
+    lv_obj_set_hidden(fps_,true); fpsWanted_ = fpsVisible_ = false;
     battery_.create(screen);
     host_.statusX(Layout::StatusX);
     statusRight_ = -1;
@@ -82,27 +81,17 @@ void ApplicationView::refreshIndicators() {
     statusRight_ = host_.statusRight();
     const bool scope = mode_ == MeasurementMode::Oscilloscope;
     overview_.visible(scope);
-    ui::StatusColumn place{Layout::TriggerNear};
-    const bool trigger = scope && trigger_ && edge_ && Layout::trigger(statusRight_, place);
-    if (trigger && place.x != triggerX_) {
-        triggerX_ = place.x;
-        lv_obj_set_x(edge_, Layout::edge(place).x);
-        lv_obj_set_x(trigger_, Layout::level(place).x);
-    }
+    const bool trigger = scope && trigger_ && edge_ && Layout::trigger(statusRight_);
     if (trigger_) lv_obj_set_hidden(trigger_, !trigger);
     if (edge_) lv_obj_set_hidden(edge_, !trigger);
-    triggerShown_ = trigger;
     placeFps();
 }
-// FPS shows where it covers neither the pill nor the trigger text actually drawn.
-void ApplicationView::placeFps() {
+// The counter has its own column; only a pill wide enough to reach it hides it.
+void ApplicationView::placeFps(bool force) {
     using Layout = ui::StatusBarLayout;
     if (!fps_ || !trigger_) return; // Not built yet.
-    int left = Layout::Fps.right() - ui::Elements::textWidth(lv_label_get_text(fps_));
-    int reach = statusRight_ + Layout::Gap;
-    if (triggerShown_) reach = std::max(reach, Layout::level({triggerX_, Layout::TriggerWidth}).x + ui::Elements::textWidth(lv_label_get_text(trigger_)) + Layout::Tight);
-    const bool visible = fpsWanted_ && reach <= left;
-    if (visible == fpsVisible_) return;
+    const bool visible = fpsWanted_ && Layout::clear(statusRight_, Layout::Fps);
+    if (!force && visible == fpsVisible_) return;
     fpsVisible_ = visible;
     lv_obj_set_hidden(fps_, !visible);
     if (visible) lv_obj_move_foreground(fps_);
@@ -132,13 +121,14 @@ void ApplicationView::scopeTrigger(const scope::TriggerSettings &trigger, const 
     if (lv_line_get_points(edge_) != points) lv_line_set_points(edge_, points, 4);
 }
 void ApplicationView::fps(bool visible, uint32_t value) {
+    char text[20]; std::snprintf(text,sizeof text,"%lu fps",static_cast<unsigned long>(value));
+    counter(visible, text);
+}
+void ApplicationView::counter(bool visible, const char *text) {
     fpsWanted_ = visible;
-    if (fps_ && visible && value != fpsValue_) {
-        fpsValue_ = value;
-        char text[20]; std::snprintf(text,sizeof text,"%lu fps",static_cast<unsigned long>(value));
-        lv_label_set_text(fps_,text);
-    }
-    placeFps();
+    const bool changed = fps_ && visible && std::strcmp(lv_label_get_text(fps_), text);
+    if (changed) lv_label_set_text(fps_, text);
+    placeFps(changed); // Its width changed: placed again.
 }
 void ApplicationView::scopeAppearance(const ScopeAppearance &appearance) {
     if (!appearance.valid() || appearance == scopeAppearance_) return;

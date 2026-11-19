@@ -21,14 +21,15 @@ void AutoSetup::begin(const ScopeRequest &request,unsigned channel,uint32_t now)
         trial_.frontend.position[c]=80;
     }
     state_=State::Searching; attempts_=0; hasSequence_=timing_=verified_=provisional_=counterRejected_=false;
+    counterWait_=CounterWait::None;
     totalDeadline_=now+600000;
     changed(now);
 }
 bool AutoSetup::changed(uint32_t now) {
     // Each finite trial gets its actual capture duration plus2s for settling,
     // snapshot copy and foreground work. The longest supported window is200s.
-    deadline_=now+uint32_t(trial_.timebaseNs/100000)+2000;
-    appliedAt_=now;
+    deadline_=now+recordMs()+2000;
+    appliedAt_=now; if (counterWait_==CounterWait::Waiting) counterWait_=CounterWait::None;
     if (++attempts_>64) { state_=State::Timeout; return false; }
     return true;
 }
@@ -78,7 +79,7 @@ bool AutoSetup::observe(const FrameView &frame,uint32_t now,const CounterSnapsho
     if (!band.valid) return false;
     const int16_t level=levelOf(band);
     const bool sourceChanged=channel_!=previousChannel;
-    if (sourceChanged) { provisional_=counterRejected_=false; }
+    if (sourceChanged) { provisional_=counterRejected_=false; counterWait_=CounterWait::None; }
     if (!timing_ || sourceChanged) {
         timing_=true; verified_=false;
         if (trial_.trigger.level!=level || sourceChanged) { trial_.trigger.level=level; return changed(now); }

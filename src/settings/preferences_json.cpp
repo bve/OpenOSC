@@ -52,6 +52,22 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["show_fps"].is<bool>()) return false;
         candidate.showFps = indicators["show_fps"].as<bool>();
     }
+    if (indicators.containsKey("show_sample_rate")) {
+        if (!indicators["show_sample_rate"].is<bool>()) return false;
+        if (indicators["show_sample_rate"].as<bool>()) candidate.showFps = 2;
+    }
+    if (indicators.containsKey("pan_moves_waveform")) {
+        if (!indicators["pan_moves_waveform"].is<bool>()) return false;
+        candidate.panReverse = indicators["pan_moves_waveform"].as<bool>();
+    }
+    if (root.containsKey("hold_ms")) {
+        if (!root["hold_ms"].is<unsigned>()) return false;
+        const unsigned ms = root["hold_ms"].as<unsigned>();
+        unsigned index = 0;
+        while (index < 3 && Preferences::HoldTimes[index] != ms) ++index;
+        if (index == 3) return false;
+        candidate.holdTime = index;
+    }
     if (indicators.containsKey("battery")) {
         const char *name = indicators["battery"].is<const char *>() ? indicators["battery"].as<const char *>() : "";
         unsigned index = 0;
@@ -178,7 +194,10 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["backlight_idle_percent"]=values.idle.dimPercent;
     document["power_off_minutes"]=values.idle.powerOffMinutes;
     document["display"]["theme"] = values.useBuiltinTheme ? "builtin" : "custom";
-    document["display"]["show_fps"] = bool(values.showFps);
+    document["display"]["show_fps"] = values.showFps == 1;
+    document["display"]["show_sample_rate"] = values.showFps == 2;
+    document["display"]["pan_moves_waveform"] = values.panReverse == 1;
+    document["hold_ms"] = values.holdMs();
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
     document["usb"]["controller"] = usbControllers[values.usbController];
     document["scope"]["timebase_ns"] = values.timebaseNs;

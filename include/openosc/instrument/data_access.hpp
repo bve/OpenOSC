@@ -443,6 +443,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     uint32_t sequence_ = 0, previousTick_ = 0, receiveErrors_ = 0, receiveOverflows_ = 0;
     uint64_t timeUs_ = 0;
     uint32_t armSequence_ = 0, captureRetryAt_ = 0;
+    bool captureRestartOwed_ = false; // A capture fault was taken; cleared by the next successful start.
     static constexpr uint32_t CaptureRetryMs = 50;
     bool triggerWaiting_ = false;
     uint64_t dmmActivatedAtUs_ = 0, recordDeadlineUs_ = 0;

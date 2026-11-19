@@ -31,6 +31,8 @@ public:
     void cursorFocus(plot::CursorLine line);
     // A one-line note in the top right corner of the plot; empty hides it.
     void note(const char *text, uint32_t color);
+    // The frequency counter overlay in the top left corner; empty hides it.
+    void counter(const char *text, uint32_t color);
     const char *note() const { return note_ && !lv_obj_is_hidden(note_) ? lv_label_get_text(note_) : ""; } // On show.
     void service(uint32_t now);
     bool captureReference(unsigned channel);
@@ -49,7 +51,8 @@ private:
     // under it (its parents' backgrounds are skipped). Anything else keeps LVGL's own answer.
     static void cover(lv_event_t *event);
     static void geometry(lv_event_t *event);
-    lv_obj_t *object_ = nullptr, *note_ = nullptr;
+    lv_obj_t *object_ = nullptr, *note_ = nullptr, *counter_ = nullptr;
+    bool noteLow_ = false; // The note in the plot's bottom left: Y-T+FFT has its header on the top line.
     plot::Model model_;
     plot::Palette palette_;
     uint32_t fadeAt_ = 0, frozenAt_ = 0;

@@ -29,6 +29,12 @@ struct CursorOptions {
 };
 // Cursor positions are thousandths of the plot, so they survive a change of its size.
 inline int cursorPixel(unsigned permille, int span) { return int((int64_t(permille) * span + 500) / 1000); }
+// The frequency counter overlay: its source (0 off, 1 CH1, 2 CH2), readings averaged, correction.
+struct CounterOptions {
+    uint8_t source = 0, average = 1;
+    int16_t ppm = 0;
+    bool valid() const { return source <= 2 && (average == 1 || average == 3 || average == 10) && ppm >= -1000 && ppm <= 1000; }
+};
 struct Options {
     Mode mode = Mode::Time;
     Style style = Style::Vectors;
@@ -39,8 +45,10 @@ struct Options {
     ChannelOptions channels[2];
     CursorOptions cursors;
     scope::SpectrumOptions spectrum;
+    CounterOptions counter;
     uint16_t zoom = 1, persistenceMs = 0;
-    int16_t pan = 0;
+    int32_t panPpb = 0; // Parts per billion of the record (PanFull: all of it).
+    static constexpr int32_t PanFull = 1000000000;
     uint8_t averaging = 1, zoomOut = 1; // zoomOut views more than one screen of a longer record.
     bool lockTrigger = true, showTrigger = true, showZero = true, glow = false, peakHold = false,
          showScale = true;

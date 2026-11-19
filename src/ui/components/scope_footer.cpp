@@ -124,17 +124,19 @@ void ScopeFooter::readoutPage() {
 }
 // The hardware counter's slots read the last snapshot even before a frame; the computed values
 // wait for a frame and its result.
-void ScopeFooter::readoutPanel(unsigned c) {
+// p: the panel; its channel is the cells' (the one channel on fills both).
+void ScopeFooter::readoutPanel(unsigned p) {
+    const unsigned c = pages_.cell(p * PerChannel).channel;
     const uint32_t color = channelColor(c);
-    look(c, &color);
-    if (pages_.cell(c * PerChannel).slot == FooterPages::ChannelOff) {
-        if (model_) { char text[16]; std::snprintf(text, sizeof text, "CH%u Off", c + 1); panels_[c].add(0, text, theme_->muted); }
+    look(p, &color);
+    if (pages_.cell(p * PerChannel).slot == FooterPages::ChannelOff) {
+        if (model_) { char text[16]; std::snprintf(text, sizeof text, "CH%u Off", c + 1); panels_[p].add(0, text, theme_->muted); }
         return;
     }
     ReadoutRow::Item items[ReadoutRow::Items];
     const bool computed = resultValid_ && result_.valid && result_.computed[c];
     for (unsigned k = 0; k < PerChannel; ++k) {
-        const auto place = pages_.cell(c * PerChannel + k);
+        const auto place = pages_.cell(p * PerChannel + k);
         if (place.slot == FooterPages::Empty || place.slot == FooterPages::ChannelOff) continue;
         auto &item = items[k];
         const unsigned kind = selection_.values[c][place.slot];
@@ -157,9 +159,11 @@ void ScopeFooter::readoutPanel(unsigned c) {
             }
         }
         item.kind = kind;
+        if (held_[p][k].kind == kind && heldChannel_[p] == c) item.prefer = held_[p][k].prefix;
     }
+    heldChannel_[p] = c;
     ReadoutRow::Placed placed[ReadoutRow::Items];
-    ReadoutRow::fit(items, Layout::TextWidth, Layout::CellWidth, placed);
+    ReadoutRow::fit(items, Layout::TextWidth, Layout::CellWidth, placed, &held_[p]);
     // A stale Full result: both shades go grey; the counter has its own snapshot and keeps its colour.
     for (unsigned k = 0; k < PerChannel; ++k) {
         if (!placed[k].shown) continue;
@@ -168,12 +172,12 @@ void ScopeFooter::readoutPanel(unsigned c) {
         const auto &parts = placed[k].parts;
         // A tag is its value's colour dimmed towards a dark background; on a light one it keeps the
         // full (dark) colour, so the names stay as readable as the values.
-        panels_[c].add(placed[k].x, parts.tag, light(theme_->background) ? value : mix(value, theme_->background, Tag), parts.size);
-        panels_[c].add(placed[k].x + parts.tagWidth, parts.value, value, parts.size);
+        panels_[p].add(placed[k].x, parts.tag, light(theme_->background) ? value : mix(value, theme_->background, Tag), parts.size);
+        panels_[p].add(placed[k].x + parts.tagWidth, parts.value, value, parts.size);
     }
     // Full: the bottom rail, whole (a first pass: as far as it has come); grey with stale values.
     if (indicator_.full && model_ && enabled(c))
-        panels_[c].rail(Layout::rail(int(c)).width * indicator_.percent / 100, indicator_.stale ? theme_->muted : color);
+        panels_[p].rail(Layout::rail(int(p)).width * indicator_.percent / 100, indicator_.stale ? theme_->muted : color);
 }
 const char *ScopeFooter::samples(const plot::Model &model, unsigned channel) {
     const auto &options = model.options();

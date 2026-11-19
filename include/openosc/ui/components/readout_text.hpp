@@ -29,6 +29,7 @@ struct ReadoutParts {
     char tag[8] = "", value[24] = "";
     int tagWidth = 0, valueWidth = 0;
     unsigned size = 12;
+    int prefix = -1; // Format::quantity's prefix index (-1: none).
     int width() const { return tagWidth + valueWidth; }
 };
 // Readout texts in IBM Plex Sans 12, never clipped. fit(): the first form within a width, at
@@ -53,7 +54,7 @@ public:
     // ">99.99%" are refused at 2 or 3), and ">99%" is that value's bound at two.
     static constexpr unsigned Forms = 10, Overflow = Forms - 1;
     static bool form(unsigned kind, bool valid, double value, const char *mark, unsigned index, ReadoutParts &output, unsigned size = 12,
-                     unsigned limit = 0);
+                     unsigned limit = 0, int prefer = -1);
     // How a computed value reads in any layout (footer panels, Legacy): its mark ("~": a tone from
     // the spectrum, or approximate) and its digit limit (0 without a bound: Full, Vpp, ...).
     struct Presentation { const char *mark = ""; unsigned limit = 0; };

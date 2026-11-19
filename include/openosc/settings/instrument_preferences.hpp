@@ -17,7 +17,7 @@ struct ScopePreferences {
     uint32_t triggerSource = 0, triggerEdge = 0, triggerMode = 0;
     int32_t triggerLevel = 0;
     uint32_t triggerPosition=250;
-    uint32_t triggerReject=0; // TriggerSettings::reject; files before it: off.
+    uint32_t triggerReject=1; // TriggerSettings::reject; files without it: on.
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
     uint32_t rollAuto=1;

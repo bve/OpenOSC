@@ -10,10 +10,10 @@ namespace openosc {
 struct PowerHold {
     static constexpr uint32_t ShowMs = KeyGestures::PowerCommitMs, OffMs = KeyGestures::LongHoldMs;
     static_assert(OffMs > ShowMs);
-    // 0..100 while shown, -1 when not.
-    static int percent(bool holding, uint32_t elapsed) {
+    // 0..100 while shown, -1 when not. off: the hold setting (Preferences::holdMs).
+    static int percent(bool holding, uint32_t elapsed, uint32_t off = OffMs) {
         if (!holding || elapsed < ShowMs) return -1;
-        return elapsed >= OffMs ? 100 : int((elapsed - ShowMs) * 100 / (OffMs - ShowMs));
+        return elapsed >= off ? 100 : int((elapsed - ShowMs) * 100 / (off - ShowMs));
     }
 };
 } // namespace openosc

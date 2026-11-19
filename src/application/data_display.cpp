@@ -1,6 +1,7 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/decode/table_text.hpp"
 #include "openosc/ui/scope/column_cache.hpp"
+#include "openosc/ui/scope/format.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -90,11 +91,22 @@ void ApplicationController::prepareColumns() {
 }
 void ApplicationController::displayData(uint32_t now) {
     refreshSoftKeys();
-    if (uint32_t(now-fpsAt_)>=1000) {
+    const bool rolled = uint32_t(now-fpsAt_) >= 1000; // FPS over each second, whatever is shown.
+    if (rolled) {
         const uint32_t flushes=display_.flushes();
-        view_.fps(prefs_.showFps,(flushes-fpsFlushes_)*1000/uint32_t(now-fpsAt_));
+        fps_ = (flushes-fpsFlushes_)*1000/uint32_t(now-fpsAt_);
         fpsFlushes_=flushes; fpsAt_=now;
     }
+    if (prefs_.showFps == 2) { // The sample rate in Scope, redrawn when it changes (a time/div at once).
+        const auto rate = data_.scopeMetadata().samplesPerSecond;
+        const double shown = state_.mode == MeasurementMode::Oscilloscope && rate.valid() ? rate.value() : 0;
+        if (shown != counterRate_ || counterStale_) {
+            char text[20];
+            const bool ok = shown > 0 && plot::Format::quantity(shown, "S/s", text, sizeof text, 3);
+            view_.counter(ok, ok ? text : "");
+            counterRate_ = shown; counterStale_ = false;
+        }
+    } else if (rolled || counterStale_) { view_.fps(prefs_.showFps != 0, fps_); counterStale_ = false; }
     view_.generatorActive(data_.generator().enabled());
     // The DAC stream halves the capture's maximum rate: said once as it starts (output on, PWM to DAC,
     // a Dedicated square below 1 kHz, a startup restore); the Scope's GEN note keeps ", ADC max /2".
@@ -162,6 +174,14 @@ void ApplicationController::displayData(uint32_t now) {
             syncCursorFocus();
         }
         view_.scopeGenerator(data_.generator().snapshot(), captureHalved);
+        {
+            const auto &options = view_.waveform().options();
+            char text[40];
+            counterText_.update(data_.scopeCounters(), options.counter, text, sizeof text);
+            const unsigned source = options.counter.source ? options.counter.source - 1U : 0;
+            const bool room = options.mode == plot::Mode::Time; // X-Y and FFT label that corner.
+            view_.waveform().counter(room ? text : "", view_.waveform().palette().channels[source]);
+        }
         if (!view_.traceDrawn()) { // A menu over the Scope, or Decoder only (plan §4.4).
             // No projection and no readouts without a trace; the decoder still takes the record.
             readouts_.suspend(data_); dataAt_=now;

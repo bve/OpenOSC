@@ -148,10 +148,17 @@ namespace openosc {
             data_.closeDmmRange(); // Its release may be among the lost events.
             if (uiReady_) view_.notify("Input overflow; press again",now);
         }
-        if (uiReady_) { // The REL/Power hold's progress, from the input sampler's own timing.
+        { // The REL/Power hold, from the input sampler's own timing; the long press covers headless.
             uint32_t held = 0;
-            const bool holding = shutdown_ == Shutdown::None && InputService::powerHold(held);
-            view_.powerHold(PowerHold::percent(holding, held));
+            const bool down = InputService::powerHold(held), holding = shutdown_ == Shutdown::None && down;
+            if (!down) powerFired_ = false; // Up (debounced): the long press's end is no new hold.
+            else if (holding && held >= prefs_.holdMs() && !recoveryPending_) powerOff(now);
+            const int power = PowerHold::percent(holding, held, prefs_.holdMs());
+            const int automatic = autoHold(now, power >= 0); // Every pass: its input state must not depend on the drawing.
+            if (uiReady_) {
+                if (power >= 0) view_.powerHold(power, "Hold to power off");
+                else view_.powerHold(automatic, "Hold for auto setup");
+            }
         }
         TimedKeyEvents input;
         if (shots_.busy()) {
@@ -215,6 +222,36 @@ void ApplicationController::applyPreferences() {
     applyBrightness();
     dataRefresh_=true;
 }
+void ApplicationController::powerOff(uint32_t now) {
+    if (powerFired_) return; // Once a hold: a refusal is not repeated every pass.
+    powerFired_ = true;
+    if (panel_==Panel::Zero) data_.cancelZero(now);
+    if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
+    confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
+}
+int ApplicationController::autoHold(uint32_t now, bool powerHeld) {
+    // Armed by the stroke's press event (onKeys): a stroke a wake took never arms. REL held takes the
+    // stroke: its release then does nothing (autoFired_), not a short AUTO.
+    if (powerHeld && autoArmed_ && (InputService::keys() & Keypad::AutoRange)) autoFired_ = true;
+    const bool down = autoArmed_ && !powerHeld && uiReady_ && state_.mode == MeasurementMode::Oscilloscope && panel_ == Panel::None && !state_.settingsOpen &&
+                      !remote_ && !recoveryPending_ && !shots_.busy() && shutdown_ == Shutdown::None && !decoderScreen() &&
+                      (InputService::keys() & Keypad::AutoRange);
+    if (!down) {
+        if (autoDown_) { autoDown_ = false; autoUpAt_ = now; }
+        else if (uint32_t(now - autoUpAt_) >= KeyGestures::DebounceMs) autoArmed_ = false; // Raw samples: a bounce continues.
+        return -1;
+    }
+    autoDown_ = true;
+    const uint32_t elapsed = now - autoHeldAt_;
+    if (autoFired_) return -1;
+    if (elapsed >= PowerHold::ShowMs) autoShown_ = true;
+    if (elapsed >= AutoHoldMs) {
+        autoFired_ = true;
+        if (!autoBusy()) startAuto(now);
+        return -1;
+    }
+    return PowerHold::percent(true, elapsed, AutoHoldMs);
+}
 void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     const uint32_t keys = events.shortPress | events.repeat;
     // A held Right steps a Number but never runs through a Choice (relays, run mode): the navigator
@@ -222,16 +259,12 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     navigator_.repeats(events.repeat & ~events.shortPress);
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
     meterRangeKeys(events, now); // KEY5 in the DMM: its own press, release and hold events.
+    if (events.press & Keypad::AutoRange) { autoArmed_ = true; autoFired_ = autoShown_ = false; autoHeldAt_ = now - KeyGestures::PressQualifyMs; }
     if (!(events.shortPress | events.longPress | events.repeat)) return;
     // REL/Power held to the end of its progress (PowerHold): the power-off pipeline at once, from
     // every screen, menu, dialog, Remote or headless; it saves settings and files and stops the
     // instruments, and says why when it cannot.
-    if (events.longPress & Keypad::Relative) {
-        if (panel_==Panel::Zero) data_.cancelZero(now);
-        if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
-        confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
-        return;
-    }
+    if (events.longPress & Keypad::Relative) { powerOff(now); return; }
     if (panel_==Panel::Zero) { zeroKeys(keys,now); return; }
     if (remote_ || !uiReady_) { // Locked: Remote, or no UI to operate (headless).
         if ((events.longPress & Keypad::Menu) && setRemote(false)) {
