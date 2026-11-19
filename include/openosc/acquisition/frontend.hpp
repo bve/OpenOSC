@@ -9,15 +9,33 @@ struct FrontendSettings {
     int position[2] = {80, 80};
     Coupling coupling[2] = {Coupling::Dc, Coupling::Dc};
     bool enabled[2] = {true, true};
-    // ZT706S interleave (CH1 alone through both ADCs, InterleavedWords): control bits 8 and 11.
+    // Interleave of CH1 (ZT706S factory, ZT703S selectable; CH1 alone through both ADCs, InterleavedWords):
+    // control bits 8 and 11.
     bool interleave = false;
     // The factory's interleave range correction (0804F3F0, only while interleaved): CH1's relays and
     // offset at the next range index (at most 10) while `range` stays the user's setting.
     bool rangeBoost = false;
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    // Diagnostic probe only (InterleaveProbe SharedInput): the selector bits 8/11 with both channels and
+    // in-phase ADC clocks; the capture's layout and clocks follow `interleave` alone.
+    bool sharedInput = false;
+#endif
     // The range the hardware of a channel is set to.
     unsigned physicalRange(unsigned c) const { return c == 0 && rangeBoost && range[0] < 10 ? range[0] + 1 : range[c]; }
     // Interleaving needs CH1 alone; the boost exists only within it.
-    bool consistent() const { return interleave ? enabled[0] && !enabled[1] : !rangeBoost; }
+    bool consistent() const {
+#ifdef OPENOSC_INTERLEAVE_PROBE
+        if (sharedInput && (interleave || rangeBoost || !enabled[0] || !enabled[1])) return false;
+#endif
+        return interleave ? enabled[0] && !enabled[1] : !rangeBoost;
+    }
+    // Whether the selector bits (8/11) are set: an interleave, or the probe's shared input.
+    bool selector() const {
+#ifdef OPENOSC_INTERLEAVE_PROBE
+        if (sharedInput) return true;
+#endif
+        return interleave;
+    }
 };
 class AnalogFrontend {
 public:

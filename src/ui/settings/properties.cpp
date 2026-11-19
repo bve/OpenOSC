@@ -4,7 +4,9 @@
 #include "openosc/settings/run_mode.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include "openosc/usb/clock_policy.hpp"
+#include "openosc/acquisition/interleave.hpp"
 #include <cstdio>
+#include <cstdlib>
 
 namespace openosc::ui {
 namespace {
@@ -35,7 +37,7 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     case Action::ShowFps: return PropertyKind::Toggle;
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
-    case Action::GeneratorStartup: case Action::UsbController: return PropertyKind::Choice;
+    case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave: return PropertyKind::Choice;
     default: return PropertyKind::Action;
     }
 }
@@ -52,7 +54,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::BacklightTimeout: return BacklightCount;
     case Action::BacklightIdleLevel: return DimCount;
     case Action::PowerOffTimeout: return OffCount;
-    case Action::GeneratorStartup: case Action::UsbController: return 2;
+    case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave: return 2;
     default: return 0;
     }
 }
@@ -68,6 +70,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::PowerOffTimeout: return indexOf(prefs_.idle.powerOffMinutes, IdleSettings::OffChoices); // An old value: none.
     case Action::GeneratorStartup: return prefs_.generatorStartup;
     case Action::UsbController: return prefs_.usbController;
+    case Action::Interleave: return prefs_.scope.interleave;
     default: return 0;
     }
 }
@@ -94,6 +97,9 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
         break;
     case Action::PowerOffTimeout: seconds(IdleSettings::OffChoices[index % OffCount], "min", output, capacity); break;
     case Action::GeneratorStartup: std::snprintf(output, capacity, "%s", index ? "Restore last" : "Off"); break;
+    case Action::Interleave: // On says when it runs.
+        std::snprintf(output, capacity, "%s", index ? "On: CH1 alone, 10/25 ns" : "Off");
+        break;
     case Action::UsbController: // Enabled says where it runs.
         if (index) std::snprintf(output, capacity, "Enabled (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
         else std::snprintf(output, capacity, "Disabled");
@@ -120,6 +126,27 @@ void SettingsProperties::value(unsigned row, char *output, size_t capacity) cons
     case Action::GeneratorStartup: // The choice, and with Restore last what the next boot does.
         if (prefs_.generatorStartup) std::snprintf(output, capacity, "Restore last (%s)", prefs_.generatorLastOutput ? "ON" : "OFF");
         else std::snprintf(output, capacity, "Off");
+        break;
+    case Action::Interleave: { // Off, or On and what it does now: its rate, or the first thing it waits for.
+        using C = scope::InterleaveConditions;
+        const uint32_t b = interleave_.blockers;
+        if (!prefs_.scope.interleave) std::snprintf(output, capacity, "Off");
+        else if (!b && activeRunMode_ < RunModeCount) // Uncalibrated: no offset measured at this clock.
+            std::snprintf(output, capacity, "On, %lu MS/s%s",
+                          (unsigned long)(scope::SelectableInterleave::rate(RunModes[activeRunMode_].coreHz) / 1000000UL),
+                          interleave_.calibrated ? "" : " uncal.");
+        else std::snprintf(output, capacity, "On, waits: %s",
+                           b & C::Channels ? "CH2 on" : b & C::Timebase ? "10/25 ns" : b & C::Rolling ? "Roll" :
+                           b & C::BusLoaded ? "GEN DAC" : b & C::Internal ? "trial" : "run mode");
+        break;
+    }
+    case Action::CalibrateInterleave: // The offset of the clock that runs, or that it has none yet.
+        if (interleave_.measuring) std::snprintf(output, capacity, "Measuring...");
+        else if (!interleave_.calibrated) std::snprintf(output, capacity, "Not measured");
+        else {
+            const int tenths = int(interleave_.offset * 10 + (interleave_.offset < 0 ? -0.5f : 0.5f));
+            std::snprintf(output, capacity, "%c%d.%d codes", tenths < 0 ? '-' : '+', std::abs(tenths) / 10, std::abs(tenths) % 10);
+        }
         break;
     case Action::UsbController: // The choice, and with Enabled whether the clock that runs allows it.
         if (!prefs_.usbController) std::snprintf(output, capacity, "Disabled");
@@ -152,6 +179,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::PowerOffTimeout: prefs_.idle.powerOffMinutes = IdleSettings::OffChoices[index]; break;
     case Action::GeneratorStartup: prefs_.generatorStartup = index; break;
     case Action::UsbController: prefs_.usbController = index; break;
+    case Action::Interleave: prefs_.scope.interleave = index; break;
     default: return false;
     }
     return true;

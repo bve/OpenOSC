@@ -1,5 +1,6 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/application/generator_startup.hpp"
+#include "openosc/board/current.hpp"
 #include "openosc/settings/instrument_state.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/usb/instrument_usb.hpp"
@@ -15,6 +16,9 @@ PreferencesResult ApplicationController::applyDataPreferences() {
     result.mode = data_.select(state_.mode);
     if (!result.mode) state_.mode = data_.measurementMode();
     if (previousMeasurement != data_.measurementMode() && usb_) usb_->profileChanged(HAL_GetTick());
+    // The ZT703S interleave choice before the request, so the first capture already follows it; any
+    // other board takes only off (a file's on is kept, not applied).
+    data_.selectInterleave(prefs_.scope.interleave && board::Current::Features.selectableInterleave);
     auto request = InstrumentState::scope(prefs_);
     if (!request.frontend.enabled[unsigned(request.trigger.channel)])
         request.trigger.channel = scope::Channel(unsigned(request.trigger.channel)^1);
@@ -33,6 +37,16 @@ PreferencesResult ApplicationController::applyDataPreferences() {
         state_.scope.millivoltsPerDivision[c] = scope::AnalogFrontend::millivoltsForRange(data_.scopeRequest().frontend.range[c]);
     dataRefresh_ = true;
     return result;
+}
+// The one path of the choice (menu, SCPI): the capture replanned at once, the setting saved, a notice.
+bool ApplicationController::selectInterleave(bool on, uint32_t now) {
+    if (!data_.selectInterleave(on)) { view_.notify("Finish calibration or AutoSetup first", now); return false; }
+    if (prefs_.scope.interleave != unsigned(on)) {
+        prefs_.scope.interleave = on;
+        changed(now);
+        view_.notify(on ? "Interleave on: CH1 alone, 10/25 ns" : "Interleave off", now);
+    }
+    return true;
 }
 // The MODE key and SYST:MODE: one path. A different measurement changes the USB profile (the device
 // reconnects); the DMM restores its saved function. Also in Remote and headless (SCPI): no UI then.

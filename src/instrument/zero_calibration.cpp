@@ -100,6 +100,7 @@ void DataAccess::serviceZero(uint32_t now) {
         }
     }
 }
+bool DataAccess::saveInterleaveProfile(const calibration::InterleaveProfile &profile) { return interleaveFile_.save(profile); }
 void DataAccess::calibrationChanged() {
     if (active_ && !stopping_ && measurement_==MeasurementMode::Oscilloscope && !scopeHeld_) configureScopeCore(request_,true);
 }

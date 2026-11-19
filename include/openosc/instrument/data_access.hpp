@@ -4,6 +4,11 @@
 #include "openosc/acquisition/trigger_level.hpp"
 #include "openosc/acquisition/sample_plan.hpp"
 #include "openosc/acquisition/interleave.hpp"
+#include "openosc/board/current.hpp"
+#include "openosc/calibration/interleave_measurement.hpp"
+#ifdef OPENOSC_INTERLEAVE_PROBE
+#include "openosc/acquisition/interleave_probe.hpp"
+#endif
 #include "openosc/acquisition/capture.hpp"
 #include "openosc/acquisition/store.hpp"
 #include "openosc/acquisition/background_reader.hpp"
@@ -196,6 +201,28 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // the saved one.
     float interleaveOffset() const { return scopeCalibration_.interleaveOffset(); }
     const calibration::InterleaveProfile &savedInterleave() const { return interleaveFile_.values(); }
+    // Interleave of CH1 (InterleaveRule): the ZT703S user's choice (Settings > Device > Performance >
+    // Interleave CH1; off by default, any other board accepts only off), what keeps a request from it.
+    bool selectInterleave(bool on);
+    bool interleaveSelected() const;
+    uint32_t interleaveBlockers(const ScopeRequest &request) const;
+    uint32_t interleaveBlockers() const { return interleaveBlockers(request_); }
+    // ZT703S interleave offset of the clock that runs (Scope calibration > Interleave offset): begin
+    // (Ok, Busy, InvalidArgument: not interleaving now or not Auto, Unsupported), cancel, its state;
+    // whether the clock that runs has one (else its records interleave uncalibrated, offset 0).
+    DataStatus beginInterleaveOffset(uint32_t now);
+    void cancelInterleaveOffset();
+    const calibration::InterleaveOffsetMeasurement &interleaveMeasurement() const { return interleaveMeasure_; }
+    bool interleaveCalibrated() const;
+    const float *interleaveOffsetAtClock() const; // The ZT703S offset measured at the clock that runs, or null.
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    // Diagnostic probe (interleave_probe.hpp, env firmware_interleave_probe): the mode for new captures,
+    // applied through an ordinary forced reconfigure (refused while held, during a calibration, an
+    // AutoSetup or a recording); what blocks it for the request now; the mode a record was captured in.
+    bool setInterleaveProbe(scope::ProbeMode mode);
+    uint32_t interleaveProbeBlockers() const;
+    const scope::InterleaveProbe &interleaveProbe() const { return probe_; }
+#endif
     void cancelZero(uint32_t now);
     bool zeroBusy() const { return zeroOperation_.busy(); }
     const calibration::ZeroOperation &zeroOperation() const { return zeroOperation_; }
@@ -379,6 +406,24 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     scope::FrameLease heldFrame_;
     scope::HeldTrigger heldTrigger_;
     scope::InterleaveTracker interleave_; // ZT706S: CH1's frequency, range correction and gain (InterleaveTracker).
+    scope::InterleaveConditions::Inputs interleaveInputs(const ScopeRequest &request) const;
+    float recordInterleaveOffset() const;
+    // The ZT706S factory interleave and its curves (range correction, display gain); never the ZT703S's.
+    static constexpr bool factoryInterleave() { return board::Current::Features.adcInterleave; }
+    bool interleaveSelected_ = false;
+    calibration::InterleaveOffsetMeasurement interleaveMeasure_;
+    bool interleaveRestart_ = false;
+    uint32_t interleaveGeneration_ = 0; // The front-end offsets' generation a running measurement began under.
+    void serviceInterleaveOffset(uint32_t now);
+    void finishInterleaveOffset();
+    void endInterleaveOffset(calibration::InterleaveOffsetMeasurement::Result result);
+    // Whether a running offset measurement still measures what it began on, were `request` captured now.
+    bool interleaveMeasureHolds(const ScopeRequest &request) const;
+    bool saveInterleaveProfile(const calibration::InterleaveProfile &profile); // The file (zero_calibration.cpp).
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    scope::InterleaveProbe probe_;
+    scope::InterleaveProbe::Inputs probeInputs(const ScopeRequest &request) const;
+#endif
     ScopeRequest request_;
     scope::FrameMetadata configuration_;
     uint64_t rollingConsumed_=0,rollingPublished_=0;

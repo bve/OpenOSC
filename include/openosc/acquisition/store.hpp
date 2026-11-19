@@ -23,6 +23,13 @@ public:
     // DataAccess's trigger inspection: the latest frame once per published frame, whatever readers
     // took it first (Leased, or released back to Idle). Does not mark it seen.
     bool acquireUninspected(FrameLease &lease);
+    // A reader of DataAccess's own (the interleave offset measurement) that used the latest frame
+    // `sequence` as a reader would: it is seen, so the capture may take its memory. Other frames: no.
+    bool consume(uint32_t sequence) {
+        if (!hasFrame_ || latest_.metadata().sequence != sequence) return false;
+        consumed_ = true;
+        return true;
+    }
     // Gives the latest frame's memory back to the arena; refused while it is read.
     bool drop();
     // Hands the latest frame and its region to the caller, who now owns the region.

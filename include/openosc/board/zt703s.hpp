@@ -10,7 +10,7 @@ struct Zt703s : Zt703sIdentity {
     static constexpr InputPin PowerKey{{Port::C, 10}, Pull::None};
     static constexpr Pin ChargeStatus{Port::C, 11};
     // DMM: 25000 counts (ZT-703S manual, multimeter specifications, pp. 32-34).
-    static constexpr Capabilities Features{GeneratorDriver::Dac, true, false, DmmCounts::Counts25000};
+    static constexpr Capabilities Features{GeneratorDriver::Dac, true, false, DmmCounts::Counts25000, true};
     // The factory GEN sets no control-word bit beyond the common power hold (0x1000): the DMM word keeps
     // nothing for the DAC generator.
     static constexpr uint16_t GeneratorControlBits = 0;

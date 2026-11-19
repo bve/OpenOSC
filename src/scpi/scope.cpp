@@ -72,6 +72,15 @@ bool Engine::scopeCommand(const Command &c) {
             Decimal::integer(progress.words,words,sizeof words);
             reply("%u,%lu,%s,%u",unsigned(progress.active),(unsigned long)progress.sequence,words,unsigned(progress.status));
         }
+    } else if (match("ACQuire:INTerleave:STATe")) { // What runs: active (0/1), the blockers.
+        if (!c.query || *c.argument) error(-108, c.query);
+        else { const auto s = backend_.interleave(); reply("%u,%lu", unsigned(s.active), (unsigned long)s.blockers); }
+    } else if (match("ACQuire:INTerleave")) { // The choice (ZT703S); ON elsewhere: hardware missing.
+        if (c.query) { if (*c.argument) error(-108, true); else reply("%u", unsigned(backend_.interleave().requested)); }
+        else { bool value; if (boolean(c, value)) {
+            if (value && !backend_.interleave().supported) error(-241);
+            else if (!backend_.interleave(value)) error(-221); // A calibration, an AutoSetup or a recording runs.
+        } }
     } else if (match("ACQuire:SRATe")) {
         if (!c.query) error(-108);
         else { const auto *m = backend_.configuration(); if (m) number(m->samplesPerSecond.value()); else error(-230, true); }

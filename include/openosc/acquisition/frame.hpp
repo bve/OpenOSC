@@ -7,7 +7,7 @@ namespace openosc::scope {
 enum class Channel : uint8_t { Ch1, Ch2 };
 // FourBanks: lane i of the capture holds points 4n+i as 16-bit words, CH1 low byte, CH2 high.
 // FourByteBanks: the same lanes as byte arrays of the one enabled channel (8-bit capture).
-// InterleavedCh1 (ZT706S): CH1 alone through both ADCs clocked in opposite phase; word w (in the
+// InterleavedCh1 (ZT706S; ZT703S with Interleave CH1 on): CH1 alone through both ADCs clocked in opposite phase; word w (in the
 // FourBanks lane order) holds points 2w and 2w+1. The factory spline (0804E640) takes point 2w
 // from the HIGH byte, converted first, and adds the calibration correction to it; 2w+1 is the
 // LOW byte as it is.

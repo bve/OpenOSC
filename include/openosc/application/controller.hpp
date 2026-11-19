@@ -80,6 +80,7 @@ private:
     void confirmShutdown(ShutdownAction action);
     using ConfirmHandler=void (ApplicationController::*)(uint32_t);
     void confirmOperation(const ui::Confirmation &question,ConfirmHandler handler);
+    void leaveConfirmation(uint32_t now); // Back to where the confirmation was asked from.
     void restoreSettings(uint32_t now);
     void openImages(uint32_t now);
     void showImages();
@@ -104,6 +105,15 @@ private:
     ui::CalibrationDraft calibrationDraft_;
     char gainQuestion_[2][40]{}; // The gain confirmation's texts (Confirmation keeps pointers).
     void serviceZeroUi(uint32_t now);
+    // Scope calibration > Interleave offset (ZT703S): its start after the confirmation, its result.
+    void interleaveOffsetAction(uint32_t now); // MENU on its row: confirm, or cancel a running one.
+    void beginInterleaveOffset(uint32_t now);
+    // Interleave CH1 (ZT703S) from the menu or SCPI: applied at once and saved; false when refused.
+    bool selectInterleave(bool on, uint32_t now);
+    void serviceInterleaveOffsetUi(uint32_t now);
+    // The loop pass's overlay pause of full-rate capture (DataAccess::pauseCapture).
+    void pauseHiddenCapture(uint32_t now, bool enumerating);
+    bool interleaveWatched_=false;
     bool zeroWatched_=false;
     uint32_t zeroProgress_=UINT32_MAX;
     ConfirmHandler confirmationHandler_=nullptr;

@@ -17,6 +17,9 @@
 #ifdef OPENOSC_DIAG_MAILBOX
 #include "openosc/application/local_control.hpp"
 #endif
+#ifdef OPENOSC_INTERLEAVE_PROBE
+#include "openosc/application/interleave_probe_control.hpp"
+#endif
 #include <cstdio>
 
 namespace openosc {
@@ -35,6 +38,19 @@ namespace openosc {
     // Diagnostic builds: the SWD mailbox, served through a backend of its own (local_control.hpp).
     InstrumentBackend localBackend(*this);
     diag::LocalControl local(localBackend);
+#endif
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    // The ZT703S interleave probe (interleave_probe_control.hpp): its SWD mailbox, DataAccess's probe
+    // mode and a backend of its own for the held record's lease.
+    struct ProbeData final : diag::ProbeTarget {
+        DataAccess &data;
+        explicit ProbeData(DataAccess &d) : data(d) {}
+        bool setInterleaveProbe(scope::ProbeMode mode) override { return data.setInterleaveProbe(mode); }
+        const scope::InterleaveProbe &interleaveProbe() const override { return data.interleaveProbe(); }
+        uint32_t interleaveProbeBlockers() const override { return data.interleaveProbeBlockers(); }
+    } probeData(data_);
+    InstrumentBackend probeBackend(*this);
+    diag::InterleaveProbeControl probe(probeData, probeBackend, openosc_interleave_probe);
 #endif
     uiReady_ = display_.initialize();
     // Settings > Files & USB > USB controller, before the first clock change (headless Remote). An
@@ -108,21 +124,16 @@ namespace openosc {
 #ifdef OPENOSC_DIAG_MAILBOX
         local.poll(now);
 #endif
+#ifdef OPENOSC_INTERLEAVE_PROBE
+        probe.poll();
+#endif
         serviceRecovery(now);
         if (uiReady_) view_.usbConnected(usb.connected());
         serviceAuto(now);
         serviceInstruments(now);
         serviceZeroUi(now);
-        {
-            // Full-rate capture restarts under a large redraw, or while a host enumerates, have
-            // coincided with USB33RDY dips and bus resets on the device (cause not established).
-            // A hidden trace needs no new frames, and such a record takes under a millisecond when
-            // one is asked for, so those restarts wait.
-            if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !autoBusy() &&
-                data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto) hiddenAt_ = now;
-            const bool settling = uint32_t(now - hiddenAt_) < OverlaySettleMs || usb.enumerating(now);
-            data_.pauseCapture(state_.mode == MeasurementMode::Oscilloscope && settling && data_.fullRateCapture(), now);
-        }
+        serviceInterleaveOffsetUi(now);
+        pauseHiddenCapture(now, usb.enumerating(now));
         serviceImages(now);
         if (uiReady_ && !shots_.busy()) {
             const uint32_t start = DWT->CYCCNT;

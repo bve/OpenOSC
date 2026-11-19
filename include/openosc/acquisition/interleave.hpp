@@ -1,26 +1,70 @@
 #pragma once
+#include "openosc/board/capabilities.hpp"
 #include "openosc/settings/run_mode.hpp"
 #include <cstdint>
 
 namespace openosc::scope {
-// The ZT706S interleave of the factory firmware (zt_fw 706s_main), the parts that decide and correct:
-// - InterleavePolicy: when CH1 alone runs through both ADCs (updater 0804A9A8);
-// - InterleaveResponse: the display gain of an interleaved CH1 by its frequency (0804D6A4/0804D720);
-// - InterleaveRangeBoost: CH1's hardware range one step less sensitive near 46..62 MHz (0804F3F0).
-// The capture itself (control bits 8/11, TIM1 CC3P, InterleavedWords, Layout::InterleavedCh1) follows
-// from InterleavePolicy in DataAccess, AnalogFrontend, AdcClock and CaptureDma.
+// Interleave: CH1 alone through both ADCs clocked in opposite phase (control bits 8/11, TIM1 CC3P,
+// InterleavedWords, Layout::InterleavedCh1 at two points a word, twice the ADC rate). The capture follows
+// from InterleaveRule in DataAccess, AnalogFrontend, AdcClock and CaptureDma. Two boards, two rules:
+// - ZT706S, the factory's (zt_fw 706s_main): InterleavePolicy at 280 MHz (updater 0804A9A8), with its
+//   display gain InterleaveResponse (0804D6A4/0804D720) and range correction InterleaveRangeBoost (0804F3F0);
+// - ZT703S, the user's choice (Capabilities::selectableInterleave; the factory 703S never enables it):
+//   SelectableInterleave on every run mode, none of the ZT706S curves, its own offset calibration.
+// What every interleave needs of a request (both boards), as blockers: none, it may run.
+struct InterleaveConditions {
+    enum Blocker : uint32_t {
+        Board = 1, Clock = 2, Timebase = 4, Channels = 8, Rolling = 16, Internal = 32, BusLoaded = 64, Off = 128,
+    };
+    struct Inputs {
+        uint32_t timerHz;
+        uint64_t timebaseNs;
+        bool ch1, ch2, rolling, internal, busLoaded;
+    };
+    // Timebase index < 2 of the factory table: 10 and 25 ns/div.
+    static constexpr bool timebase(uint64_t timebaseNs) { return timebaseNs == 10 || timebaseNs == 25; }
+    // internal: an AutoSetup or zero trial. busLoaded: the ZT703S DAC stream halves the rate.
+    // CH2 on (and so X-Y) keeps the two ordinary channels: an interleave never turns CH2 off itself.
+    static constexpr uint32_t capture(const Inputs &in) {
+        return (timebase(in.timebaseNs) ? 0U : uint32_t(Timebase)) | (in.ch1 && !in.ch2 ? 0U : uint32_t(Channels)) |
+               (in.rolling ? uint32_t(Rolling) : 0U) | (in.internal ? uint32_t(Internal) : 0U) |
+               (in.busLoaded ? uint32_t(BusLoaded) : 0U);
+    }
+};
 struct InterleavePolicy {
     // The factory's interleave needs a non-zero clock setting: here the 280 MHz profile (140 M words/s,
     // 280 MS/s of CH1), the High one. 200 MHz (USB data) and the 360 MHz trial profile never interleave.
     static constexpr uint32_t TimerHz = RunModes[1].coreHz;
     static_assert(RunModes[1].coreHz == 280000000 && RunModes[1].adcDivider == 2, "Interleave runs on the 280 MHz profile");
-    // Timebase index < 2 of the factory table: 10 and 25 ns/div.
-    static constexpr bool timebase(uint64_t timebaseNs) { return timebaseNs == 10 || timebaseNs == 25; }
-    // board: the build's Capabilities::adcInterleave. internal: an AutoSetup or zero trial. busLoaded:
-    // the ZT703S DAC stream halves the rate (never on the ZT706S, kept for the rule's completeness).
+    static constexpr bool timebase(uint64_t timebaseNs) { return InterleaveConditions::timebase(timebaseNs); }
+    // board: the build's Capabilities::adcInterleave.
     static constexpr bool enabled(bool board, uint32_t timerHz, uint64_t timebaseNs, bool ch1, bool ch2, bool rolling,
                                   bool internal, bool busLoaded) {
-        return board && timerHz == TimerHz && timebase(timebaseNs) && ch1 && !ch2 && !rolling && !internal && !busLoaded;
+        return board && timerHz == TimerHz && !InterleaveConditions::capture({timerHz, timebaseNs, ch1, ch2, rolling, internal, busLoaded});
+    }
+};
+// The ZT703S's selectable interleave: on every run mode whose timer the ADC clock divides, at twice
+// that profile's ADC rate (200/100 -> 200 MS/s, 280/140 -> 280 MS/s, 360/90 -> 180 MS/s) at the
+// profile's ordinary DMA word rate. Not on the HSI fallback (no profile).
+struct SelectableInterleave {
+    static constexpr bool profile(uint32_t timerHz) {
+        for (const auto &mode : RunModes) if (mode.coreHz == timerHz) return true;
+        return false;
+    }
+    static constexpr uint32_t rate(uint32_t timerHz) { return 2 * (timerHz / adcDividerAt(timerHz)); }
+    static constexpr uint32_t blockers(bool selected, const InterleaveConditions::Inputs &in) {
+        return (selected ? 0U : uint32_t(InterleaveConditions::Off)) | (profile(in.timerHz) ? 0U : uint32_t(InterleaveConditions::Clock)) |
+               InterleaveConditions::capture(in);
+    }
+};
+// The build's rule: what keeps a request from interleaving on this board (0: it interleaves).
+// `selected`: the user's choice (ZT703S); the ZT706S factory interleave needs none.
+struct InterleaveRule {
+    static constexpr uint32_t blockers(const board::Capabilities &board, bool selected, const InterleaveConditions::Inputs &in) {
+        if (board.adcInterleave)
+            return (in.timerHz == InterleavePolicy::TimerHz ? 0U : uint32_t(InterleaveConditions::Clock)) | InterleaveConditions::capture(in);
+        if (board.selectableInterleave) return SelectableInterleave::blockers(selected, in);
+        return InterleaveConditions::Board;
     }
 };
 struct InterleaveResponse {

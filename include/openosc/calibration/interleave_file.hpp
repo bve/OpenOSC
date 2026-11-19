@@ -4,12 +4,15 @@
 #include <cstddef>
 
 namespace openosc::calibration {
-// scope_interleave.json: schema 1, the factory CRC, enabled and offset_codes.
+// scope_interleave.json: schema 1, the factory CRC, enabled and offset_codes (the ZT706S service
+// offset). Schema 2 adds "clocks": [{"core_mhz": 200, "adc_divider": 2, "offset_codes": 9.4}, ...],
+// the ZT703S's offset per timing (core clock and ADC divider). A profile without clocked offsets is written as schema 1 (the ZT706S's file stays
+// the one its firmware wrote); both are read.
 class InterleaveJson {
 public:
     using Profile = InterleaveProfile;
     static constexpr const char *Path = storage::Layout::InterleaveFile, *Previous = storage::Layout::InterleavePrevious;
-    static constexpr size_t MaxBytes = 256;
+    static constexpr size_t MaxBytes = 512;
     static constexpr CalibrationFileText Text{"Invalid interleave offset", "Cannot read interleave JSON", "Cannot save interleave JSON",
                                               "Cannot preserve invalid interleave JSON", "Interleave loaded; file restore failed"};
     static InterleaveProfile empty(const CalibrationData &factory) { InterleaveProfile profile; profile.factoryCrc = factory.crc(); return profile; }

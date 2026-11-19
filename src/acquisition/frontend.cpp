@@ -56,7 +56,8 @@ bool AnalogFrontend::scope(const FrontendSettings &settings,int16_t triggerLevel
     // From the multimeter or power-up the whole path changes; so does a new offset compare
     // (a hardware-zero profile, a calibration trial) under the same settings.
     bool analog = forced_ || !scopeActive_ || calibration_.generation() != generation_ ||
-                  settings.interleave != previous_.interleave || settings.rangeBoost != previous_.rangeBoost;
+                  settings.selector() != previous_.selector() || settings.interleave != previous_.interleave ||
+                  settings.rangeBoost != previous_.rangeBoost;
     for (unsigned c = 0; c < 2; ++c)
         analog = analog || settings.range[c] != previous_.range[c] || settings.position[c] != previous_.position[c] ||
                  settings.coupling[c] != previous_.coupling[c] || settings.enabled[c] != previous_.enabled[c];
@@ -76,7 +77,7 @@ bool AnalogFrontend::scope(const FrontendSettings &settings,int16_t triggerLevel
     initialize();
     // Common power/control bits (bit 10 also the factory selector's, 0804B878); enables, range bits
     // and the interleave selector (bits 8 and 11 together) are committed together.
-    uint16_t word = 0x1600 | (settings.interleave ? InterleaveBits : 0);
+    uint16_t word = 0x1600 | (settings.selector() ? InterleaveBits : 0);
     for (unsigned c = 0; c < 2; ++c)
         if (settings.enabled[c]) {
             const unsigned range = settings.physicalRange(c);

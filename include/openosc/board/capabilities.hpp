@@ -16,5 +16,8 @@ struct Capabilities {
     // the word rate, the factory's 10/25 ns interleave. The ZT703S updater (08049B10) is empty.
     bool adcInterleave;
     DmmCounts dmmCounts;
+    // ZT703S: the same two-ADC interleave of CH1, chosen by the user (Settings > Device > Performance >
+    // Interleave CH1, off by default) on every run mode; its own offset calibration, no ZT706S curves.
+    bool selectableInterleave;
 };
 } // namespace openosc::board

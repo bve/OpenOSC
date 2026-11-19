@@ -52,6 +52,8 @@ public:
     bool output(bool) override;
     bool generatorStartup() const override;
     bool generatorStartup(bool restore) override;
+    InterleaveStatus interleave() const override;
+    bool interleave(bool on) override;
     bool remote() const override;
     bool remote(bool) override;
     bool performance(PerformanceSnapshot &) const override;

@@ -18,6 +18,10 @@ public:
                        const CalibrationDraft &draft = {}, const CalibrationStatus &status = {})
         : menu_(menu), prefs_(preferences), activeRunMode_(activeRunMode), calibration_(draft, status) {}
     const Preferences &preferences() const { return prefs_; }
+    // The interleave as DataAccess reports it: what keeps the request in force from interleaving
+    // (InterleaveConditions bits), and the ZT703S offset of the clock that runs (null: not measured).
+    struct InterleaveState { uint32_t blockers = 0; bool calibrated = true; float offset = 0; bool measuring = false; };
+    void interleave(const InterleaveState &state) { interleave_ = state; }
     const CalibrationDraft &calibration() const { return calibration_.draft(); }
     const char *title() const override { return menu_.title(); }
     unsigned count() const override { return menu_.count(); }
@@ -36,6 +40,7 @@ private:
     SettingsAction action(unsigned row) const { return menu_.entry(row).action; }
     const SettingsMenu &menu_;
     Preferences prefs_;
+    InterleaveState interleave_;
     uint32_t activeRunMode_;
     CalibrationRows calibration_;
 };

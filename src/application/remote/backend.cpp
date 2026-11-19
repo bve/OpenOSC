@@ -1,3 +1,4 @@
+#include "openosc/board/current.hpp"
 #include "openosc/application/scpi_backend.hpp"
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/board.hpp"
@@ -164,6 +165,12 @@ DataStatus InstrumentBackend::operationStatus() const { return application_.data
 generator::Snapshot InstrumentBackend::generator() const { return application_.data_.generator().snapshot(); }
 bool InstrumentBackend::configureGenerator(const generator::Settings &s) { return application_.applyGenerator(s,Board::milliseconds()); }
 bool InstrumentBackend::output(bool value) { return application_.requestGeneratorOutput(value, Board::milliseconds()); }
+scpi::Backend::InterleaveStatus InstrumentBackend::interleave() const {
+    const auto &a = application_;
+    const uint32_t blockers = a.data_.interleaveBlockers();
+    return {board::Current::Features.selectableInterleave, a.prefs_.scope.interleave != 0, !blockers, blockers};
+}
+bool InstrumentBackend::interleave(bool on) { return application_.selectInterleave(on, Board::milliseconds()); }
 bool InstrumentBackend::generatorStartup() const { return application_.prefs_.generatorStartup; }
 bool InstrumentBackend::generatorStartup(bool restore) {
     auto &a = application_;

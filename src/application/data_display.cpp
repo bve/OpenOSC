@@ -5,6 +5,19 @@
 #include <cstring>
 
 namespace openosc {
+// Full-rate capture restarts under a large redraw, or while a host enumerates, have coincided with
+// USB33RDY dips and bus resets on the device (cause not established). A hidden trace needs no new
+// frames, and such a record takes under a millisecond when one is asked for, so those restarts wait.
+// A calibration consumes records behind its opaque page: a zero is never hidden; the interleave
+// offset measurement neither, nor held by the settle window its own confirmation left. Both still
+// wait while a host enumerates (bounded; a measurement past its deadline ends as Timeout).
+void ApplicationController::pauseHiddenCapture(uint32_t now, bool enumerating) {
+    const bool measuring = data_.interleaveMeasurement().active();
+    if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !measuring && !autoBusy() &&
+        data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto) hiddenAt_ = now;
+    const bool settling = (!measuring && uint32_t(now - hiddenAt_) < OverlaySettleMs) || enumerating;
+    data_.pauseCapture(state_.mode == MeasurementMode::Oscilloscope && settling && data_.fullRateCapture(), now);
+}
 // The level belongs to the next capture; its marker sits on the scale of the record on screen.
 void ApplicationController::showTrigger(const scope::FrameMetadata *shown) {
     const auto &trigger = data_.scopeRequest().trigger;

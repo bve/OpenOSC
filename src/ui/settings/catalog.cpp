@@ -48,6 +48,14 @@ constexpr SettingsEntry performance[] = {
     {"Restart device", Action::Restart},
     {"Back", Action::Back},
 };
+// The ZT703S's: its selectable interleave of CH1 next to the run mode it doubles.
+constexpr SettingsEntry selectablePerformance[] = {
+    {"Run mode", Action::RunProfile},
+    {"Interleave CH1", Action::Interleave},
+    {"Record memory", Action::BufferSize},
+    {"Restart device", Action::Restart},
+    {"Back", Action::Back},
+};
 constexpr SettingsEntry power[] = {
     {"Backlight timeout",Action::BacklightTimeout},
     {"Idle backlight",Action::BacklightIdleLevel},
@@ -59,6 +67,7 @@ constexpr SettingsEntry calibration[] = {
     {"Hardware zero (PWM)",Action::CalibrateHardwareZero},
     {"Software zero",Action::CalibrateZero},
     {"Gain",Action::None,Page::Gain},
+    {"Interleave offset",Action::CalibrateInterleave}, // The ZT703S's, per clock (the ZT706S page has its own).
     {"Reload calibration JSON",Action::ReloadZero},
     {"Use factory zero",Action::FactoryZero},
     {"Back",Action::Back},
@@ -107,7 +116,9 @@ constexpr SettingsPageDefinition pages[] = {
     page("DEVICE", "Settings / Device", Page::Root, device),
     {"ABOUT", "Settings / Device / About", Page::Device, nullptr, 0},
     {"STORAGE", "Settings / Device / Storage", Page::Device, nullptr, 0},
-    page("PERFORMANCE", "Settings / Device / Performance", Page::Device, performance),
+    board::Current::Features.selectableInterleave
+        ? page("PERFORMANCE", "Settings / Device / Performance", Page::Device, selectablePerformance)
+        : page("PERFORMANCE", "Settings / Device / Performance", Page::Device, performance),
     page("POWER", "Settings / Device / Power", Page::Device, power),
     board::Current::Features.adcInterleave
         ? page("SCOPE CALIBRATION","Settings / Device / Scope calibration",Page::Device,interleaveCalibration)

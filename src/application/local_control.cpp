@@ -1,6 +1,7 @@
 // Diagnostic candidate17 only: compiled empty unless OPENOSC_DIAG_MAILBOX (env firmware_diag).
 #ifdef OPENOSC_DIAG_MAILBOX
 #include "openosc/application/local_control.hpp"
+#include "openosc/application/diag_record.hpp"
 #include "openosc/acquisition/ranges.hpp"
 #include <atomic>
 #include <cmath>
@@ -12,20 +13,6 @@ __attribute__((used)) volatile openosc::diag::Mailbox openosc_diag_mailbox{};
 namespace openosc::diag {
 namespace {
 volatile Mailbox &box() { return openosc_diag_mailbox; }
-template <typename Record> uint32_t checksum(const Record &record) {
-    return Crc32::compute(&record, sizeof record - sizeof(uint32_t)); // Every word but the closing check.
-}
-// Odd while written, even and larger once complete: the host never takes a half-written record.
-template <typename Record> void publish(volatile uint32_t &word, volatile Record &target, Record record, uint32_t &counter) {
-    record.check = checksum(record);
-    word = ++counter;
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    const auto *from = reinterpret_cast<const uint32_t *>(&record);
-    auto *to = reinterpret_cast<volatile uint32_t *>(&target);
-    for (size_t i = 0; i < sizeof record / sizeof(uint32_t); ++i) to[i] = from[i];
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    word = ++counter;
-}
 bool faulted(DataStatus status) {
     return status == DataStatus::HardwareError || status == DataStatus::Timeout || status == DataStatus::Overflow;
 }
@@ -254,21 +241,9 @@ void LocalControl::described() {
     Descriptor d{};
     if (view_) {
         const auto &m = view_->metadata();
-        const auto &split = view_->split();
-        d.frameValid = 1;
-        d.sequence = m.sequence; d.samples = m.samples; d.ring = m.ring; d.origin = m.origin; d.layout = uint32_t(m.layout);
-        d.rateNumerator = m.samplesPerSecond.numerator; d.rateDenominator = m.samplesPerSecond.denominator;
+        frameFields(*view_, d);
         d.timestampLow = uint32_t(m.timestampUs); d.timestampHigh = uint32_t(m.timestampUs >> 32);
         d.timebaseLow = uint32_t(m.timebaseNs); d.timebaseHigh = uint32_t(m.timebaseNs >> 32);
-        d.flags = uint32_t(m.channels[0].enabled) | uint32_t(m.channels[1].enabled) << 1 | uint32_t(m.triggered) << 2 |
-                  uint32_t(m.rolling) << 3 | uint32_t(m.timingVerified) << 4;
-        d.triggerIndex = m.triggerIndex;
-        for (unsigned i = 0; i < 4; ++i) {
-            d.banks[i] = uint32_t(reinterpret_cast<uintptr_t>(view_->bank(i)));
-            d.older[i] = uint32_t(reinterpret_cast<uintptr_t>(split.older[i]));
-            d.end[i] = split.end[i]; d.newest[i] = split.newest[i];
-        }
-        d.ahbWords = split.ahbWords; d.historyWords = split.historyWords;
         d.crc[0] = crc_[0].value(); d.crc[1] = crc_[1].value();
     }
     d.capturesAtStop = capturesAtStop_; d.msSinceCapture = msSinceCapture_; d.stopUptimeMs = stopAt_; d.stageMs = stageMs_;

@@ -83,6 +83,12 @@ public:
     virtual bool remote() const = 0;
     virtual bool remote(bool enabled) = 0;
     virtual bool performance(PerformanceSnapshot &) const { return false; }
+    // Interleave CH1 (ZT703S, ACQ:INTerleave): whether the board has the choice, the choice (saved like
+    // the menu's), whether the request in force interleaves now and what keeps it from it
+    // (InterleaveConditions bits). Without a backend for it: unsupported, off accepted.
+    struct InterleaveStatus { bool supported = false, requested = false, active = false; uint32_t blockers = 0; };
+    virtual InterleaveStatus interleave() const { return {}; }
+    virtual bool interleave(bool on) { return !on; }
     // The GUI heap, read now (a pool walk); false while there is none to read.
     virtual bool memory(MemorySnapshot &) const { return false; }
     // The factory calibration record as this boot decoded it (SYST:CAL:FACT?, docs/SCPI.md), from the

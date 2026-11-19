@@ -52,6 +52,11 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
         status_ = DataStatus::Busy;
         return false;
     }
+    // An admitted change ends a running interleave offset measurement here (its records would mix
+    // conditions); the new capture takes the profile in force. An identical restart (the measurement's
+    // own) keeps it. No reconfigure from here: this one is it.
+    if (interleaveMeasure_.active() && (!request_.same(r) || !interleaveMeasureHolds(r)))
+        interleaveMeasure_.end(calibration::InterleaveOffsetMeasurement::Result::Interrupted);
     const auto previous = request_;
     request_ = r;
     forcePending_ = false; forcedSequence_ = 0; // A force belongs to the acquisition it was given for.
@@ -131,25 +136,126 @@ bool DataAccess::samplePlan(scope::SamplePlan &plan, const scope::CaptureBuffer 
                                                 : scope::SamplePlan::headroom(buffer,maximumRate*perTransfer),
                                         perTransfer);
 }
-// The ZT706S interleave this request gets on this build and clock (InterleavePolicy, factory 0804A9A8).
-bool DataAccess::interleaving(const ScopeRequest &r) const {
-    return scope::InterleavePolicy::enabled(board::Current::Features.adcInterleave, TimerClock::apb1(), r.timebaseNs,
-                                            r.frontend.enabled[0], r.frontend.enabled[1], r.rolling(), internalCapture(),
-                                            generatorLoadsBus());
+// What keeps a request from interleaving on this build and clock (InterleaveRule): the ZT706S's
+// factory rule, or the ZT703S's selectable one with the user's choice (in a probe build, the probe's
+// mode in place of it while one is set).
+scope::InterleaveConditions::Inputs DataAccess::interleaveInputs(const ScopeRequest &r) const {
+    return {TimerClock::apb1(), r.timebaseNs, r.frontend.enabled[0], r.frontend.enabled[1], r.rolling(), internalCapture(),
+            generatorLoadsBus()};
+}
+bool DataAccess::interleaveSelected() const {
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    if (probe_.active()) return probe_.mode() == scope::ProbeMode::Interleave;
+#endif
+    return interleaveSelected_;
+}
+uint32_t DataAccess::interleaveBlockers(const ScopeRequest &r) const {
+    return scope::InterleaveRule::blockers(board::Current::Features, interleaveSelected(), interleaveInputs(r));
+}
+bool DataAccess::interleaving(const ScopeRequest &r) const { return !interleaveBlockers(r); }
+// The ZT703S choice (Settings > Device > Performance > Interleave CH1) takes effect as any setting
+// does: an ordinary forced reconfigure of the same request, or in HOLD the Next plan (the held record
+// keeps its own). Refused during a calibration, an AutoSetup or a recording; a refused reconfigure
+// puts the previous choice back. Elsewhere only Off is accepted (the ZT706S interleave is the factory's).
+bool DataAccess::selectInterleave(bool on) {
+    if (!board::Current::Features.selectableInterleave) return !on;
+    if (on == interleaveSelected_) return true;
+    if (zeroBusy() || internalCapture() || recorder_.busy()) return false;
+    interleaveSelected_ = on;
+    if (scopeHeld_) { describeNext(configuration_); return true; }
+    if (configureScopeCore(request_, true)) return true;
+    interleaveSelected_ = !on;
+    configureScopeCore(request_, true);
+    return false;
+}
+// The HIGH ADC's offset a new interleaved record takes, frozen in its metadata: the ZT706S's service
+// or factory correction; the ZT703S's measured one of the clock that runs (none of the factory's: its
+// record holds an in-phase one), 0 where none was measured and while one is being measured.
+float DataAccess::recordInterleaveOffset() const {
+    if (factoryInterleave()) return interleaveOffset();
+    if (interleaveMeasure_.active()) return 0.f;
+    const auto *clocked = scopeCalibration_.interleave().at(TimerClock::apb1(), adcDividerAt(TimerClock::apb1()));
+    return clocked ? clocked->offset : 0.f;
+}
+const float *DataAccess::interleaveOffsetAtClock() const {
+    const auto *clocked = scopeCalibration_.interleave().at(TimerClock::apb1(), adcDividerAt(TimerClock::apb1()));
+    return clocked ? &clocked->offset : nullptr;
+}
+bool DataAccess::interleaveCalibrated() const {
+    return factoryInterleave() || interleaveOffsetAtClock() != nullptr;
+}
+// The ZT703S interleave offset (InterleaveOffsetMeasurement), an asynchronous bounded operation:
+// begun only where the record would interleave now (the choice on, CH1 alone at 10/25 ns, Auto, not
+// HOLD, no calibration, AutoSetup or recording); the capture restarts without the correction; each
+// fresh record is taken once as serviceScopeFrames inspects it; the result is saved for the clock that
+// runs and the capture restarts with it. A failure, timeout, cancel or a change of the conditions ends
+// it with the profile in force unchanged; HOLD and records already captured are never touched.
+DataStatus DataAccess::beginInterleaveOffset(uint32_t now) {
+    if (!board::Current::Features.selectableInterleave) return DataStatus::Unsupported;
+    if (interleaveMeasure_.active() || zeroBusy() || internalCapture() || recorder_.busy() || scopeHeld_ ||
+        !active_ || measurement_ != MeasurementMode::Oscilloscope) return DataStatus::Busy;
+    if (!interleaving(request_) || request_.trigger.mode != scope::TriggerMode::Auto) return DataStatus::InvalidArgument;
+    interleaveMeasure_.begin(now, TimerClock::apb1(), sequence_ + 1);
+    interleaveGeneration_ = scopeCalibration_.generation();
+    if (configureScopeCore(request_, true)) return DataStatus::Ok;
+    interleaveMeasure_.end(calibration::InterleaveOffsetMeasurement::Result::Interrupted);
+    configureScopeCore(request_, true);
+    return DataStatus::Busy;
+}
+void DataAccess::cancelInterleaveOffset() { endInterleaveOffset(calibration::InterleaveOffsetMeasurement::Result::Cancelled); }
+void DataAccess::endInterleaveOffset(calibration::InterleaveOffsetMeasurement::Result result) {
+    if (!interleaveMeasure_.active()) return;
+    interleaveMeasure_.end(result);
+    if (!scopeHeld_) configureScopeCore(request_, true); // Records with the correction in force again.
+}
+// The conditions it was begun under: not held, the same clock, the request still interleaving (the
+// choice, CH1 alone, 10/25 ns), Auto, Scope, and the front-end offsets (zero, PWM) it began under.
+bool DataAccess::interleaveMeasureHolds(const ScopeRequest &r) const {
+    return !scopeHeld_ && TimerClock::apb1() == interleaveMeasure_.coreHz() && interleaving(r) &&
+           r.trigger.mode == scope::TriggerMode::Auto && measurement_ == MeasurementMode::Oscilloscope &&
+           interleaveGeneration_ == scopeCalibration_.generation();
+}
+void DataAccess::serviceInterleaveOffset(uint32_t now) {
+    using Result = calibration::InterleaveOffsetMeasurement::Result;
+    // A finished measurement restarts the capture here, outside the inspection that ended it.
+    if (interleaveRestart_) { interleaveRestart_ = false; if (!scopeHeld_) configureScopeCore(request_, true); }
+    if (!interleaveMeasure_.active()) return;
+    if (!interleaveMeasureHolds(request_)) endInterleaveOffset(Result::Interrupted);
+    else if (interleaveMeasure_.expired(now)) endInterleaveOffset(Result::Timeout);
+}
+void DataAccess::finishInterleaveOffset() {
+    using Result = calibration::InterleaveOffsetMeasurement::Result;
+    if (interleaveMeasure_.result() == Result::Measured) {
+        auto profile = scopeCalibration_.interleave(); // The ZT706S fields and other clocks kept.
+        profile.factoryCrc = calibration_.crc();
+        // This timing's entry; one of a timing no run mode has any more may give its place.
+        const auto current = [](uint32_t coreHz, uint32_t divider) {
+            for (const auto &mode : RunModes) if (mode.coreHz == coreHz && mode.adcDivider == divider) return true;
+            return false;
+        };
+        if (!profile.measured(interleaveMeasure_.coreHz(), adcDividerAt(interleaveMeasure_.coreHz()), interleaveMeasure_.offset(), current) ||
+            !saveInterleaveProfile(profile) ||
+            !scopeCalibration_.setInterleave(profile))
+            interleaveMeasure_.end(Result::SaveFailed);
+    }
+    interleaveRestart_ = true; // The next pass: records with the correction in force (serviceInterleaveOffset).
 }
 // What the analog front end is set to for a request: its settings, interleaved when it interleaves,
-// with CH1's range correction (InterleaveTracker) while it does. The request itself never changes.
+// with the ZT706S's CH1 range correction (InterleaveTracker) while it does. The request never changes.
 scope::FrontendSettings DataAccess::appliedFrontend(const ScopeRequest &r) const {
     auto settings=r.frontend;
     settings.interleave=interleaving(r);
-    settings.rangeBoost=settings.interleave && interleave_.boost();
+    settings.rangeBoost=settings.interleave && factoryInterleave() && interleave_.boost();
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    settings.sharedInput=probe_.active() && probe_.applied(probeInputs(r)) == scope::ProbeMode::SharedInput;
+#endif
     return settings;
 }
 // Every record captured interleaved, once: CH1's frequency over its first InterleaveTracker::MaximumPoints
 // (the record's own analysis, bounded) for the range correction and display gain of the next capture.
 void DataAccess::observeInterleave(const scope::FrameView &frame) {
     const auto &m=frame.metadata();
-    if (m.layout!=scope::Layout::InterleavedCh1 || m.rolling) return;
+    if (!factoryInterleave() || m.layout!=scope::Layout::InterleavedCh1 || m.rolling) return; // The ZT706S's only.
     const auto part=frame.slice(0,std::min<uint32_t>(m.samples,scope::InterleaveTracker::MaximumPoints));
     const auto summary=scope::Analyzer::summarize(part,scope::Channel::Ch1,true,true);
     const double rate=m.samplesPerSecond.value();
@@ -173,6 +279,27 @@ scope::AcquisitionArena::Geometry DataAccess::recordGeometry() const {
                     plan.rate.value()>half;
     return Arena::geometry(request_.recordPoints,ch1,ch2,fast);
 }
+#ifdef OPENOSC_INTERLEAVE_PROBE
+scope::InterleaveProbe::Inputs DataAccess::probeInputs(const ScopeRequest &r) const {
+    return {board::Current::Features, TimerClock::apb1(), r.timebaseNs, r.frontend.enabled[0], r.frontend.enabled[1],
+            r.rolling(), internalCapture(), generatorLoadsBus()};
+}
+// The probe's Interleave is the production rule; its SharedInput has its own conditions.
+uint32_t DataAccess::interleaveProbeBlockers() const {
+    return probe_.mode() == scope::ProbeMode::Interleave ? interleaveBlockers(request_) : scope::InterleaveProbe::blockers(probe_.mode(), probeInputs(request_));
+}
+bool DataAccess::setInterleaveProbe(scope::ProbeMode mode) {
+    if (!scope::InterleaveProbe::valid(uint32_t(mode))) return false;
+    if (mode == probe_.mode()) return true;
+    if (scopeHeld_ || zeroBusy() || internalCapture() || recorder_.busy()) return false;
+    const auto previous = probe_.mode();
+    probe_.set(mode);
+    if (configureScopeCore(request_, true)) return true;
+    probe_.set(previous);
+    configureScopeCore(request_, true);
+    return false;
+}
+#endif
 bool DataAccess::planCapture(scope::SamplePlan &plan, scope::CaptureBuffer &buffer, bool &rolling) const {
     rolling=request_.rolling() && !internalCapture();
     const bool ch1=request_.frontend.enabled[0], ch2=request_.frontend.enabled[1];
@@ -198,7 +325,7 @@ scope::ChannelMetadata DataAccess::scopeChannelFor(const ScopeRequest &request, 
     const bool software=!zeroTrial();
     return calibration::ChannelScale::describe(scopeCalibration_,zeroFile_.values(),software,request,c,
                                                c<2 ? applied.physicalRange(c) : 0,
-                                               c==0 && applied.interleave ? interleave_.gain() : 0);
+                                               c==0 && applied.interleave && factoryInterleave() ? interleave_.gain() : 0);
 }
 void DataAccess::describeChannels(scope::FrameMetadata &metadata) {
     for (unsigned c = 0; c < 2; ++c) metadata.channels[c] = scopeChannelFor(request_, c);
@@ -215,7 +342,7 @@ bool DataAccess::describeNext(scope::FrameMetadata &metadata) {
     next.samples=next.ring=plan.count; next.origin=0;
     next.samplesPerSecond=rate; next.timebaseNs=request_.timebaseNs;
     next.layout=rolling ? scope::Layout::Linear : buffer.layout(); next.rolling=rolling;
-    next.interleaveOffset=next.layout==scope::Layout::InterleavedCh1 ? interleaveOffset() : 0;
+    next.interleaveOffset=next.layout==scope::Layout::InterleavedCh1 ? recordInterleaveOffset() : 0;
     next.clearTrigger();
     describeChannels(next);
     if (!next.valid()) return false;
@@ -342,7 +469,7 @@ bool DataAccess::startCapture() {
     // The front end as this capture sets it (interleaved, CH1's range correction): its metadata says so.
     const auto frontend = appliedFrontend(request_);
     if (!frontend.interleave) interleave_.leave();
-    metadata.interleaveOffset = frontend.interleave ? interleaveOffset() : 0;
+    metadata.interleaveOffset = frontend.interleave ? recordInterleaveOffset() : 0;
     describeChannels(metadata);
     usbtrace::mark(usbtrace::Tag::CaptureBegin);
     const bool captureStarted = capture_.start(metadata, frontend,buffer,rolling,request_.trigger.level,zeroTrial() ? nullptr : &request_.trigger);
@@ -352,6 +479,10 @@ bool DataAccess::startCapture() {
         return refused(capture_.status());
     }
     configuration_=capture_.metadata();
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    probe_.started(metadata.sequence, frontend.interleave ? scope::ProbeMode::Interleave
+                                      : frontend.sharedInput ? scope::ProbeMode::SharedInput : scope::ProbeMode::Normal);
+#endif
     staged_ = false; // This capture runs the current request.
     if (!zeroBusy()) counters_.start();
     configuration_.samples=configuration_.ring=plan.count;
@@ -426,6 +557,7 @@ void DataAccess::holdScopeCore(bool hold) {
 // Single detection, HOLD, and publication of a finished record where it lies: the store takes
 // over its arena region and the capture is free to start again in other memory.
 void DataAccess::serviceScopeFrames(uint32_t now) {
+    serviceInterleaveOffset(now); // Its deadline and its conditions, before a record is inspected.
     // Every published frame is inspected once, also when a foreground reader (the asynchronous view,
     // its readout, USB) took it before this pass: Single must not wait for a frame nobody has read.
     // The lease lasts until the end of poll (serviceScopeCapture) and does not mark the frame seen.
@@ -439,6 +571,12 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
         triggerWaiting_ = !accepted;
         if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now; } // What a reader is now given.
         observeInterleave(inspected_.view());
+        // The measurement is a reader of the record it takes (the scope view may be hidden by Settings):
+        // it consumes it, so a one-slot capture memory is free for the next record.
+        if (interleaveMeasure_.record(inspected_.view())) {
+            store_.consume(inspected_.view().metadata().sequence);
+            if (!interleaveMeasure_.active()) finishInterleaveOffset();
+        }
         if (accepted && request_.trigger.mode == scope::TriggerMode::Single) {
             inspected_.annotateTrigger(found, index);
             heldTrigger_.remember(inspected_.view().metadata().sequence, found, index);

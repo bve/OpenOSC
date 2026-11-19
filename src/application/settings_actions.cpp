@@ -14,7 +14,11 @@ ui::SettingsProperties ApplicationController::settingsRows() const {
     status.gainInForce = data_.gainInForce(d.channel, d.range);
     status.interleaveInForce = data_.interleaveOffset();
     status.interleaveSaved = data_.savedInterleave().offset; status.interleaveSavedEnabled = data_.savedInterleave().enabled;
-    return ui::SettingsProperties(settingsMenu_, prefs_, ClockControl::activeMode(), calibrationDraft_, status);
+    ui::SettingsProperties rows(settingsMenu_, prefs_, ClockControl::activeMode(), calibrationDraft_, status);
+    const auto *clocked = data_.interleaveOffsetAtClock();
+    rows.interleave({data_.interleaveBlockers(), data_.interleaveCalibrated(), clocked ? *clocked : 0.f,
+                     data_.interleaveMeasurement().active()});
+    return rows;
 }
 void ApplicationController::closeSettings() {
     state_.settingsOpen = false;
@@ -95,6 +99,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
         if (usb_) usb_->enable(prefs_.usbController != 0, now);
         view_.notify(prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
     }
+    if (chosen.scope.interleave != prefs_.scope.interleave) selectInterleave(chosen.scope.interleave != 0, now);
     if (chosen.showFps != prefs_.showFps) fpsAt_ = now - 1000; // Apply on the next display pass, not a second later.
     const bool idle = chosen.idle.backlightSeconds != prefs_.idle.backlightSeconds || chosen.idle.dimPercent != prefs_.idle.dimPercent ||
                       chosen.idle.powerOffMinutes != prefs_.idle.powerOffMinutes;

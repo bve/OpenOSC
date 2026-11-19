@@ -15,29 +15,6 @@ void ApplicationController::confirmShutdown(ShutdownAction action) {
     confirmAction_=action;
     confirmOperation(ui::Confirmation(action),&ApplicationController::requestShutdown);
 }
-void ApplicationController::confirmOperation(const ui::Confirmation &question,ConfirmHandler handler) {
-    confirmationImages_=panel_==Panel::Images;
-    confirmationZero_=panel_==Panel::Zero;
-    confirmationSettings_=state_.settingsOpen;
-    cancelAuto(Board::milliseconds()); confirmation_=question; confirmationHandler_=handler;
-    state_.settingsOpen = false;
-    openPanel(Panel::Confirmation, confirmation_); // On Cancel.
-}
-void ApplicationController::confirmationKeys(uint32_t keys, uint32_t now) {
-    if (!keys) return;
-    using Outcome = ui::PropertyNavigator::Outcome;
-    const auto outcome = (keys & Keypad::Mode) ? Outcome::Back : navigator_.keys(keys, confirmation_);
-    if (outcome == Outcome::Back || (outcome == Outcome::Activate && navigator_.row() == 0)) {
-        confirmationHandler_=nullptr;
-        if (confirmationImages_) { panel_=Panel::Images; imageShowing_=false; showImages(); }
-        else if (confirmationZero_ && data_.zeroBusy()) { panel_=Panel::Zero; zeroProgress_=UINT32_MAX; serviceZeroUi(now); }
-        else if (confirmationSettings_) { panel_=Panel::None; state_.settingsOpen=true; navigator_.reset(settingsMenu_.selected()); showSettings(); }
-        else closePanel();
-        return;
-    }
-    if (outcome == Outcome::Activate && confirmationHandler_) { (this->*confirmationHandler_)(now); return; }
-    view_.properties(confirmation_, navigator_);
-}
 // Headless (no LVGL: the REL/Power hold works there too) nothing is drawn; a refused restart then
 // shows only in its result (still running, USB back).
 void ApplicationController::shutdownNotice(const char *text, uint32_t now) {
