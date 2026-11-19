@@ -57,6 +57,10 @@ public:
         return operation_ == Operation::Key ? key_.status() : operation_ == Operation::Range ? range_.status() :
                operation_ == Operation::Group ? group_ : selector_.status();
     }
+    // The command status() reports, for a notice: "function", "key", "range" or "group key".
+    const char *operation() const {
+        return operation_ == Operation::Key ? "key" : operation_ == Operation::Range ? "range" : operation_ == Operation::Group ? "group key" : "function";
+    }
     // The last function choice: a selection (selectFunction) or a group key (pressGroup).
     DataStatus selectionStatus() const { return groupChosen_ ? group_ : selector_.status(); }
 private:

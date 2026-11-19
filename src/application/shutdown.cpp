@@ -65,7 +65,7 @@ public:
     void stopInstruments() override { if (a_.usb_) a_.usb_->stop(); a_.stopBootGuard(); a_.data_.beginShutdown(); }
     bool instrumentsStopped() override { return a_.data_.shutdownReady(); }
     void cancelRecorders() override {
-        a_.data_.scopeRecorder().cancel(); a_.data_.meterLogger().cancel();
+        a_.data_.scopeRecorder().cancel(true); a_.data_.meterLogger().cancel(true); // Out of time: the .TMPs stay.
         decodeCsvFile().cancel(DecodeCsvShutdown); // Already ended in prepare(): idempotent.
     }
     // Finished steps, failed or not (each may end after a NOR timeout): watchdog progress.

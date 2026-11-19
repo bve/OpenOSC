@@ -29,6 +29,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         confirmOperation(ui::Confirmation("USE FACTORY ZERO?","Disable hardware + software","Saved zero values are kept"),&ApplicationController::disableZero);
         break;
     case ui::SettingsAction::ReloadPreferences: {
+        const bool discarded = saves_.settingsPending() || saves_.themePending();
         if (!preferences_.load()) {
             view_.notify(preferences_.error(), now);
             break;
@@ -42,17 +43,20 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         else themes_.reload();
         buildView();
         char result[112]; applied.text(result, sizeof result);
-        view_.notify(result, now);
+        char text[160];
+        std::snprintf(text, sizeof text, "%s%s", discarded ? "Unsaved changes discarded. " : "", result);
+        view_.notify(text, now);
         break;
     }
     case ui::SettingsAction::ReloadTheme:
         if (themes_.reload()) {
+            const bool discarded = saves_.themePending();
             saves_.dropTheme();
             prefs_.useBuiltinTheme = 0;
             changed(now);
             buildView();
             const char *notice = ThemeNotice::text(themes_);
-            view_.notify(notice ? notice : "Theme loaded", now);
+            view_.notify(notice ? notice : discarded ? "Theme loaded; plot changes discarded" : "Theme loaded", now);
         } else view_.notify(themes_.error(), now);
         break;
     case ui::SettingsAction::BuiltinTheme:
@@ -79,6 +83,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
     case ui::SettingsAction::UsbRemote:
         if (!prefs_.usbController) view_.notify("Enable USB controller first", now); // No link to be remote over.
         else if (!setRemote(true)) view_.notify("Finish active operations first",now);
+        else view_.notify("USB Remote: hold MENU to exit",now);
         break;
     case ui::SettingsAction::Close: closeSettings(); break;
     default: break;

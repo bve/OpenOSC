@@ -32,7 +32,7 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     if (CalibrationRows::handles(entry.action)) return calibration_.kind(entry.action);
     switch (entry.action) {
     case Action::Brightness: return PropertyKind::Number;
-    case Action::ShowFps: return PropertyKind::Toggle;
+    case Action::ShowFps: case Action::PanDirection: case Action::HoldTime:
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
     case Action::GeneratorStartup: case Action::UsbController: return PropertyKind::Choice;
@@ -45,7 +45,9 @@ void SettingsProperties::name(unsigned row, char *output, size_t capacity) const
 unsigned SettingsProperties::options(unsigned row) const {
     if (CalibrationRows::handles(action(row))) return calibration_.options(action(row));
     switch (action(row)) {
-    case Action::ShowFps: return 2;
+    case Action::ShowFps: return 3;
+    case Action::PanDirection: return 2;
+    case Action::HoldTime: return 3;
     case Action::BatteryDisplay: return 3;
     case Action::RunProfile: return RunModeCount;
     case Action::BufferSize: return scope::RecordBudget::StepCount;
@@ -60,6 +62,8 @@ unsigned SettingsProperties::option(unsigned row) const {
     if (CalibrationRows::handles(action(row))) return calibration_.option(action(row));
     switch (action(row)) {
     case Action::ShowFps: return prefs_.showFps;
+    case Action::PanDirection: return prefs_.panReverse;
+    case Action::HoldTime: return prefs_.holdTime;
     case Action::BatteryDisplay: return prefs_.batteryDisplay;
     case Action::RunProfile: return activeRunMode_ < RunModeCount ? activeRunMode_ : prefs_.scope.runMode;
     case Action::BufferSize: return indexOf(prefs_.scope.recordPoints, scope::RecordBudget::Steps);
@@ -75,6 +79,9 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
     if (CalibrationRows::handles(action(row))) { calibration_.optionName(action(row), index, output, capacity); return; }
     switch (action(row)) {
     case Action::BatteryDisplay: std::snprintf(output, capacity, "%s", Batteries[index % 3]); break;
+    case Action::ShowFps: { static constexpr const char *counters[] = {"Off", "FPS", "Sample rate"}; std::snprintf(output, capacity, "%s", counters[index % 3]); break; }
+    case Action::PanDirection: std::snprintf(output, capacity, "%s", index ? "Move waveform" : "Move view"); break;
+    case Action::HoldTime: { static constexpr const char *holds[] = {"1 s", "1.5 s", "2 s"}; std::snprintf(output, capacity, "%s", holds[index % 3]); break; }
     case Action::RunProfile: {
         const auto &mode = RunModes[index % RunModeCount];
         std::snprintf(output, capacity, "CPU %lu MHz  ADC %lu", (unsigned long)mode.coreHz / 1000000UL,
@@ -144,6 +151,8 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     if (CalibrationRows::handles(action(row))) return calibration_.choose(action(row), index);
     switch (action(row)) {
     case Action::ShowFps: prefs_.showFps = index; break;
+    case Action::PanDirection: prefs_.panReverse = index; break;
+    case Action::HoldTime: prefs_.holdTime = index; break;
     case Action::BatteryDisplay: prefs_.batteryDisplay = index; break;
     case Action::RunProfile: prefs_.scope.runMode = index; break;
     case Action::BufferSize: prefs_.scope.recordPoints = scope::RecordBudget::Steps[index]; break;

@@ -35,9 +35,11 @@ bool InstrumentUsb::connect(void *context,usb::QuietAttach::Kind kind) {
 #ifdef OPENOSC_USB_TRACE
         usbtrace::mark(usbtrace::Tag::Reattach, usbResets);
 #endif
+        self.attachResets_=usbResets; self.resetSinceAttach_=false; // Before the detach: a reset during it is this attach's host.
         HAL_PCD_DevDisconnect(&usbPcd);
         Board::delay(10);
-        HAL_PCD_DevConnect(&usbPcd); self.attachedAt_=Board::milliseconds();
+        HAL_PCD_DevConnect(&usbPcd); self.attachedAt_=Board::milliseconds(); self.host_.mark();
+        self.attach_.window().connected(self.attachedAt_);
         return true;
     }
     if (self.active_ || !self.initialized_) return self.active_;
@@ -50,6 +52,7 @@ bool InstrumentUsb::connect(void *context,usb::QuietAttach::Kind kind) {
     }
     if (USBD_Start(&usbDevice) != USBD_OK) { self.release(true); self.initialized_=false; return false; }
     self.active_=true; self.initialized_=false; self.attachedAt_=Board::milliseconds(); self.reattach_.started();
+    self.attachResets_=usbResets; self.resetSinceAttach_=false; self.attach_.window().connected(self.attachedAt_);
     self.watchdog_=usb::AddressWatchdog{}; // A new session: no host, deadline or retry of the last one.
     self.host_=usb::HostPresence{}; self.hostPresent_=false; self.busResets_=usbResets;
     CooperativeService::install([](void *context,uint32_t now) {
@@ -83,7 +86,7 @@ bool InstrumentUsb::connected() const {
     return active_ && usb::instrument.configured && usbDevice.dev_state == USBD_STATE_CONFIGURED;
 }
 bool InstrumentUsb::hostActive(uint32_t now) const {
-    return connected() || hostPresent_ || uint32_t(now-busActivityAt_) < HostQuietMs;
+    return connected() || hostPresent_ || int32_t(now-busActivityAt_) < int32_t(HostQuietMs);
 }
 void InstrumentUsb::poll(uint32_t now) {
     const auto *registers = reinterpret_cast<const USB_OTG_DeviceTypeDef*>(
@@ -92,6 +95,9 @@ void InstrumentUsb::poll(uint32_t now) {
     const uint32_t at = Board::milliseconds();
     if (active_) host_.sample(at, (registers->DSTS & USB_OTG_DSTS_FNSOF) >> USB_OTG_DSTS_FNSOF_Pos);
     hostPresent_ = active_ && host_.present(at);
+    const bool reset = active_ && usbResets != attachResets_;
+    if (reset && !resetSinceAttach_) attach_.window().answered(); // The first reset after this attach.
+    resetSinceAttach_ = reset;
     // A bus reset is a host's activity (quiet window, saves wait) only once its SOFs prove it there;
     // until then it waits, so a host plugged in later still gets its window and resets without a
     // proven host give none.

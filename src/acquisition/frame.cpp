@@ -451,12 +451,16 @@ FrameView FrameView::withTrigger(bool found, uint32_t index) const {
     view.metadata_.clearTrigger();
     view.metadata_.triggered = found;
     view.metadata_.triggerIndex = found ? index : 0;
-    if (same) view.metadata_.triggerShift = metadata_.triggerShift;
+    if (same) {
+        view.metadata_.triggerShift = metadata_.triggerShift; view.metadata_.eventOffset = metadata_.eventOffset;
+        view.metadata_.eventKnown = metadata_.eventKnown; view.metadata_.crossingQ16 = metadata_.crossingQ16;
+    }
     view.valid_ = view.validate();
     return view;
 }
 FrameView FrameView::withShiftedTrigger(uint32_t index, int32_t shift) const {
     FrameView view = *this;
+    view.metadata_.clearTrigger();
     view.metadata_.triggered = true;
     view.metadata_.triggerIndex = index;
     view.metadata_.triggerShift = shift;

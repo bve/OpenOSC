@@ -17,10 +17,11 @@ public:
     const Preferences& values() const { return values_; }
     const char* error() const { return error_; }
     bool repaired() const { return repaired_; } // An invalid JSON was archived.
-    bool restored() const { return restored_; } // The values came from the previous copy.
+    bool restored() const { return restored_; } // The values came from a previous or backup copy.
 private:
     static constexpr const char* Path = storage::Layout::SettingsFile;
     bool readValid(const char* path, Preferences& output, bool& storageError) const;
+    void backup();
     Filesystem& fs_;
     Preferences values_;
     const char* error_ = nullptr;

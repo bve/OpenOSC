@@ -41,7 +41,7 @@ public:
     static void timer();
 private:
     enum class Phase { Idle,Filling,Armed,Post,Complete };
-    void edge(uint32_t line);
+    static void edge(int irq);
     void elapsed();
     void delay(uint64_t ticks);
     bool nextSpan();
@@ -53,8 +53,9 @@ private:
     TriggerSettings settings_;
     TriggerDelayPlan delay_;
     volatile Phase phase_=Phase::Idle;
-    uint64_t postTicks_=0,preTicks_=0;
+    uint64_t postTicks_=0,preTicks_=0,recordTicks_=0;
     uint32_t clock_=0,line_=0;
+    int irq_=0; // line_'s IRQn_Type, enabled only while Armed.
     volatile uint32_t deadline_=0;
     volatile bool deadlineValid_=false,forcePending_=false;
 };

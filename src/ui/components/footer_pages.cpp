@@ -9,7 +9,10 @@ bool FooterPages::plan(const scope::ReadoutSelection &selection, const bool (&en
         for (unsigned i = 0; i < scope::ReadoutSelection::PerChannel; ++i)
             if (selection.values[c][i] < scope::Measurements::Count && selection.values[c][i] != unsigned(scope::Measurement::Off))
                 slots[c][active[c]++] = uint8_t(i);
-        if (enabled[c]) pages = std::max(pages, (active[c] + PerChannel - 1) / PerChannel);
+    }
+    for (unsigned c = 0; c < 2; ++c) {
+        const unsigned per = enabled[0] != enabled[1] ? Cells : PerChannel;
+        if (enabled[c]) pages = std::max(pages, (active[c] + per - 1) / per);
     }
     const unsigned count = pages + (scales ? 1 : 0) + (spectrum ? 1 : 0);
     bool changed = count != count_ || spectrum != spectrum_ || scales != scales_;
@@ -30,9 +33,16 @@ FooterPages::Kind FooterPages::kind(unsigned page) const {
 FooterPages::Cell FooterPages::cell(unsigned page, unsigned index) const {
     Cell cell;
     if (index >= Cells || kind(page) != Kind::Readouts) return cell;
+    const unsigned readouts = page - (spectrum_ ? 1 : 0);
+    if (wide()) {
+        cell.channel = enabled_[1];
+        const unsigned item = readouts * Cells + index;
+        if (item < active_[cell.channel]) cell.slot = slots_[cell.channel][item];
+        return cell;
+    }
     cell.channel = uint8_t(index / PerChannel);
     if (!enabled_[cell.channel]) { cell.slot = index % PerChannel ? Empty : ChannelOff; return cell; }
-    const unsigned item = (page - (spectrum_ ? 1 : 0)) * PerChannel + index % PerChannel;
+    const unsigned item = readouts * PerChannel + index % PerChannel;
     if (item < active_[cell.channel]) cell.slot = slots_[cell.channel][item];
     return cell;
 }

@@ -1,6 +1,7 @@
 #include "openosc/scpi/engine.hpp"
 #include "openosc/data/decimal.hpp"
 #include "openosc/acquisition/record_depths.hpp"
+#include "openosc/acquisition/timebases.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -34,10 +35,11 @@ bool Engine::scopeCommand(const Command &c) {
         else { backend_.releaseFrame(); if (!backend_.autoScale()) error(-221); }
     } else if (match("TRIGger:STATus")) {
         if (!c.query) error(-109);
-        else reply("%s", backend_.held() ? "STOP" : backend_.waiting() ? "WAIT" : "RUN");
+        else reply("%s", backend_.held() ? "STOP" : backend_.waiting() ? "WAIT" : request.rolling() ? "RUN" : backend_.triggered() ? "TD" :
+                         request.trigger.mode == scope::TriggerMode::Auto ? "AUTO" : "RUN"); // Rigol's TD|WAIT|RUN|AUTO|STOP.
     } else if (match("TIMebase:SCALe") || match("TIMebase:MAIN:SCALe")) {
         if (c.query) number(request.timebaseNs / 1e9);
-        else { double value; if (argument(c, value, Header::Unit::Time)) { if (value < 1e-8 || value > 20) error(-222); else { request.timebaseNs = std::llround(value * 1e9); apply(request); } } }
+        else { double value; if (argument(c, value, Header::Unit::Time)) { if (value < 1e-8 || value > 20) error(-222); else { request.timebaseNs = scope::Timebases::nearest(value * 1e9); apply(request); } } }
     } else if (match("TIMebase:MAIN:OFFSet") || match("TIMebase:OFFSet")) {
         const double span=request.timebaseNs/1e8;
         if (c.query) number((.5-request.trigger.position/1000.0)*span);

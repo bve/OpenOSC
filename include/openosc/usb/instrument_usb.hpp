@@ -59,18 +59,22 @@ public:
     bool connected() const;
     // True after attaching and while a host keeps resetting the bus without finishing enumeration.
     bool enumerating(uint32_t now) const {
-        return active_ && !connected() && (uint32_t(now-attachedAt_) < EnumerationMs || uint32_t(now-busActivityAt_) < HostQuietMs);
+        // No host to wait for: no bus reset FirstResetMs after the attach, or no SOFs NoHostMs after it.
+        const uint32_t window = host_.seen() ? EnumerationMs : resetSinceAttach_ ? NoHostMs : usb::EnumerationQuiet::FirstResetMs;
+        return active_ && !connected() && (int32_t(now-attachedAt_) < int32_t(window) ||
+                                           (host_.seen() && int32_t(now-busActivityAt_) < int32_t(HostQuietMs)));
     }
     // True while a host is enumerating or using the device: power-hungry bursts wait. Bus resets
     // count only while a host is proven by its SOFs (poll).
     bool hostActive(uint32_t now) const;
 private:
     static constexpr uint32_t HostQuietMs = 5000;
-    static constexpr uint32_t EnumerationMs = 3000;
+    static constexpr uint32_t EnumerationMs = 3000, NoHostMs = 1000; // SOFs after an unproven reset (a charger's lines).
     // A host unproven this long is gone (pulled cable, suspended PC): the watchdog's episode ends with
     // it, and a later host starts a new one. Longer than HostPresence::GraceMs (a bus reset).
     static constexpr uint32_t HostLostMs = 1000;
-    uint32_t attachedAt_ = 0;
+    uint32_t attachedAt_ = 0, attachResets_ = 0; // usbResets at the attach: a reset since is a host's.
+    bool resetSinceAttach_ = false;              // poll(): usbResets moved since attachResets_.
     uint32_t busActivityAt_ = 0, busResets_ = 0;
     struct Polling {
         explicit Polling(bool &flag):flag_(flag) { flag_=true; }

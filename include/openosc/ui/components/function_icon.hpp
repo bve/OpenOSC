@@ -3,8 +3,8 @@
 #include "openosc/measurement/dmm/function.hpp"
 
 namespace openosc::ui {
-// The decoded function's sign on the DMM's function row (FunctionSymbols at the row's height);
-// unknown functions draw a question mark.
+// The decoded function's sign on the DMM's function row (FunctionSymbols at the row's height, bare:
+// the unit beside it names the quantity); unknown functions draw a question mark.
 class FunctionIcon {
 public:
     static constexpr int Width = 56, Height = 26;

@@ -10,24 +10,23 @@ constexpr unsigned rows[][14] = {
     {Controls::Channel, Controls::TimeCursors, Controls::VoltageCursors, Controls::CursorAX,
      Controls::CursorBX, Controls::CursorAY, Controls::CursorBY},
     {Controls::Persistence, Controls::Reference, Controls::Clear},
-    {Controls::FftSource, Controls::FftWindow, Controls::FftScale, Controls::FftDc}
+    {Controls::FftSource, Controls::FftWindow, Controls::FftScale, Controls::FftDc},
+    {Controls::CounterSource, Controls::CounterAverage, Controls::CounterPpm}
 };
-constexpr unsigned counts[] = {10, 6, 7, 3, 4};
-constexpr const char *names[] = {"View", "Capture rendering", "Cursors", "History", "FFT"};
+constexpr unsigned counts[] = {10, 6, 7, 3, 4, 3};
+constexpr const char *names[] = {"View", "Capture rendering", "Cursors", "History", "FFT", "Frequency counter"};
 }
 const char *Controls::groupName(unsigned g) { return g < unsigned(Group::Count) ? names[g] : ""; }
 const char *Controls::section() const { return groupName(unsigned(group)); }
-unsigned Controls::count() const { return counts[unsigned(group)] + 1; }
-unsigned Controls::row(unsigned index) const {
-    if (!index || index >= count()) return Section;
-    return rows[unsigned(group)][index-1];
-}
+unsigned Controls::count() const { return counts[unsigned(group)]; }
+unsigned Controls::row(unsigned index) const { return index < count() ? rows[unsigned(group)][index] : unsigned(Section); }
 unsigned Controls::index(unsigned selected) const {
     for (unsigned i=0; i<count(); ++i) if (row(i)==selected) return i;
     return 0;
 }
 void Controls::open(unsigned selected) {
     if (selected==Section) return;
+    listing = false;
     for (unsigned g=0; g<unsigned(Group::Count); ++g)
         for (unsigned i=0; i<counts[g]; ++i) if (rows[g][i]==selected) { group=Group(g); return; }
 }

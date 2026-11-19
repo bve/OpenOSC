@@ -95,12 +95,13 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
         if (usb_) usb_->enable(prefs_.usbController != 0, now);
         view_.notify(prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
     }
-    if (chosen.showFps != prefs_.showFps) fpsAt_ = now - 1000; // Apply on the next display pass, not a second later.
+    if (chosen.showFps != prefs_.showFps) counterStale_ = true; // Redrawn on the next display pass.
     const bool idle = chosen.idle.backlightSeconds != prefs_.idle.backlightSeconds || chosen.idle.dimPercent != prefs_.idle.dimPercent ||
                       chosen.idle.powerOffMinutes != prefs_.idle.powerOffMinutes;
     prefs_.brightness = chosen.brightness; prefs_.showFps = chosen.showFps; prefs_.batteryDisplay = chosen.batteryDisplay;
     prefs_.idle = chosen.idle;
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
+    prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();
     changed(now);

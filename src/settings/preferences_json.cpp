@@ -3,6 +3,7 @@
 #include "openosc/settings/json_input.hpp"
 #include "openosc/settings/json_workspace.hpp"
 #include "openosc/settings/instrument_json.hpp"
+#include "openosc/acquisition/timebases.hpp"
 #include <ArduinoJson.h>
 #include <cstring>
 
@@ -52,6 +53,22 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["show_fps"].is<bool>()) return false;
         candidate.showFps = indicators["show_fps"].as<bool>();
     }
+    if (indicators.containsKey("show_sample_rate")) {
+        if (!indicators["show_sample_rate"].is<bool>()) return false;
+        if (indicators["show_sample_rate"].as<bool>()) candidate.showFps = 2;
+    }
+    if (indicators.containsKey("pan_moves_waveform")) {
+        if (!indicators["pan_moves_waveform"].is<bool>()) return false;
+        candidate.panReverse = indicators["pan_moves_waveform"].as<bool>();
+    }
+    if (root.containsKey("hold_ms")) {
+        if (!root["hold_ms"].is<unsigned>()) return false;
+        const unsigned ms = root["hold_ms"].as<unsigned>();
+        unsigned index = 0;
+        while (index < 3 && Preferences::HoldTimes[index] != ms) ++index;
+        if (index == 3) return false;
+        candidate.holdTime = index;
+    }
     if (indicators.containsKey("battery")) {
         const char *name = indicators["battery"].is<const char *>() ? indicators["battery"].as<const char *>() : "";
         unsigned index = 0;
@@ -75,6 +92,8 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!number(timing,"timebase_us",microseconds)) return false;
         candidate.timebaseNs=uint64_t(microseconds)*1000;
     }
+    if (candidate.timebaseNs >= 10 && candidate.timebaseNs <= 20000000000ULL)
+        candidate.timebaseNs = scope::Timebases::nearest(double(candidate.timebaseNs));
     if (root.containsKey("mode")) {
         if (!root["mode"].is<const char *>())
             return false;
@@ -160,6 +179,11 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
             return false;
         candidate.generatorShape = index;
     }
+    constexpr unsigned shapes = sizeof generator::ShapeNames / sizeof *generator::ShapeNames, levels = unsigned(generator::Level::Custom) + 1;
+    if (candidate.generatorShape < shapes && candidate.generatorLevel < levels) { // A limit lowered since the save: clamped, the rest kept.
+        const uint64_t limit = generator::Capabilities::maximumMillihertz(generator::Shape(candidate.generatorShape), generator::Level(candidate.generatorLevel));
+        if (limit && candidate.generatorMillihertz > limit) candidate.generatorMillihertz = limit;
+    }
     if (!InstrumentJson::parse(scope, meter, candidate) || !candidate.valid())
         return false;
     output = candidate;
@@ -178,7 +202,10 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["backlight_idle_percent"]=values.idle.dimPercent;
     document["power_off_minutes"]=values.idle.powerOffMinutes;
     document["display"]["theme"] = values.useBuiltinTheme ? "builtin" : "custom";
-    document["display"]["show_fps"] = bool(values.showFps);
+    document["display"]["show_fps"] = values.showFps == 1;
+    document["display"]["show_sample_rate"] = values.showFps == 2;
+    document["display"]["pan_moves_waveform"] = values.panReverse == 1;
+    document["hold_ms"] = values.holdMs();
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
     document["usb"]["controller"] = usbControllers[values.usbController];
     document["scope"]["timebase_ns"] = values.timebaseNs;

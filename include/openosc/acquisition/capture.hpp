@@ -75,6 +75,7 @@ private:
     // quiesce() proved every DMA stream stopped; else it stays Capturing.
     void abandon(DataStatus status);
     void laneCounts(uint64_t (&counts)[4],uint32_t *remaining=nullptr) const; // Caller masks interrupts; DMA may still be running.
+    uint64_t laneCount(unsigned lane,uint32_t *remaining=nullptr) const; // One lane of laneCounts.
     void triggerEvent(bool external) override;
     void freezeRecord() override;
     // A split ring's frozen window from the lane counts and the copies served (HistoryCopy::finish);

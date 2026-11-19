@@ -27,7 +27,7 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     startQ16 = origin + int64_t(m.samples - 1) * 65536 * o.pan / 1000;
     if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
     if (o.lockTrigger && m.triggered)
-        startQ16 += int64_t(m.triggerIndex) * 65536 - origin - int64_t(pretrigger(m, anchored));
+        startQ16 += int64_t(m.triggerIndex) * 65536 - int64_t(m.crossingQ16) - origin - int64_t(pretrigger(m, anchored));
     // Without a trigger, Auto still needs captured history on both sides of the initial
     // window. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
     else if (!m.rolling && !m.triggered && o.lockTrigger &&

@@ -54,12 +54,14 @@ struct FrameMetadata {
     // no edge the ring holds the whole record around): triggerIndex minus that point. The view places
     // the edge where the pretrigger point is. Zero for every other record; not in any file format.
     int32_t triggerShift = 0;
+    int32_t eventOffset = 0; bool eventKnown = false; // The comparator event, in points from triggerIndex (WAV:EVENt?).
+    uint32_t crossingQ16 = 0; // The level's crossing this far before triggerIndex (1/65536 points; the view's sub-point lock).
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
     ChannelMetadata channels[2];
     bool valid() const;
-    // No trigger: not triggered, index and shift zero (the one reset of all three).
-    void clearTrigger() { triggered = false; triggerIndex = 0; triggerShift = 0; }
+    // No trigger: every trigger field reset (the one place; add new ones here).
+    void clearTrigger() { triggered = false; triggerIndex = 0; triggerShift = 0; eventOffset = 0; eventKnown = false; crossingQ16 = 0; }
 };
 // A FourBanks or InterleavedCh1 record in two parts (CaptureBuffer::split): each lane keeps its newest
 // ahbWords in the capture ring (bank i of the view, a power of two) and its older words in a history
@@ -96,10 +98,12 @@ public:
     bool volts(Channel channel, size_t index, double &output) const;
     const FrameMetadata &metadata() const { return metadata_; }
     // The trigger at `index` (none without `found`): a record annotated again with its own trigger
-    // keeps its triggerShift, any other trigger has none.
+    // keeps its triggerShift, comparator event and crossing; any other trigger has none.
     FrameView withTrigger(bool found, uint32_t index) const;
     // The trigger at `index`, `shift` points past the record's pretrigger point (FrameMetadata::triggerShift).
     FrameView withShiftedTrigger(uint32_t index, int32_t shift) const;
+    FrameView withEvent(int32_t offset) const { FrameView view = *this; view.metadata_.eventOffset = offset; view.metadata_.eventKnown = true; return view; }
+    FrameView withCrossing(uint32_t q16) const { FrameView view = *this; view.metadata_.crossingQ16 = q16; return view; }
     FrameView slice(uint32_t first,uint32_t count) const;
     const uint16_t *bank(unsigned index) const { return index < 4 ? banks_[index] : nullptr; }
     const SplitHistory &split() const { return split_; }

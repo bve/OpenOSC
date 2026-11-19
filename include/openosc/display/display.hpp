@@ -6,7 +6,7 @@ public:
     static constexpr unsigned Width = 320, Height = 240;
     static constexpr uint16_t Background = 0x0841, White = 0xffff,
         Cyan = 0x07ff, Green = 0x07e0, Red = 0xf800, Selected = 0x21cd;
-    bool initialize();
+    bool initialize(bool keep = false); // keep: already scanning frame 0 with the logo (Board::splash).
     void clear(uint16_t color = Background);
     void rectangle(unsigned x, unsigned y, unsigned w, unsigned h, uint16_t color);
     void text(unsigned x, unsigned y, const char* text, uint16_t color = White);

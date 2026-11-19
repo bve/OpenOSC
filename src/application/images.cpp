@@ -28,6 +28,7 @@ void ApplicationController::loadImage(uint32_t now) {
     char path[screenshot::ImageCatalog::PathBytes];
     imageReader_.cancel(); imageShowing_=false;
     if (!images_.path(path,sizeof path)) return;
+    if (screenStreamBusy(now)) { showImages(); view_.notify("Image: USB screen transfer in progress",now); return; }
     if (!imageReader_.start(path,screenshot::previewMemory(),imageFullSize_)) {
         showImages(); view_.notify(imageReader_.error(),now); return;
     }

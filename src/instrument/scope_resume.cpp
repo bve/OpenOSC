@@ -25,14 +25,14 @@ bool DataAccess::resumeScope(const ScopeRequest &request) {
     const auto configuration = configuration_;
     const auto trigger = heldTrigger_;
     const auto configuredAt = configuredAt_, armSequence = armSequence_;
-    const bool singleDone = singleDone_, failed = captureFailed_, waiting = triggerWaiting_, staged = staged_;
+    const bool singleDone = singleDone_, failed = captureFailed_, owed = captureRestartOwed_, waiting = triggerWaiting_, staged = staged_;
     const auto reject = [&] {
         const auto failure = status_;
         stopCapture(false); // configureScopeCore may have restarted the previous acquisition.
         request_ = previous;
         configuration_ = configuration;
         configuredAt_ = configuredAt; armSequence_ = armSequence;
-        singleDone_ = singleDone; captureFailed_ = failed; triggerWaiting_ = waiting; staged_ = staged;
+        singleDone_ = singleDone; captureFailed_ = failed; captureRestartOwed_ = owed; triggerWaiting_ = waiting; staged_ = staged;
         heldTrigger_ = trigger;
         scopeHeld_ = true;
         if (!heldFrame_.valid()) store_.acquireLatest(heldFrame_);
@@ -58,13 +58,13 @@ bool DataAccess::resumeScope(const ScopeRequest &request) {
     if (request.trigger.mode == scope::TriggerMode::Single) armSequence_ = sequence_ + 1;
     // Settings staged in HOLD are already request_: same() would keep a capture still running the old
     // plan (holdPending_) or skip the restart, so a staged request is applied as a change.
-    if (!configureScopeCore(request, failed || staged, true)) { putBack(); return reject(); }
+    if (!configureScopeCore(request, failed || owed || staged, true)) { putBack(); return reject(); }
 
     heldFrame_.release();
     if (!store_.cancel()) { status_ = DataStatus::Busy; return reject(); }
     heldTrigger_.forget();
     ++holdReleases_;
-    triggerWaiting_ = request.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = request.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     return true;
 }
 } // namespace openosc

@@ -52,6 +52,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // Skips capture restarts while nothing consumes frames; a recent frame request overrides it.
     bool fullRateCapture() const { return configuration_.samplesPerSecond.value() >= FullRateSamples; }
     void pauseCapture(bool pause,uint32_t now) { capturePaused_ = pause && uint32_t(now-frameRequestedAt_)>=FrameDemandMs; }
+    bool capturePaused() const { return capturePaused_; }
+    bool captureQuieted() const { return usbQuiet_; }
     bool configureScope(const ScopeRequest &request);
     // While held: keeps the record and applies the configuration at the next RUN.
     bool stageScope(const ScopeRequest &request);
@@ -115,6 +117,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // accepted, and again once the running capture has waited TriggerWaitMs for an edge with its gate
     // Armed (followTriggerWait). Auto: never. HOLD and a finished Single read STOP (scopeHeld).
     bool scopeWaiting() const { return triggerWaiting_; }
+    bool scopeTriggered() const { return acceptedTriggered_; } // The last accepted frame held its trigger edge.
     // A physical F1-F4: one group key (dmm::MeterCommands::pressGroup), the statistics restart; what the
     // controller does is read from its packets. SCPI and the restore select a function instead.
     bool sendDmmGroup(dmm::CommandGroup group);
@@ -151,7 +154,11 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool serialMeter(bool enabled);
     const board::DmmSerialOutput &meterSerial() const { return serial_; }
     bool dmmBusy() const { return dmm_.busy(); }
+    // DMM chip restarts that brought it back (serviceDmmWatchdog); its function is then lost.
+    uint32_t dmmRestarts() const { return dmmRestarts_; }
+    uint32_t dmmReselects() const { return dmmReselects_; } // Powered again in its default function, silently.
     DataStatus dmmCommandStatus() const { return dmm_.status(); }
+    const char *dmmCommandName() const { return dmm_.operation(); }
     DataStatus dmmSelectionStatus() const { return dmm_.selectionStatus(); }
     bool recordScope(ScopeRecorder::Format format);
     ScopeRecorder &scopeRecorder() { return recorder_; }
@@ -319,6 +326,13 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // DmmCloseMs; past that, or a UART fault, the commands are abandoned and the UART stops all the same.
     void serviceDmmClose(uint32_t now);
     void stopDmmUart();
+    void serviceDmmWatchdog(uint32_t now);
+    static constexpr uint64_t DmmSilentUs = 5000000; // Doubled per restart without packets, up to 16x.
+    static constexpr uint32_t DmmOffMs = 1000; // Minimum unpowered time; stock always gets a reboot's worth.
+    static_assert(DmmOffMs <= dmm::FunctionSelector::PowerOnWaitMs, "A selection's deadline covers the power-on wait");
+    bool dmmOff_ = false, dmmRecovering_ = false, dmmTripped_ = false, dmmLeft_ = false, dmmReselect_ = false;
+    uint32_t dmmOffAt_ = 0, dmmRestarts_ = 0, dmmReselects_ = 0, dmmFutileRestarts_ = 0;
+    uint64_t dmmPacketUs_ = 0;
     static constexpr uint32_t DmmCloseMs = 500;
     bool dmmClosing_ = false;
     uint32_t dmmCloseDeadline_ = 0;
@@ -398,8 +412,9 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     uint32_t sequence_ = 0, previousTick_ = 0, receiveErrors_ = 0, receiveOverflows_ = 0;
     uint64_t timeUs_ = 0;
     uint32_t armSequence_ = 0, captureRetryAt_ = 0;
+    bool captureRestartOwed_ = false; // A capture fault was taken; cleared by the next successful start.
     static constexpr uint32_t CaptureRetryMs = 50;
-    bool triggerWaiting_ = false;
+    bool triggerWaiting_ = false, acceptedTriggered_ = false;
     uint64_t dmmActivatedAtUs_ = 0, recordDeadlineUs_ = 0;
     DataStatus recordStatus_ = DataStatus::NoData;
     // followTriggerWait: since when (armedAt_) the capture armedSequence_ has been seen Armed.

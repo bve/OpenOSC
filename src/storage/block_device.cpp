@@ -17,6 +17,7 @@ uint32_t bootSectorSize(const uint8_t* p) {
 }
 
 bool BlockDevice::initialize() {
+    cacheValid_ = dirty_ = false; // scratch_ reads the boot sector here.
     if (!nor_.read(0, scratch_, 512)) return false;
     if (uint32_t size = bootSectorSize(scratch_)) { sectorSize_ = size; return true; }
     // Preserve a valid existing MBR; inspect its partition using candidate LBA units.
@@ -34,13 +35,52 @@ bool BlockDevice::initialize() {
     sectorSize_ = 512;
     return true; // No formatting: expose the actual raw medium to the host.
 }
+bool BlockDevice::writeBlock(uint32_t physical) {
+    // A failure after the erase leaves the block blank: write the whole image again.
+    bool written = false;
+    for (unsigned attempt = 0; attempt < 3 && !written; ++attempt) {
+        written = nor_.writeSector(physical, scratch_);
+        if (!written) Watchdog::progress(); // Each attempt may wait out ready()'s 5 s; the policy allows one.
+    }
+    if (!written) return false;
+    Watchdog::progress(); // A NOR sector rewritten: progress of whatever file operation asked for it.
+    Board::service();
+    return true;
+}
+bool BlockDevice::flush() {
+    if (!cacheValid_ || !dirty_) return true;
+    if (!writeBlock(cached_)) return false; // Still dirty: the next flush tries again.
+    dirty_ = false;
+    return true;
+}
+bool BlockDevice::setOwner(MediaOwner owner) {
+    if (owner == owner_) return true;
+    if (!flush()) return false; // The dirty block stays, and so does the owner.
+    cacheValid_ = false; // The host reads and writes the NOR itself.
+    owner_ = owner;
+    return true;
+}
+bool BlockDevice::service(uint32_t now, bool idle) {
+    if (!idle || !dirty_ || owner_ != MediaOwner::Local) return false;
+    if (int32_t(now - dirtyAt_) < int32_t(PulseMs) || int32_t(now - writtenAt_) < int32_t(QuietMs)) return false;
+    if (flush()) return true;
+    dirtyAt_ = now; // A failing NOR: the next pulse in PulseMs, not every pass (the next sync reports it).
+    return false;
+}
 
 bool BlockDevice::valid(uint32_t lba, uint32_t count, MediaOwner requester) const {
     return requester == owner_ && lba <= sectorCount() && count <= sectorCount() - lba;
 }
 bool BlockDevice::read(uint32_t lba, uint32_t count, uint8_t* data, MediaOwner requester) {
     if (!valid(lba, count, requester) || (!data && count)) return false;
-    return !count || nor_.read(lba * sectorSize_, data, size_t(count) * sectorSize_);
+    if (!count) return true;
+    const uint32_t address = lba * sectorSize_, bytes = count * sectorSize_;
+    if (!nor_.read(address, data, bytes)) return false;
+    if (cacheValid_ && dirty_ && address < cached_ + 4096 && cached_ < address + bytes) { // Newer than the NOR.
+        const uint32_t from = address > cached_ ? address : cached_, to = address + bytes < cached_ + 4096 ? address + bytes : cached_ + 4096;
+        std::memcpy(data + (from - address), scratch_ + (from - cached_), to - from);
+    }
+    return true;
 }
 bool BlockDevice::write(uint32_t lba, uint32_t count, const uint8_t* data, MediaOwner requester) {
     if (!valid(lba, count, requester) || (!data && count)) return false;
@@ -51,17 +91,29 @@ bool BlockDevice::write(uint32_t lba, uint32_t count, const uint8_t* data, Media
         const uint32_t offset = address & 4095U;
         uint32_t chunk = 4096 - offset;
         if (chunk > remaining) chunk = remaining;
-        if (!nor_.read(physical, scratch_, sizeof scratch_)) return false;
+        if (owner_ != MediaOwner::Local) { // The host (in its interrupt): write-through, off the cache state.
+            if (!nor_.read(physical, scratch_, sizeof scratch_)) return false;
+            std::memcpy(scratch_ + offset, data, chunk);
+            if (!writeBlock(physical)) return false;
+            address += chunk; data += chunk; remaining -= chunk;
+            continue;
+        }
+        if (!cacheValid_ || cached_ != physical) { // Another block: the cached one goes first (writes stay in order).
+            if (!flush()) return false;
+            cacheValid_ = false;
+            if (chunk < 4096 && !nor_.read(physical, scratch_, sizeof scratch_)) return false;
+            cached_ = physical; cacheValid_ = true;
+        }
         std::memcpy(scratch_ + offset, data, chunk);
-        if (!nor_.writeSector(physical, scratch_)) return false;
+        const uint32_t now = Board::milliseconds();
+        if (!dirty_) dirtyAt_ = now;
+        dirty_ = true; writtenAt_ = now;
         address += chunk;
         data += chunk;
         remaining -= chunk;
-        Watchdog::progress(); // A NOR sector rewritten: progress of whatever file operation asked for it.
-        Board::service();
     }
     return true;
 }
-bool BlockDevice::sync() { return nor_.ready(); }
+bool BlockDevice::sync() { return flush() && nor_.ready(); }
 }
 

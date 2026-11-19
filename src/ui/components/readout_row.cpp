@@ -9,7 +9,7 @@ namespace {
 // the item's digit limit.
 bool narrower(const ReadoutRow::Item &item, unsigned from, int than, unsigned size, unsigned &index, ReadoutParts &parts) {
     for (unsigned i = from; i < ReadoutText::Forms; ++i)
-        if (ReadoutText::form(item.kind, item.valid, item.value, item.mark, i, parts, size, item.limit) &&
+        if (ReadoutText::form(item.kind, item.valid, item.value, item.mark, i, parts, size, item.limit, item.prefer) &&
             (than < 0 || parts.width() < than)) {
             index = i;
             return true;
@@ -29,23 +29,44 @@ struct Kept {
     bool better(const Kept &b) const { return elided != b.elided ? elided < b.elided : digits > b.digits; }
 };
 } // namespace
-ReadoutRow::Fit ReadoutRow::fit(const Item (&items)[Items], int width, int cell, Placed (&out)[Items]) {
-    const auto fit = in(items, width, cell, Size, out);
+ReadoutRow::Fit ReadoutRow::fit(const Item (&items)[Items], int width, int cell, Placed (&out)[Items], Held (*held)[Items]) {
+    const auto fit = in(items, width, cell, Size, out, held);
+    // held: the regular size's forms only; the narrow pass starts fresh.
+    if (held)
+        for (unsigned i = 0; i < Items; ++i) (*held)[i] = {items[i].kind, out[i].form, out[i].parts.prefix};
     const Kept regular(out);
     if (!regular.elided && regular.digits >= 2) return fit; // Two digits or more each in IBM Plex Sans 12.
     Placed narrow[Items];
-    const auto condensed = in(items, width, cell, NarrowSize, narrow);
+    const auto condensed = in(items, width, cell, NarrowSize, narrow, nullptr);
     if (!Kept(narrow).better(regular)) return fit;
     std::copy(narrow, narrow + Items, out);
     return condensed == Fit::Elided ? Fit::Elided : Fit::Narrow;
 }
-ReadoutRow::Fit ReadoutRow::in(const Item (&items)[Items], int width, int cell, unsigned size, Placed (&out)[Items]) {
+ReadoutRow::Fit ReadoutRow::in(const Item (&items)[Items], int width, int cell, unsigned size, Placed (&out)[Items],
+                               const Held (*held)[Items]) {
     unsigned shown = 0, forms[Items]{};
+    const auto room = [&](unsigned i) { return i + 1 == Items ? width - int(i) * cell : cell - Gap; };
     for (unsigned i = 0; i < Items; ++i) {
         out[i] = {};
-        out[i].shown = narrower(items[i], 0, -1, size, forms[i], out[i].parts);
+        unsigned start = 0;
+        if (held && (*held)[i].kind == items[i].kind) { // The last form, one more precise only with room to spare.
+            start = (*held)[i].form;
+            unsigned index; ReadoutParts parts;
+            if (start && narrower(items[i], start - 1, -1, size, index, parts) && index < start && parts.width() <= room(i) - Spare)
+                start = index;
+        }
+        out[i].shown = narrower(items[i], start, -1, size, forms[i], out[i].parts) ||
+                       (start && narrower(items[i], 0, -1, size, forms[i], out[i].parts));
         out[i].form = forms[i];
         shown += out[i].shown;
+    }
+    // Each down to its own cell where it can be: values keep their places.
+    for (unsigned i = 0; i < Items; ++i) {
+        unsigned index; ReadoutParts parts;
+        while (out[i].shown && out[i].parts.width() > room(i) &&
+               narrower(items[i], forms[i] + 1, out[i].parts.width(), size, index, parts)) {
+            forms[i] = index; out[i].parts = parts; out[i].form = index;
+        }
     }
     const int gaps = shown > 1 ? int(shown - 1) * Gap : 0;
     const auto total = [&]() {

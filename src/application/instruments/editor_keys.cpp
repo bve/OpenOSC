@@ -1,4 +1,5 @@
 #include "openosc/application/controller.hpp"
+#include <cstdio>
 #include "openosc/platform/input.hpp"
 #include "openosc/generator/frequency.hpp"
 
@@ -8,7 +9,19 @@ void ApplicationController::openPanel(Panel panel, const ui::PropertyList &list,
     navigator_.reset(row);
     view_.properties(list, navigator_);
 }
+void ApplicationController::backPanel() {
+    if (panel_ == Panel::Display && !plotControls_.listing && !sectionDirect_) { // A section: back to the list, on its row.
+        plotControls_.listing = true;
+        openPanel(Panel::Display, ui::DisplayProperties(plotControls_), unsigned(plotControls_.group));
+        return;
+    }
+    const bool child = panel_ == Panel::Display || panel_ == Panel::Measurements || panel_ == Panel::Acquisition ||
+                       panel_ == Panel::Decoder;
+    if (child && analyzeRow_ != ~0U) { openAnalyze(analyzeRow_); return; }
+    closePanel();
+}
 void ApplicationController::closePanel() {
+    analyzeRow_ = ~0U;
     panel_ = Panel::None;
     dataRefresh_ = true;
     view_.measurement(state_);
@@ -20,7 +33,7 @@ ApplicationController::FieldKey ApplicationController::fieldKeys(uint32_t keys, 
     using Outcome = ui::PropertyNavigator::Outcome;
     const auto outcome = navigator_.keys(keys, list);
     if (outcome == Outcome::Refused && list.notice()) view_.notify(list.notice(), now);
-    if (outcome == Outcome::Back) { closePanel(); return FieldKey::Closed; }
+    if (outcome == Outcome::Back) { backPanel(); return FieldKey::Closed; }
     if (outcome == Outcome::Changed) return FieldKey::Committed;
     if (outcome == Outcome::Activate) return FieldKey::Action;
     view_.properties(list, navigator_);
@@ -47,19 +60,14 @@ void ApplicationController::triggerKeys(uint32_t keys, uint32_t now) {
     } else if (key != FieldKey::Committed) return;
     commitTrigger(now);
 }
-// F3 again with the Trigger focus: the trigger source goes to the other channel the next capture
-// has on (one capture source at a time); with one channel on it stays. In HOLD the next capture
-// takes it, the held record and its trigger stay; a finished Single resumes as any edit does.
-void ApplicationController::triggerSource(uint32_t now) {
+// F3 again with the Trigger focus: Auto, Normal, Single, Auto. Single arms (resumes a HOLD), as
+// Analyze's Arm Single does; the others take effect as any edit.
+void ApplicationController::triggerModeStep(uint32_t now) {
     auto request = data_.scopeRequest();
-    const unsigned other = unsigned(request.trigger.channel) ^ 1;
-    if (!request.frontend.enabled[other]) {
-        view_.notify(other ? "Trigger CH1: CH2 is off" : "Trigger CH2: CH1 is off", now);
-        return;
-    }
-    request.trigger.channel = scope::Channel(other);
-    if (!applyEdited(request, now)) { view_.notify("Finish data transfer first", now); return; }
-    view_.notify(data_.scopeRequest().trigger.channel == scope::Channel::Ch1 ? "Trigger source CH1" : "Trigger source CH2", now);
+    request.trigger.mode = scope::TriggerMode((unsigned(request.trigger.mode) + 1) % 3);
+    const bool applied = request.trigger.mode == scope::TriggerMode::Single ? applyScope(request, now, ScopeApply::Resume)
+                                                                            : applyEdited(request, now);
+    if (!applied) { view_.notify("Finish data transfer first", now); return; }
     dataRefresh_ = true;
 }
 void ApplicationController::frequencyKeys(uint32_t keys, uint32_t now) {

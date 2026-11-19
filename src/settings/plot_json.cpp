@@ -29,6 +29,8 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     spectrum["window"]=windows[unsigned(o.spectrum.window)];
     spectrum["scale"]=o.spectrum.scale==scope::SpectrumScale::Dbfs ? "dbfs" : "linear";
     spectrum["remove_dc"]=o.spectrum.removeDc;
+    auto counter=root.createNestedObject("counter");
+    counter["source"]=o.counter.source; counter["average"]=o.counter.average; counter["ppm"]=o.counter.ppm;
     auto channels = root.createNestedArray("channels");
     for (const auto &c : o.channels) {
         auto item = channels.createNestedObject();

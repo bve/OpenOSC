@@ -64,7 +64,7 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     const bool burst = uint32_t(configuredAt - configuredAt_) < ConfigQuietMs && samplePlan(plan);
     configuredAt_ = configuredAt;
     armSequence_ = sequence_ + 1;
-    triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     captureFailed_ = false;
     if (active_ && measurement_ == MeasurementMode::Oscilloscope && !burst && !startCapture() && !captureWaiting_) {
         const auto failure = status_;
@@ -351,6 +351,7 @@ bool DataAccess::startCapture() {
         arena_.release(captureRegion_); captureRegion_ = 0;
         return refused(capture_.status());
     }
+    captureRestartOwed_ = false;
     configuration_=capture_.metadata();
     staged_ = false; // This capture runs the current request.
     if (!zeroBusy()) counters_.start();
@@ -404,7 +405,7 @@ void DataAccess::holdScopeCore(bool hold) {
     forcePending_ = false; forcedSequence_ = 0; // HOLD ends a force; RUN arms without one.
     holdPending_ = false;
     if (!hold) captureFailed_ = false;
-    triggerWaiting_ = !hold && request_.trigger.mode != scope::TriggerMode::Auto;
+    triggerWaiting_ = !hold && request_.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     if (!hold) {
         heldFrame_.release();
         return;
@@ -414,7 +415,7 @@ void DataAccess::holdScopeCore(bool hold) {
     // capture finish into HOLD instead of holding nothing, for a bounded time. The same wait when the
     // last capture failed and its retry is due (captureFailed_): the frame on show is gone with it.
     const bool capturing = captureRegion_ && capture_.state() == scope::FrameMailbox::State::Capturing;
-    const bool retrying = captureFailed_ && !staged_ && !request_.rolling() && capture_.state() == scope::FrameMailbox::State::Idle;
+    const bool retrying = (captureFailed_ || captureRestartOwed_) && !staged_ && !request_.rolling() && capture_.state() == scope::FrameMailbox::State::Idle;
     if (!heldFrame_.valid() && !rollingActive_ && (capturing || retrying)) {
         const double record = configuration_.samplesPerSecond.valid() ? 1000.0 * configuration_.samples / configuration_.samplesPerSecond.value() : 0;
         holdPending_ = true;
@@ -437,7 +438,8 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
         const bool found=fresh && findTrigger(inspected_.view(),index);
         const bool accepted=fresh && triggerAccepts(inspected_.view().metadata(),found); // A forced record too.
         triggerWaiting_ = !accepted;
-        if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now; } // What a reader is now given.
+        if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now;
+            acceptedTriggered_ = inspected_.view().metadata().triggered && !inspected_.view().metadata().forced; } // What a reader is now given.
         observeInterleave(inspected_.view());
         if (accepted && request_.trigger.mode == scope::TriggerMode::Single) {
             inspected_.annotateTrigger(found, index);
@@ -495,8 +497,10 @@ void DataAccess::serviceScopeCapture(uint32_t now) {
     inspected_.release();
     releaseCaptureRegion();
     if (!active_ || stopping_ || measurement_ != MeasurementMode::Oscilloscope || (scopeHeld_ && !holdPending_)) return;
-    if (capture_.status() == DataStatus::HardwareError || capture_.status() == DataStatus::Timeout || capture_.status()==DataStatus::Overflow) {
-        status_ = capture_.status();
+    const DataStatus fault = capture_.status();
+    if (!captureRestartOwed_ && (fault == DataStatus::HardwareError || fault == DataStatus::Timeout || fault == DataStatus::Overflow)) {
+        captureRestartOwed_ = true;
+        status_ = fault;
         if (!captureFailed_) captureRetryAt_ = now + CaptureRetryMs;
         captureFailed_ = true;
     }

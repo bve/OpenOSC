@@ -75,6 +75,7 @@ void Model::accumulate() {
             previous=point;
         }
     } else for (unsigned c=0; c<3; ++c) {
+        if (c==2 && options_.persistenceMs!=InfinitePersistence) continue;
         const auto &trace=storage_.traces[c];
         if (!trace.enabled) continue;
         int previous=Missing;

@@ -18,10 +18,21 @@ bool ApplicationController::changePlotMode(plot::Options &options, plot::Mode be
 void ApplicationController::plotKeys(uint32_t keys, uint32_t now, bool fine) {
     for (unsigned c=0; c<2; ++c) plotControls_.enabled[c]=channelShown(c);
     ui::DisplayProperties list(plotControls_, fine);
+    if (list.listing()) { // The section list: Open shows a section, Back goes up.
+        using Outcome = ui::PropertyNavigator::Outcome;
+        const auto outcome = navigator_.keys(keys, list);
+        if (outcome == Outcome::Back) { backPanel(); return; }
+        if (outcome == Outcome::Open || outcome == Outcome::Activate) {
+            plotControls_.group = plot::Controls::Group(navigator_.row());
+            plotControls_.listing = false;
+            navigator_.reset();
+        }
+        view_.properties(ui::DisplayProperties(plotControls_, fine), navigator_);
+        return;
+    }
     const auto key = fieldKeys(keys, list, now);
-    // The section and channel rows choose what the panel shows; the other fields go to the view.
     const unsigned row = list.row(navigator_.row());
-    if (key == FieldKey::Committed && row != plot::Controls::Section) applyDisplay(plot::Controls::Count, now);
+    if (key == FieldKey::Committed) applyDisplay(plot::Controls::Count, now);
     else if (key == FieldKey::Action) applyDisplay(row, now);
     if (key == FieldKey::Committed || key == FieldKey::Action) view_.properties(ui::DisplayProperties(plotControls_, fine), navigator_);
 }

@@ -67,6 +67,11 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
         if (!integer(input,"channel",o.spectrum.channel) || !choice(input,"window",o.spectrum.window,windows) ||
             !choice(input,"scale",o.spectrum.scale,scales) || !flag(input,"remove_dc",o.spectrum.removeDc)) return false;
     }
+    if (object.containsKey("counter")) {
+        if (!object["counter"].is<JsonObjectConst>()) return false;
+        const auto input=object["counter"].as<JsonObjectConst>();
+        if (!integer(input,"source",o.counter.source) || !integer(input,"average",o.counter.average) || !integer(input,"ppm",o.counter.ppm)) return false;
+    }
     if (object.containsKey("channels")) {
         auto channels = object["channels"].as<JsonArrayConst>();
         if (channels.size() != 2)

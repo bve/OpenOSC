@@ -1,4 +1,7 @@
 #include "openosc/platform/board.hpp"
+#ifdef OPENOSC_APPLICATION
+#include "openosc/display/display.hpp"
+#endif
 #include "openosc/platform/clocks.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/dma_memory.hpp"
@@ -14,6 +17,16 @@ extern "C" const uint8_t D1CorePrescTable[16] = {0,0,0,0,1,2,3,4,1,2,3,4,6,7,8,9
 extern "C" { volatile openosc::Diagnostics boot_diagnostics = {}; }
 
 namespace openosc {
+#ifdef OPENOSC_APPLICATION
+extern "C" char __openosc_framebuffer[]; // ld/application.ld: framebuffer 0.
+static bool splash_ = false;
+static uint32_t entry_[Board::DisplayEntryWords]{};
+bool Board::splash() { const bool kept = splash_; splash_ = false; return kept; } // Once.
+const uint32_t *Board::displayAtEntry() { return entry_; }
+#else
+bool Board::splash() { return false; }
+const uint32_t *Board::displayAtEntry() { static const uint32_t none[DisplayEntryWords]{}; return none; }
+#endif
 bool Board::initialize() {
     boot_diagnostics.magic = 0x4f534342;
     boot_diagnostics.stage = 1;
@@ -55,12 +68,23 @@ bool Board::initialize() {
     // its own. Once, before any USB attach (Registers only: usbPcd is not set up yet).
     UsbCore::powerOff();
 #endif
-    LTDC->GCR &= ~LTDC_GCR_LTDCEN;
+#ifdef OPENOSC_APPLICATION
+    entry_[1] = LTDC->GCR; entry_[2] = LTDC_Layer1->CR; entry_[3] = LTDC_Layer1->CFBAR;
+    entry_[4] = LTDC_Layer1->PFCR; entry_[5] = LTDC_Layer1->CFBLR; entry_[6] = LTDC_Layer2->CR;
+    // Frame 0 holds the logo (one layer, our address, RGB565, 320 px); else stopped until Display resets it.
+    splash_ = (entry_[1] & LTDC_GCR_LTDCEN) && (entry_[2] & LTDC_LxCR_LEN) && !(entry_[6] & LTDC_LxCR_LEN) &&
+              entry_[3] == uint32_t(reinterpret_cast<uintptr_t>(__openosc_framebuffer)) &&
+              (entry_[4] & 7U) == LTDC_PIXEL_FORMAT_RGB565 && ((entry_[5] >> 16) & 0x1fffU) == 640U;
+    entry_[0] = splash_;
+    LTDC->GCR &= ~LTDC_GCR_LTDCEN; // Not scanning while the clocks change (stopped, the panel shows black).
+#endif
     HAL_Init();
     __enable_irq();
     if (!ClockControl::configure()) { boot_diagnostics.error = 1; return false; }
 #ifdef OPENOSC_APPLICATION
     DmaMemory::initialize();
+    // The logo in frame 0 again, on this image's own timings and layer set-up, while storage mounts.
+    if (splash_ && !Display::restart(__openosc_framebuffer)) { splash_ = false; entry_[0] |= 2U; }
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     *reinterpret_cast<volatile uint32_t*>(0xe0001fb0) = 0xc5acce55; // Cortex-M7 DWT lock access.
     DWT->CYCCNT = 0;

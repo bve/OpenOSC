@@ -24,6 +24,7 @@ void Session::reselect() {
     detector_.reselect(); // The old function's snapshot and window go with the selection.
     awaiting_ = false;
 }
+Function Session::awaited() const { return awaiting_ ? awaited_ : Function::Unknown; }
 void Session::restart(Function function, uint64_t untilUs) {
     reselect();
     awaited_ = function;
@@ -36,6 +37,8 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
         return false; // A bad packet changes nothing.
     candidate.timestampUs = timestampUs;
     candidate.sequence = ++sequence_;
+    rawBytes_ = uint8_t(bytes < sizeof raw_ ? bytes : sizeof raw_);
+    std::memcpy(raw_, packet, rawBytes_);
     latest_ = candidate;
     // The hold mode sees the packet in the context it settles (before HOLD's stop: a mode's cycle never
     // freezes with the display): a packet ending the wait for a selected function counts, a local REL
@@ -93,7 +96,7 @@ bool Session::hold(bool enabled) {
 DataStatus Session::status(uint64_t nowUs, uint64_t staleAfterUs) const {
     if (!sequence_)
         return DataStatus::NoData;
-    if (nowUs < latest_.timestampUs || nowUs - latest_.timestampUs > staleAfterUs)
+    if (nowUs < latest_.timestampUs || nowUs - latest_.timestampUs > staleAfterUs || latest_.timestampUs < freshFromUs_)
         return DataStatus::Stale;
     return displayed().primary.status;
 }

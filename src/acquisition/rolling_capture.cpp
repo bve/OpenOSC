@@ -26,16 +26,17 @@ uint64_t CaptureDma::rollingAvailable() const {
     laneCounts(lanes);
     return RollingProgress::available(lanes);
 }
+uint64_t CaptureDma::laneCount(unsigned lane,uint32_t *remaining) const {
+    DMA_TypeDef *dma=controller(lane);
+    const uint32_t flag=0x20U<<(lane<2 ? 6 : 0);
+    uint32_t flags=dma->LISR,count=streams[lane]->NDTR;
+    const uint32_t after=dma->LISR;
+    if ((flags^after)&flag) { flags=after; count=streams[lane]->NDTR; }
+    if (remaining) *remaining=count;
+    return DmaLaneProgress::completed(cycles_[lane],count,flags&flag,buffer_.segmentTransfers);
+}
 void CaptureDma::laneCounts(uint64_t (&lanes)[4],uint32_t *remaining) const {
-    for (unsigned lane=0;lane<4;++lane) {
-        DMA_TypeDef *dma=controller(lane);
-        const uint32_t flag=0x20U<<(lane<2 ? 6 : 0);
-        uint32_t flags=dma->LISR,count=streams[lane]->NDTR;
-        const uint32_t after=dma->LISR;
-        if ((flags^after)&flag) { flags=after; count=streams[lane]->NDTR; }
-        lanes[lane]=DmaLaneProgress::completed(cycles_[lane],count,flags&flag,buffer_.segmentTransfers);
-        if (remaining) remaining[lane]=count;
-    }
+    for (unsigned lane=0;lane<4;++lane) lanes[lane]=laneCount(lane,remaining ? remaining+lane : nullptr);
     __DMB();
 }
 } // namespace openosc::scope

@@ -3,6 +3,7 @@
 
 namespace openosc {
 void ApplicationController::startScreenshot(uint32_t now) {
+    if (screenStreamBusy(now)) { view_.notify("Screenshot: USB screen transfer in progress",now); return; }
     lv_refr_now(nullptr);
     display_.settle(); // The frame just drawn is on screen: front() is it.
     auto *snapshot=screenshot::previewMemory();

@@ -90,6 +90,21 @@ void MeterSummary::flowMeta() {
     place(range_, mode, textWidth(range_));
     place(secondary_, secondary, Width - secondary);
 }
+namespace {
+// "250 Ω", "2.5 kΩ", "60 µF": the reading's unit signs, spaced from the number.
+void spaced(double value, Quantity quantity, char *output, size_t capacity) {
+    static constexpr const char *units[] = {"", "V", "A", "\xce\xa9", "F", "Hz"};
+    char text[32];
+    if (!plot::Format::quantity(value, "", text, sizeof text, 6)) { std::snprintf(output, capacity, "----"); return; }
+    size_t n = std::strlen(text);
+    char prefix[3] = "";
+    if (n && std::strchr("pnumkMG", text[n - 1])) {
+        if (text[--n] == 'u') std::snprintf(prefix, sizeof prefix, "\xc2\xb5");
+        else prefix[0] = text[n];
+    }
+    std::snprintf(output, capacity, "%.*s %s%s", int(n), text, prefix, units[unsigned(quantity)]);
+}
+} // namespace
 // In the reading's display units (MeterText::unit: kΩ, µF), as the reading's own unit label.
 void MeterSummary::statisticText(double value, Quantity quantity, char *output, size_t capacity) const {
     static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
@@ -149,24 +164,22 @@ void MeterSummary::visible(bool value) { lv_obj_set_hidden(root_, !value); }
 void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
                           double reference, bool relative, bool peerRelative) {
     const double offset = relative ? reference : 0;
-    lv_label_set_text(secondary_, result.secondary.valid() ? result.secondaryText : "");
+    bool changed = Elements::setText(secondary_, result.secondary.valid() ? result.secondaryText : "");
     if (relative) {
-        static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
         char value[32], text[48];
-        plot::Format::quantity(reference, units[unsigned(result.primary.quantity)], value, sizeof value, 6);
-        std::snprintf(text, sizeof text, "REL ref %s", value); lv_label_set_text(reference_, text);
-    } else if (peerRelative) lv_label_set_text(reference_, "REL ref: controller");
+        spaced(reference, result.primary.quantity, value, sizeof value);
+        std::snprintf(text, sizeof text, "REL ref %s", value); changed |= Elements::setText(reference_, text);
+    } else if (peerRelative) changed |= Elements::setText(reference_, "REL ref: controller");
     else if (const auto *range = dmm::Ranges::current(result)) {
-        static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
         char value[32], text[48];
-        plot::Format::quantity(range->maximumSi, units[unsigned(result.primary.quantity)], value, sizeof value, 6);
-        std::snprintf(text, sizeof text, "Range %s", value); lv_label_set_text(reference_, text);
-    } else lv_label_set_text(reference_, "Range unavailable");
-    lv_label_set_text(range_, result.range == dmm::RangeMode::Auto ? "AUTO"
-                              : result.range == dmm::RangeMode::Manual ? "MANUAL" : "UNKNOWN");
-    flowMeta();
+        spaced(range->maximumSi, result.primary.quantity, value, sizeof value);
+        std::snprintf(text, sizeof text, "Range %s", value); changed |= Elements::setText(reference_, text);
+    } else changed |= Elements::setText(reference_, "Range unavailable");
+    changed |= Elements::setText(range_, result.range == dmm::RangeMode::Auto ? "AUTO"
+                                         : result.range == dmm::RangeMode::Manual ? "MANUAL" : "UNKNOWN");
+    if (changed) flowMeta();
     if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) resolution_ = resolution;
-    lv_obj_set_style_text_color(range_, lv_color_hex(accent), 0);
+    Elements::textColor(range_, accent);
     // Statistics shown (On, not Trend): the names stay, and an empty period (after a reset, an
     // overload or no reading, or of another quantity) shows "--" as the factory's placeholders.
     const bool shown = statistics != nullptr;

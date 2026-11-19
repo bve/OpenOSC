@@ -50,6 +50,17 @@ bool scan(const FrameView &frame, const TriggerSettings &s, uint32_t first, uint
     return found;
 }
 } // namespace
+uint32_t TriggerSearch::crossingBeforeQ16(const FrameView &frame, const TriggerSettings &settings, uint32_t index) {
+    int16_t a, b;
+    if (!index || !frame.signedCode(settings.channel, index - 1, a) || !frame.signedCode(settings.channel, index, b) || a == b)
+        return 0;
+    // Linear between the two points; Q16 of (level + 0.5 - a) / (b - a), mirrored for falling.
+    const int32_t span = settings.edge == Edge::Rising ? b - a : a - b;
+    const int32_t past = settings.edge == Edge::Rising ? (2 * (settings.level - a) + 1) : (2 * (a - settings.level) + 1);
+    if (span <= 0 || past < 0) return 0;
+    const uint32_t f = uint32_t(std::min<int64_t>(int64_t(past) * 32768 / span, 65536)); // past/2/span in Q16.
+    return 65536 - f;
+}
 bool TriggerSearch::find(const FrameView &frame, const TriggerSettings &settings, uint32_t &index) {
     if (!settings.valid() || !frame.valid() || frame.metadata().samples < 2) return false;
     uint32_t distance = UINT32_MAX;

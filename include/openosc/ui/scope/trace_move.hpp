@@ -3,13 +3,16 @@
 #include "openosc/ui/scope/options.hpp"
 
 namespace openosc::plot {
+class Model;
 // MOVE: the running trace moves through the analog zero of the next capture, a held record
 // moves only on the screen, so its samples and metadata stay as captured.
 class TraceMove {
 public:
     struct Change { bool request = false, view = false; };
-    static Change apply(ScopeRequest &request, Options &options, unsigned channel, bool held, int horizontal, int vertical, bool fine);
-    static bool pan(Options &options, int horizontal);
+    // Pan steps one division of the shown window, one pixel when fine (PanStep without a model).
+    static Change apply(ScopeRequest &request, Options &options, unsigned channel, bool held, int horizontal, int vertical, bool fine,
+                        const Model *model = nullptr);
+    static bool pan(Options &options, int horizontal, const Model *model = nullptr, bool fine = false);
 };
 // The factory X-Y entry: a continuous free-running picture, whatever the capture was doing before.
 class XyMode {

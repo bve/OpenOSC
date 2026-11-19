@@ -5,8 +5,8 @@
 
 namespace openosc::plot {
 bool Options::valid() const {
-    if (unsigned(mode) > 3 || unsigned(style) > 2 || unsigned(grid) > 3 || unsigned(math) > 2 || !spectrum.valid() ||
-        unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom ||
+    if (unsigned(mode) > 3 || unsigned(style) > 2 || unsigned(grid) > 3 || unsigned(math) > 2 || !spectrum.valid() || !counter.valid() ||
+        unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom || !zoomOut ||
         zoom > 256 || pan < -1000 || pan > 1000 ||
         (persistenceMs > 10000 && persistenceMs!=InfinitePersistence) ||
         !averaging || averaging > 64 || (averaging & (averaging - 1)) ||

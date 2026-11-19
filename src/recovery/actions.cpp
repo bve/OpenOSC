@@ -75,7 +75,10 @@ void RecoveryController::perform() {
             message("STORAGE ERROR", "CANNOT FINISH DISK OPERATIONS");
             return;
         }
-        if (action_ == Action::Launch) Handoff::jump(layout::VectorBase);
+        if (action_ == Action::Launch) {
+            LTDC->GCR &= ~LTDC_GCR_LTDCEN; // The application keeps only the factory logo up (Board::splash).
+            Handoff::jump(layout::VectorBase);
+        }
         if (action_ == Action::PowerOff) PowerControl::powerOff();
     }
 }

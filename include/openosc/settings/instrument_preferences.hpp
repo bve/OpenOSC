@@ -17,7 +17,7 @@ struct ScopePreferences {
     uint32_t triggerSource = 0, triggerEdge = 0, triggerMode = 0;
     int32_t triggerLevel = 0;
     uint32_t triggerPosition=250;
-    uint32_t triggerReject=0; // TriggerSettings::reject; files before it: off.
+    uint32_t triggerReject=1; // TriggerSettings::reject; files without it: on.
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
     uint32_t rollAuto=1;
@@ -37,7 +37,7 @@ struct ScopePreferences {
 struct MeterPreferences {
     // display: 0 primary, 1 statistics (MEAN), 2 trend, 3 analog dial (appended: 0..2 keep their meaning).
     static constexpr uint32_t Displays = 4, Faces = 3, Palettes = 3, AnalogDisplay = 3;
-    uint32_t display = 0, statistics = 1, automatic = 1, range = 0;
+    uint32_t display = 0, statistics = 1, automatic = 1, range = 0, bar = 1; // bar: the 0-25 bar graph.
     uint32_t face = 0, palette = 0; // ui::MeterStyles: IBM/Mono/Segment, Dark/Amber/Paper.
     // The function (MeterFunctions index) the manual `range` was confirmed in; MeterFunctionCount:
     // unknown (files before it) - such a manual range is not restored, Auto still is.
@@ -54,7 +54,7 @@ struct MeterPreferences {
     dmm::HoldSettings hold;
     bool analog() const { return display == AnalogDisplay; } // Which of the two orders shows.
     bool valid() const {
-        return display < Displays && statistics <= 1 && automatic <= 1 && range < 8 && face < Faces && palette < Palettes &&
+        return display < Displays && statistics <= 1 && bar <= 1 && automatic <= 1 && range < 8 && face < Faces && palette < Palettes &&
                rangeFunction <= MeterFunctionCount && appearance.valid() && digitalArrangement.valid() && analogArrangement.valid() && hold.valid();
     }
 };

@@ -19,6 +19,7 @@ public:
     void stop() override;
     bool held() const override;
     bool waiting() const override;
+    bool triggered() const override;
     const scope::FrameView *frame(bool refresh) override;
     void releaseFrame() override;
     void endSession() override;
@@ -56,6 +57,12 @@ public:
     bool remote(bool) override;
     bool performance(PerformanceSnapshot &) const override;
     bool memory(MemorySnapshot &) const override;
+    size_t stalls(char *out, size_t size) const override;
+    size_t bootTimes(char *out, size_t size) const override;
+    size_t meterPacket(const uint8_t *&data) const override;
+    bool screenCapture() override;
+    void screenEnd() override;
+    size_t screenRead(uint32_t offset, uint8_t *out, size_t size) const override;
     bool factoryCalibration(FactoryCalibration &) const override;
     bool factoryRecordFormat(FactoryRecordReading &) const override;
     bool recovery() override;

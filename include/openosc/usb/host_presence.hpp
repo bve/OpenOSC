@@ -28,18 +28,22 @@ public:
             const uint32_t advanced = (frame - frame_) & FrameMask;
             if (advanced + Tolerance >= span && advanced <= span + Tolerance) {
                 if (proofs_ < 2) ++proofs_;
+                if (proofs_ >= 2) seen_ = true;
                 provenAt_ = now;
             } else if (uint32_t(now - provenAt_) >= GraceMs) proofs_ = 0;
         } else proofs_ = 0;
         at_ = now; frame_ = frame;
     }
     bool present(uint32_t now) const { return proofs_ >= 2 && uint32_t(now - provenAt_) < GraceMs; }
+    // A host proven since construction or the last mark() (an attach): one that may still be enumerating.
+    void mark() { seen_ = false; }
+    bool seen() const { return seen_; }
     // How long no host has been proven: 0 while present.
     uint32_t absentFor(uint32_t now) const { return present(now) ? 0 : uint32_t(now - provenAt_); }
 
 private:
     uint32_t at_ = 0, frame_ = 0, provenAt_ = 0;
     uint8_t proofs_ = 0;
-    bool sampled_ = false;
+    bool sampled_ = false, seen_ = false;
 };
 } // namespace openosc::usb

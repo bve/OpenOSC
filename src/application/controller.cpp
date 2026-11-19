@@ -1,3 +1,4 @@
+#include "openosc/application/boot_timing.hpp"
 #include "openosc/platform/watchdog.hpp"
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/stack_guard.hpp"
@@ -28,6 +29,7 @@ namespace openosc {
     const bool backend = data_.initialize(state_.mode, FactoryRecordPolicy(prefs_.scope.factoryRecordFormat));
     const auto applied = applyDataPreferences();
     restoreStartupOutput(applied); // After the saved settings were applied; never with refused ones.
+    BootTiming::mark(BootTiming::Data);
     InstrumentBackend tmcBackend(*this), serialBackend(*this);
     scpi::Engine tmcEngine(tmcBackend), serialEngine(serialBackend);
     InstrumentUsb usb(tmcEngine,serialEngine); usb_ = &usb;
@@ -37,6 +39,7 @@ namespace openosc {
     diag::LocalControl local(localBackend);
 #endif
     uiReady_ = display_.initialize();
+    BootTiming::mark(BootTiming::Display);
     // Settings > Files & USB > USB controller, before the first clock change (headless Remote). An
     // explicit Disabled holds also without a display; Recovery restores the setting independently.
     usb.enable(prefs_.usbController != 0, Board::milliseconds());
@@ -61,9 +64,9 @@ namespace openosc {
         if (bootStart_.notice) view_.notify(bootStart_.notice, Board::milliseconds());
         else if (!applied.ok()) view_.notify(result,Board::milliseconds());
         else if (preferences_.error()) view_.notify(preferences_.error(), Board::milliseconds());
-        else if (preferences_.repaired() && preferences_.restored()) view_.notify("Bad settings archived; previous copy restored", Board::milliseconds());
+        else if (preferences_.repaired() && preferences_.restored()) view_.notify("Bad settings archived; backup copy restored", Board::milliseconds());
         else if (preferences_.repaired()) view_.notify("Bad settings archived; defaults written", Board::milliseconds());
-        else if (preferences_.restored()) view_.notify("Settings restored from previous copy", Board::milliseconds());
+        else if (preferences_.restored()) view_.notify("Settings restored from a backup copy", Board::milliseconds());
         else if (const char *theme = ThemeNotice::text(themes_)) view_.notify(theme, Board::milliseconds());
         else if (themes_.error()) view_.notify(themes_.error(), Board::milliseconds());
         else if (data_.zeroFile().error()) view_.notify(data_.zeroFile().error(),Board::milliseconds());
@@ -77,6 +80,7 @@ namespace openosc {
             view_.notify(text, Board::milliseconds());
         }
         else if (boot_diagnostics.error==4) view_.notify("High unavailable; Normal active",Board::milliseconds());
+        BootTiming::mark(BootTiming::View);
     } else { // Headless: no UI; Remote (and its 200 MHz) only if that profile really runs.
         boot_diagnostics.error = 2; display_.enabled(false); setRemote(true);
     }
@@ -84,7 +88,7 @@ namespace openosc {
     struct CaptureQuiet final : usb::QuietClient {
         DataAccess &data;
         explicit CaptureQuiet(DataAccess &d) : data(d) {}
-        bool quietCapture(bool quiet) override { return data.quietCapture(quiet); }
+        bool quietCapture(bool quiet) override { return data.quietCapture(quiet && BatteryMonitor::supplied()); }
     } captureQuiet(data_);
     usb.quietWith(&captureQuiet); // Before any attach, the boot start's first.
     usb.followClock(ClockControl::activeMode()); // The boot profile: a high one leaves USB data off.
@@ -96,6 +100,7 @@ namespace openosc {
     performance_.start(DWT->CYCCNT);
     InputService::enable();
     while (true) {
+        const uint32_t passStart = Board::milliseconds();
         performance_.tick(DWT->CYCCNT);
         Watchdog::heartbeat(); // The one proof that the application's loop goes on (docs/WATCHDOG.md).
         StackGuard::check();   // A stack that reached .bss resets (recorded) instead of running on (issue #8).
@@ -120,7 +125,8 @@ namespace openosc {
             // one is asked for, so those restarts wait.
             if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !autoBusy() &&
                 data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto) hiddenAt_ = now;
-            const bool settling = uint32_t(now - hiddenAt_) < OverlaySettleMs || usb.enumerating(now);
+            // On battery no host can enumerate: a mode change's reattach then held the scope for up to HostQuietMs.
+            const bool settling = uint32_t(now - hiddenAt_) < OverlaySettleMs || (BatteryMonitor::supplied() && usb.enumerating(now));
             data_.pauseCapture(state_.mode == MeasurementMode::Oscilloscope && settling && data_.fullRateCapture(), now);
         }
         serviceImages(now);
@@ -137,10 +143,17 @@ namespace openosc {
             data_.closeDmmRange(); // Its release may be among the lost events.
             if (uiReady_) view_.notify("Input overflow; press again",now);
         }
-        if (uiReady_) { // The REL/Power hold's progress, from the input sampler's own timing.
+        { // The REL/Power hold, from the input sampler's own timing; the long press covers headless.
             uint32_t held = 0;
-            const bool holding = shutdown_ == Shutdown::None && InputService::powerHold(held);
-            view_.powerHold(PowerHold::percent(holding, held));
+            const bool down = InputService::powerHold(held), holding = shutdown_ == Shutdown::None && down;
+            if (!down) powerFired_ = false; // Up (debounced): the long press's end is no new hold.
+            else if (holding && held >= prefs_.holdMs() && !recoveryPending_) powerOff(now);
+            const int power = PowerHold::percent(holding, held, prefs_.holdMs());
+            const int automatic = autoHold(now, power >= 0); // Every pass: its input state must not depend on the drawing.
+            if (uiReady_) {
+                if (power >= 0) view_.powerHold(power, "Hold to power off");
+                else view_.powerHold(automatic, "Hold for auto setup");
+            }
         }
         TimedKeyEvents input;
         if (shots_.busy()) {
@@ -169,6 +182,18 @@ namespace openosc {
         }
         boot_diagnostics.action = uint32_t(state_.mode) | (state_.settingsOpen ? 0x100 : 0)
             | (state_.settingsOpen && settingsMenu_.information() ? 0x200 : 0);
+        {
+            const uint32_t end = Board::milliseconds();
+            const bool menuPause = data_.capturePaused() && uint32_t(now - hiddenAt_) < OverlaySettleMs; // Paused by design.
+            const bool expecting = state_.mode == MeasurementMode::Oscilloscope && !data_.scopeHeld() && !autoBusy() &&
+                                   data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto && !menuPause;
+            const uint8_t held = (data_.captureQuieted() ? StallLog::Quiet : 0) | (data_.capturePaused() ? StallLog::Paused : 0) |
+                                 (BatteryMonitor::supplied() ? StallLog::Supplied : 0);
+            const auto &m = data_.scopeMetadata();
+            const uint32_t recordMs = m.samplesPerSecond.valid() ? uint32_t(std::min(60000.0, m.samples * 1000.0 / m.samplesPerSecond.value())) : 0;
+            stalls_.frame(data_.scopeFrameSequence(), expecting, held, end, recordMs);
+            stalls_.pass(passStart, end);
+        }
         // Keep the foreground polling loop awake while the PIO USB core is active.
         // WFI caused reproducible EP0 stalls/re-enumeration on this ZT703S.
     }
@@ -178,6 +203,7 @@ namespace openosc {
 void ApplicationController::render() {
     rendering_ = true;
     display_.render();
+    BootTiming::mark(BootTiming::Frame);
     rendering_ = false;
     ahead_.release();
 }
@@ -204,6 +230,36 @@ void ApplicationController::applyPreferences() {
     applyBrightness();
     dataRefresh_=true;
 }
+void ApplicationController::powerOff(uint32_t now) {
+    if (powerFired_) return; // Once a hold: a refusal is not repeated every pass.
+    powerFired_ = true;
+    if (panel_==Panel::Zero) data_.cancelZero(now);
+    if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
+    confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
+}
+int ApplicationController::autoHold(uint32_t now, bool powerHeld) {
+    // Armed by the stroke's press event (onKeys): a stroke a wake took never arms. REL held takes the
+    // stroke: its release then does nothing (autoFired_), not a short AUTO.
+    if (powerHeld && autoArmed_ && (InputService::keys() & Keypad::AutoRange)) autoFired_ = true;
+    const bool down = autoArmed_ && !powerHeld && uiReady_ && state_.mode == MeasurementMode::Oscilloscope && panel_ == Panel::None && !state_.settingsOpen &&
+                      !remote_ && !recoveryPending_ && !shots_.busy() && shutdown_ == Shutdown::None && !decoderScreen() &&
+                      (InputService::keys() & Keypad::AutoRange);
+    if (!down) {
+        if (autoDown_) { autoDown_ = false; autoUpAt_ = now; }
+        else if (uint32_t(now - autoUpAt_) >= KeyGestures::DebounceMs) autoArmed_ = false; // Raw samples: a bounce continues.
+        return -1;
+    }
+    autoDown_ = true;
+    const uint32_t elapsed = now - autoHeldAt_;
+    if (autoFired_) return -1;
+    if (elapsed >= PowerHold::ShowMs) autoShown_ = true;
+    if (elapsed >= AutoHoldMs) {
+        autoFired_ = true;
+        if (!autoBusy()) startAuto(now);
+        return -1;
+    }
+    return PowerHold::percent(true, elapsed, AutoHoldMs);
+}
 void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     const uint32_t keys = events.shortPress | events.repeat;
     // A held Right steps a Number but never runs through a Choice (relays, run mode): the navigator
@@ -211,21 +267,15 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     navigator_.repeats(events.repeat & ~events.shortPress);
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
     meterRangeKeys(events, now); // KEY5 in the DMM: its own press, release and hold events.
+    if (events.press & Keypad::AutoRange) { autoArmed_ = true; autoFired_ = autoShown_ = false; autoHeldAt_ = now - KeyGestures::PressQualifyMs; }
     if (!(events.shortPress | events.longPress | events.repeat)) return;
     // REL/Power held to the end of its progress (PowerHold): the power-off pipeline at once, from
     // every screen, menu, dialog, Remote or headless; it saves settings and files and stops the
     // instruments, and says why when it cannot.
-    if (events.longPress & Keypad::Relative) {
-        if (panel_==Panel::Zero) data_.cancelZero(now);
-        if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
-        confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
-        return;
-    }
+    if (events.longPress & Keypad::Relative) { powerOff(now); return; }
     if (panel_==Panel::Zero) { zeroKeys(keys,now); return; }
     if (remote_ || !uiReady_) { // Locked: Remote, or no UI to operate (headless).
-        if ((events.longPress & Keypad::Menu) && setRemote(false)) {
-            state_.settingsOpen = true; settingsMenu_.open(); navigator_.reset(); showSettings();
-        }
+        if (events.longPress & Keypad::Menu) setRemote(false, "USB Remote off");
         return;
     }
     if (panel_ == Panel::Confirmation) { confirmationKeys(keys,now); return; }
@@ -258,13 +308,14 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     } else if (state_.settingsOpen) settingsKeys(keys, now);
     else panelKeys(keys, now, !(events.repeat & (Keypad::Up|Keypad::Down|Keypad::Left|Keypad::Right)));
 }
-void ApplicationController::changed(uint32_t now) { saves_.settingsChanged(now); }
+void ApplicationController::changed(uint32_t) { saves_.settingsChanged(); }
 // The guarded profile confirmed after its stable time (BootConfirmation); no NOR write while a host is
 // active (STORE-02) or a shutdown or the Recovery handoff runs.
 void ApplicationController::serviceBootGuard(uint32_t now) {
     // Also not while HOLD waits for its record (scopeHoldPending): the confirmation is not consumed, the next pass writes it.
     if (!guard_ || shutdownSequence_.active() || recoveryPending_ || (usb_ && usb_->hostActive(now)) || data_.scopeHoldPending()) return;
     if (!guardConfirmation_.due(now, ClockControl::activeMode() == OverclockedRunMode, started_)) return;
+    stalls_.mark(StallLog::Guard);
     guardConfirmation_.written(guard_->confirm(), now);
     Watchdog::progress();
 }
@@ -279,32 +330,50 @@ void ApplicationController::stopBootGuard() {
 // Each save, failed or not, is a finished step (WatchdogPolicy): two saves in one pass may each end
 // only after a NOR timeout (5 s), longer together than the watchdog allows without progress.
 bool ApplicationController::SettingsStore::saveTheme() {
+    a_.stalls_.mark(StallLog::Theme);
     const bool saved = a_.themes_.savePlot(a_.view_.waveform().options());
     Watchdog::progress();
     return saved;
 }
 bool ApplicationController::SettingsStore::savePreferences() {
     usbtrace::mark(usbtrace::Tag::SaveBegin);
+    a_.stalls_.mark(StallLog::Save);
     const bool saved = a_.preferences_.save(a_.prefs_);
     usbtrace::mark(usbtrace::Tag::SaveEnd);
     Watchdog::progress();
     return saved;
 }
-// Erasing the external Flash dips the supply shared with the USB PHY hard enough to drop the host, so
-// saves wait until no host is present (STORE-02). A running shutdown or Recovery handoff saves once
-// itself (ShutdownSequence), so the background save stays out of its way (PendingSaves).
+// Settings and theme are saved only by ShutdownSequence (PendingSaves).
 void ApplicationController::store(uint32_t now) {
+    // The block cache's pulse (a NOR erase, a stall) only while nobody uses the device.
+    const bool unused = idle_.quietMs(now) >= UnusedMs && !(usb_ && usb_->hostActive(now)) && !autoBusy() && !data_.zeroBusy() &&
+                        !shots_.busy() && !imageReader_.busy() &&
+                        !(state_.mode == MeasurementMode::Oscilloscope && data_.scopeRequest().trigger.mode == scope::TriggerMode::Single && !data_.scopeHeld());
+    if (fs_.service(now, unused)) stalls_.mark(StallLog::Save);
     followGeneratorOutput(now); // A confirmed OUTP ON just before a save is in it.
-    SettingsStore files(*this);
-    const uint32_t outcome = saves_.service(now, shutdownSequence_, recoveryPending_, usb_ && usb_->hostActive(now),
-                                            data_.scopeHoldPending(), files);
-    if (!uiReady_) return;
-    if (outcome & PendingSaves::ThemeFailed) view_.notify(themes_.error(), now);
-    if (outcome & PendingSaves::SettingsFailed) view_.notify(preferences_.error(), now);
-    if ((outcome & PendingSaves::SettingsAttempted) && state_.settingsOpen && !settingsMenu_.information()) showSettings();
+    // The power-off save's volume while changes wait (UI only): every minute, at once when they start or Settings opens.
+    const bool pending = saves_.settingsPending() && uiReady_;
+    const char *before = saveProblem_;
+    const bool opened = state_.settingsOpen && !saveSettingsOpen_;
+    saveSettingsOpen_ = state_.settingsOpen;
+    if (!pending) { saveProblem_ = saveWarned_ = nullptr; saveCheckedAt_ = now - 60000; saveWarnedAt_ = now - 600000; }
+    else if (opened || int32_t(now - saveCheckedAt_) >= 60000) {
+        saveCheckedAt_ = now;
+        saveProblem_ = !fs_.mounted() ? "No storage: settings will not save" : !fs_.refreshFree() ? "Storage error: settings may not save"
+                     : fs_.freeBytes() < 16384 ? "Storage full: settings will not save" : nullptr;
+    }
+    if (uiReady_ && state_.settingsOpen && !settingsMenu_.information() && (saveProblem_ != before || pending != saveShownPending_))
+        showSettings();
+    // The same problem every 10 minutes, another one at least 2 after the last notice; never over another notice.
+    if (!saveProblem_) saveWarned_ = nullptr;
+    if (int32_t(now - saveWarnedAt_) > 600000) saveWarnedAt_ = now - 600000; // No int32 wrap on long uptimes.
+    const int32_t since = int32_t(now - saveWarnedAt_);
+    if (saveProblem_ && !view_.toastShowing() && (since >= 600000 || (saveProblem_ != saveWarned_ && since >= 120000))) {
+        saveWarned_ = saveProblem_; saveWarnedAt_ = now; view_.notify(saveProblem_, now);
+    }
 }
 void ApplicationController::queuePlotSave(uint32_t now) {
-    saves_.plotChanged(now);
+    saves_.plotChanged();
     prefs_.useBuiltinTheme = 0;
     changed(now);
 }
@@ -315,8 +384,9 @@ void ApplicationController::showSettings() {
     }
     char saved[48];
     std::snprintf(saved, sizeof saved, "Saved: %s", storage::Layout::SettingsFile);
-    const char* status = saves_.settingsPending() ? (usb_ && usb_->connected() ? "Saves when USB host disconnects" : "Saving settings...")
-        : preferences_.error() ? preferences_.error() : saved;
+    saveShownPending_ = saves_.settingsPending();
+    const char* status = preferences_.error() ? preferences_.error() : !saves_.settingsPending() ? saved
+                       : saveProblem_ ? saveProblem_ : "Saved at power-off";
     view_.settings(settingsMenu_, settingsRows(), navigator_, status);
 }
 }

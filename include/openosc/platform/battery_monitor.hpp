@@ -10,6 +10,7 @@ public:
     bool initialize();
     void poll(uint32_t now);
     const power::BatteryState &state() const { return gauge_.state(); }
+    static bool supplied() { return GPIOC->IDR & GPIO_PIN_9; } // PC9 now, not debounced; reads high on battery in the Scope (batch 6).
 private:
     ADC_HandleTypeDef adc_{};
     power::BatteryGauge gauge_;

@@ -3,16 +3,22 @@
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/handoff.hpp"
 #include "openosc/platform/recovery_request.hpp"
+#include "openosc/platform/reset_record.hpp"
 #include "openosc/recovery/controller.hpp"
 #include "openosc/update/crc32.hpp"
 
 int main() {
     using namespace openosc;
     if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
-    boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     Board::delay(30);
     const bool requestedByApp = RecoveryRequest::take();
-    const bool recoveryRequested = (Keypad::read() & Keypad::F2) || requestedByApp;
+    // Recovery itself faulted last time (e.g. on an ECC-broken header after a cut update): no auto-start
+    // into the same fault, the menu comes up. Taken once.
+    auto &last = ResetRecord::retained();
+    const bool faulted = ResetRecord::valid(last) && last.source == uint32_t(ResetRecord::Source::Recovery) &&
+                         (last.cause == uint32_t(ResetRecord::Cause::Fault) || last.cause == uint32_t(ResetRecord::Cause::Interrupt));
+    if (faulted) last.magic = 0;
+    const bool recoveryRequested = (Keypad::read() & Keypad::F2) || requestedByApp || faulted;
     Display screen;
     UpdateOperation update(screen);
 #ifndef OPENOSC_RAM_TEST
@@ -20,6 +26,7 @@ int main() {
 #else
     (void)recoveryRequested;
 #endif
+    boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     if (!screen.initialize()) {
         boot_diagnostics.error = 2;
         Watchdog::fatal(2);

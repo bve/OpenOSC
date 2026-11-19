@@ -166,6 +166,12 @@ void AnalogDial::paint(lv_layer_t *layer) const {
     lv_draw_label_dsc_t number;
     lv_draw_label_dsc_init(&number);
     number.font = look_.text(MeterRole::ScaleNumbers, 12); number.color = scale; number.align = LV_TEXT_ALIGN_CENTER;
+    // A needle frame redraws a thin strip: what lies outside it is not even queued.
+    const lv_area_t &clip = layer->_clip_area;
+    const auto hits = [&](float x1, float y1, float x2, float y2, float pad) {
+        return std::min(x1, x2) - pad <= clip.x2 && std::max(x1, x2) + pad >= clip.x1 &&
+               std::min(y1, y2) - pad <= clip.y2 && std::max(y1, y2) + pad >= clip.y1;
+    };
     const int ticks = counts_.ticks(), step = counts_.major;
     for (int i = 0; i <= ticks; ++i) {
         const bool major = i % step == 0;
@@ -174,10 +180,11 @@ void AnalogDial::paint(lv_layer_t *layer) const {
         tick.width = look_.tickWidth + (major ? 1 : 0);
         tick.p1 = {lv_value_precise_t(g.px + s * g.radius), lv_value_precise_t(g.py - c * g.radius)};
         tick.p2 = {lv_value_precise_t(g.px + s * inner), lv_value_precise_t(g.py - c * inner)};
-        lv_draw_line(layer, &tick);
+        if (hits(tick.p1.x, tick.p1.y, tick.p2.x, tick.p2.y, tick.width + 1)) lv_draw_line(layer, &tick);
         if (!major) continue;
-        number.text = labels_[i / step]; number.text_local = 1;
         const lv_area_t box = numberArea(i / step);
+        if (!hits(box.x1, box.y1, box.x2, box.y2, 0)) continue;
+        number.text = labels_[i / step]; number.text_local = 1;
         lv_draw_label(layer, &number, &box);
     }
     // The unit of the numbers, under the top of the arc.

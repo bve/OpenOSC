@@ -12,9 +12,10 @@ void pins(GPIO_TypeDef* port, uint32_t mask, uint32_t af) {
     HAL_GPIO_Init(port, &gpio);
 }
 }
-bool Display::initialize() {
+bool Display::initialize(bool keep) {
     __HAL_RCC_LTDC_CLK_ENABLE();
-    __HAL_RCC_LTDC_FORCE_RESET(); __HAL_RCC_LTDC_RELEASE_RESET();
+    keep = keep && (LTDC->GCR & LTDC_GCR_LTDCEN) && LTDC_Layer1->CFBAR == 0x24000000U; // Still scanning it, else set up.
+    if (!keep) { __HAL_RCC_LTDC_FORCE_RESET(); __HAL_RCC_LTDC_RELEASE_RESET(); }
 #ifndef OPENOSC_APPLICATION
     RCC_PeriphCLKInitTypeDef clock{};
     clock.PeriphClockSelection = RCC_PERIPHCLK_LTDC;
@@ -34,14 +35,19 @@ bool Display::initialize() {
     pins(GPIOE, GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15, GPIO_AF14_LTDC);
     GPIO_InitTypeDef gpio{};
     gpio.Pin = GPIO_PIN_13; gpio.Mode = GPIO_MODE_OUTPUT_PP;
-    HAL_GPIO_Init(GPIOC, &gpio);
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-    Board::delay(50);
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-    Board::delay(10);
-    if (!configure(0x24000000)) return false;
-    LTDC_Layer2->CR = 0;
-    clear(); present(); PowerControl::backlight(true);
+    if (!keep) { // The panel's reset blanks it: not while the logo stays up.
+        HAL_GPIO_Init(GPIOC, &gpio);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+        Board::delay(50);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+        Board::delay(10);
+    }
+    if (!keep) {
+        if (!configure(0x24000000)) return false;
+        LTDC_Layer2->CR = 0;
+        clear(); present();
+    }
+    PowerControl::backlight(true);
     return true;
 }
 // The controller's timings and layer, scanning `frame`.

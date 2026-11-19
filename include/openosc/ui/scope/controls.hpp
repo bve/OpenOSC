@@ -36,12 +36,16 @@ public:
         FftWindow,
         FftScale,
         FftDc,
+        CounterSource,
+        CounterAverage,
+        CounterPpm,
         Section,
         Count
     };
-    enum class Group { View, Capture, Cursors, History, Fft, Count };
+    enum class Group { View, Capture, Cursors, History, Fft, Counter, Count };
     Group group = Group::View;
-    // The rows of the group: Section first, then the group's own.
+    bool listing = true; // The section list (DisplayProperties); false: the group's own rows.
+    // The rows of the group (Section past the last).
     unsigned count() const;
     unsigned row(unsigned index) const;
     unsigned index(unsigned row) const;

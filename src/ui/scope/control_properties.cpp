@@ -1,4 +1,5 @@
 #include "openosc/ui/scope/controls.hpp"
+#include <algorithm>
 #include <cstdio>
 
 namespace openosc::plot {
@@ -14,7 +15,7 @@ template <class T, size_t N> unsigned indexOf(T value, const T (&choices)[N]) {
 Kind Controls::kind(unsigned row) const {
     switch (row) {
     case PeakHold: case Glow: case Visible: case Invert: case TimeCursors: case VoltageCursors: case FftDc: return Kind::Toggle;
-    case Pan: case Gain: case Position: case CursorAX: case CursorBX: case CursorAY: case CursorBY: return Kind::Number;
+    case Pan: case Gain: case Position: case CursorAX: case CursorBX: case CursorAY: case CursorBY: case CounterPpm: return Kind::Number;
     case Reference: case Clear: return Kind::Action;
     default: return Kind::Choice;
     }
@@ -52,6 +53,9 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case FftWindow: std::snprintf(text, capacity, "FFT window"); break;
     case FftScale: std::snprintf(text, capacity, "FFT scale"); break;
     case FftDc: std::snprintf(text, capacity, "FFT remove DC"); break;
+    case CounterSource: std::snprintf(text, capacity, "Counter"); break;
+    case CounterAverage: std::snprintf(text, capacity, "Readings averaged"); break;
+    case CounterPpm: std::snprintf(text, capacity, "Clock correction"); break;
     default: if (capacity) text[0] = 0; break;
     }
 }
@@ -60,7 +64,7 @@ unsigned Controls::choices(unsigned row) const {
     case Section: return unsigned(Group::Count);
     case Channel: case FftSource: case FftScale: return 2;
     case View: case GridStyle: case Average: case FftWindow: return 4;
-    case TraceStyle: case MathTrace: case TraceInterpolation: case SampleReduction: return 3;
+    case TraceStyle: case MathTrace: case TraceInterpolation: case SampleReduction: case CounterSource: case CounterAverage: return 3;
     case Persistence: return sizeof Persistences / sizeof *Persistences;
     case Zoom: return sizeof Zooms / sizeof *Zooms;
     default: return kind(row) == Kind::Toggle ? 2 : 0;
@@ -91,6 +95,8 @@ unsigned Controls::choice(unsigned row) const {
     case TimeCursors: return o.cursors.time;
     case VoltageCursors: return o.cursors.voltage;
     case FftDc: return o.spectrum.removeDc;
+    case CounterSource: return o.counter.source;
+    case CounterAverage: return o.counter.average == 1 ? 0 : o.counter.average == 3 ? 1 : 2;
     default: return 0;
     }
 }
@@ -98,7 +104,7 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
     static constexpr const char *views[] = {"Y-T", "X-Y", "FFT", "Y-T+FFT"}, *styles[] = {"Vectors", "Points", "Envelope"},
         *grids[] = {"Full", "Major", "Axes", "None"}, *maths[] = {"Off", "CH1+CH2", "CH1-CH2"}, *reductions[] = {"Peak", "HD mean", "Auto (HD/Peak)"},
         *interpolations[] = {"Linear", "Sinc", "Spline"}, *windows[] = {"Rectangular", "Hann", "Hamming", "Blackman"},
-        *scales[] = {"Linear", "dBFS"};
+        *scales[] = {"Linear", "dBFS"}, *counters[] = {"Off", "CH1", "CH2"}, *averaged[] = {"1", "3", "10"};
     const auto pick = [&](const char *const *names, unsigned n) { std::snprintf(text, capacity, "%s", i < n ? names[i] : ""); };
     switch (row) {
     case Section: std::snprintf(text, capacity, "%s", groupName(i)); break;
@@ -111,6 +117,8 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
     case TraceInterpolation: pick(interpolations, 3); break;
     case FftWindow: pick(windows, 4); break;
     case FftScale: pick(scales, 2); break;
+    case CounterSource: pick(counters, 3); break;
+    case CounterAverage: pick(averaged, 3); break;
     case Persistence:
         if (i < choices(row) && Persistences[i] == InfinitePersistence) std::snprintf(text, capacity, "Infinite");
         else std::snprintf(text, capacity, "%u ms", i < choices(row) ? Persistences[i] : options.persistenceMs);
@@ -134,6 +142,7 @@ void Controls::value(unsigned row, char *text, size_t capacity) const {
     case CursorBX: std::snprintf(text, capacity, "%u/1000", cursor.xB); break;
     case CursorAY: std::snprintf(text, capacity, "%u/1000", cursor.yA); break;
     case CursorBY: std::snprintf(text, capacity, "%u/1000", cursor.yB); break;
+    case CounterPpm: std::snprintf(text, capacity, "%+d ppm", o.counter.ppm); break;
     default:
         if (kind(row) == Kind::Choice || kind(row) == Kind::Toggle) choiceName(row, choice(row), text, capacity);
         else if (capacity) text[0] = 0;
@@ -150,6 +159,7 @@ int32_t Controls::number(unsigned row) const {
     case CursorBX: return cursor.xB;
     case CursorAY: return cursor.yA;
     case CursorBY: return cursor.yB;
+    case CounterPpm: return options.counter.ppm;
     default: return 0;
     }
 }
@@ -163,6 +173,7 @@ void Controls::setNumber(unsigned row, int32_t value) {
     case CursorBX: cursor.xB = uint16_t(value); break;
     case CursorAY: cursor.yA = uint16_t(value); break;
     case CursorBY: cursor.yB = uint16_t(value); break;
+    case CounterPpm: options.counter.ppm = int16_t(std::clamp<int32_t>(value, -1000, 1000)); break;
     default: break;
     }
 }

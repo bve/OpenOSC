@@ -22,6 +22,7 @@ public:
 
 private:
     void receive();
+    void restartReceive();
     void interrupt();
     static UartDma *active_;
     PeripheralResources &resources_;

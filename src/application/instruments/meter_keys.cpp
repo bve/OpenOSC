@@ -72,7 +72,7 @@ ui::MeterProperties ApplicationController::meterProperties() const {
     return ui::MeterProperties(meter.displayed(),prefs_.meter.display,prefs_.meter.statistics,
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
-        prefs_.meter.face, prefs_.meter.palette, &themes_.theme(), prefs_.meter.hold.mode);
+        prefs_.meter.face, prefs_.meter.palette, &themes_.theme(), prefs_.meter.hold.mode).barGraph(prefs_.meter.bar);
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
 void ApplicationController::refreshMeterPanel() {
@@ -165,6 +165,7 @@ void ApplicationController::meterChanged(unsigned row, uint32_t now) {
         return;
     case Row::Display: prefs_.meter.display=meterEditor_.display(); break;
     case Row::Statistics: prefs_.meter.statistics=meterEditor_.statistics(); break;
+    case Row::BarGraph: prefs_.meter.bar=meterEditor_.barGraph(); break;
     case Row::Digits: prefs_.meter.face=meterEditor_.face(); break;
     case Row::Colors: prefs_.meter.palette=meterEditor_.palette(); break;
     default: return;

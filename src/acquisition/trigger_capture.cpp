@@ -11,9 +11,11 @@
 #include <cmath>
 
 namespace openosc::scope {
+// Lane 0 alone (lanes run in step, within 3 words): bus reads mid-record delay the capture's GPIO reads.
 void CaptureDma::triggerEvent(bool) {
     CriticalSection guard;
-    uint64_t lanes[4]; laneCounts(lanes);
+    const uint64_t lane=laneCount(0);
+    const uint64_t lanes[4]{lane,lane,lane,lane};
     eventCursor_=CircularProgress::prefix(lanes);
 }
 void CaptureDma::freezeRecord() {
@@ -87,7 +89,7 @@ void CaptureDma::publishTriggered() {
     const uint16_t *banks[4]={buffer_.lanes[0],buffer_.lanes[1],buffer_.lanes[2],buffer_.lanes[3]};
     const FrameView ring(metadata,banks,buffer_.wordsPerLane(),buffer_.split() ? &split_ : nullptr);
     const uint32_t target=event<=first ? 0 : uint32_t(std::min<uint64_t>(metadata.samples-1,event-first));
-    const auto frame=TriggerRecord::select(ring,trigger_,requestedSamples_,target,forced_); // trigger_ stays as set.
+    auto frame=TriggerRecord::select(ring,trigger_,requestedSamples_,target,forced_); // trigger_ stays as set.
     if (!frame.valid()) {
         mailbox_.cancel(); status_=DataStatus::NoData; return; // A comparator event must agree with the raw edge.
     }
@@ -99,6 +101,11 @@ void CaptureDma::publishTriggered() {
     const uint32_t spare=(frame.metadata().origin+metadata.ring-metadata.origin)%metadata.ring;
     usbtrace::mark(usbtrace::Tag::CaptureStop, uint32_t(std::min<uint64_t>(late,0xffff)) | std::min<uint32_t>(spare,0x7fffU) << 16 |
                    (end<due ? 1U << 31 : 0U));
+    if (frame.metadata().triggered && !frame.metadata().forced) { // Where the comparator event fell.
+        const uint32_t size=ring.metadata().ring ? ring.metadata().ring : 1;
+        const uint32_t start=uint32_t((uint64_t(frame.metadata().origin)+size-ring.metadata().origin%size)%size);
+        frame=frame.withEvent(int32_t(int64_t(target)-start-frame.metadata().triggerIndex));
+    }
     metadata_=frame.metadata();
     // An Auto or forced record without a trigger: TriggerSearch::nearest proved no edge in the whole ring.
     edgeless_=!frame.metadata().triggered;

@@ -5,7 +5,7 @@
 #define LV_MEM_SIZE (60 * 1024U) /* Peak use 42 KiB in the native UI review; AXI also holds the 512 KiB arena. */
 // Temporary LVGL image/layer buffers can be handed to DMA2D as well as objects.
 #define LV_ATTRIBUTE_LARGE_RAM_ARRAY __attribute__((section(".lvgl_heap"), aligned(32)))
-#define LV_DEF_REFR_PERIOD 8
+#define LV_DEF_REFR_PERIOD 6
 #define LV_USE_DRAW_DMA2D 1
 #define LV_DRAW_DMA2D_HAL_INCLUDE "stm32h7xx.h"
 #define LV_USE_DRAW_DMA2D_INTERRUPT 1

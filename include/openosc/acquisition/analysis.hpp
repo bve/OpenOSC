@@ -12,8 +12,9 @@ struct TriggerSettings {
     uint16_t position=250; // Requested pre-trigger fraction, in thousandths of the record.
     // Noise reject: an edge counts only if, since the signal was last past the level, it went
     // RejectCodes beyond the level on the side it starts from (hysteresis on arming; the edge stays
-    // where it crosses the level). Off (default) counts every crossing, as before.
-    bool reject = false;
+    // where it crosses the level). Off counts every crossing: chatter on the opposite slope can
+    // then trigger half a period late.
+    bool reject = true;
     static constexpr int RejectCodes = 4;
     bool valid() const;
     // The code a rising (falling) edge must have come from at or below (above): the level itself
@@ -26,6 +27,8 @@ struct TriggerSettings {
 class TriggerSearch {
 public:
     static bool find(const FrameView &frame, const TriggerSettings &settings, uint32_t &index);
+    // Edge `index`: where the level (between codes, level +- 0.5) is crossed, in 1/65536 points before it.
+    static uint32_t crossingBeforeQ16(const FrameView &frame, const TriggerSettings &settings, uint32_t index);
     static bool nearest(const FrameView &frame,const TriggerSettings &settings,uint32_t target,uint32_t &index);
     // The same among the edges at indices first..last only (clamped to the record): ties to the lower index.
     static bool nearest(const FrameView &frame,const TriggerSettings &settings,uint32_t target,uint32_t first,uint32_t last,

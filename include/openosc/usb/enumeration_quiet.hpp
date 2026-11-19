@@ -26,6 +26,8 @@ protected:
 // - configured(): a healthy host ends the window at once; a later host (unplugged, plugged again)
 //   may have one window of its own at its first reset.
 // - stopped(): a full stop ends it and allows the next logical attach.
+// - connected(now): D+ is up. No bus reset of any kind (answered()) within FirstResetMs ends the window
+//   early, as running out does: an episode without a proven reset leaves one window for a later host.
 // The budget is a deadline from the window's start: a `now` from before it (a poll's tick taken
 // before the window opened) never ends it.
 // So a failed host, a host removed after failing and a standalone scope without one get no periodic
@@ -33,28 +35,36 @@ protected:
 class EnumerationQuiet {
 public:
     static constexpr uint32_t BudgetMs = 5000;
+    static constexpr uint32_t FirstResetMs = 500; // No host's reset this long after the connect: no host (PC9 lies).
+    void connected(uint32_t now) { if (active_) { connectedAt_ = now; connecting_ = true; } } // D+ up, at `now`.
+    void answered() { connecting_ = false; } // Any bus reset after the connect, SOFs proven or not.
     void request() { armed_ = true; }
     void attach(uint32_t now) {
         if (!armed_) return;
-        armed_ = false; awaitingHost_ = false;
+        armed_ = false; awaitingHost_ = false; connecting_ = false; // Its own connect starts the cut-off.
         if (!active_) open(now);
     }
     void abandon() { active_ = false; awaitingHost_ = false; armed_ = false; }
     void reset(uint32_t now) {
+        connecting_ = false;
         if (active_) { resetSeen_ = true; return; }
         if (awaitingHost_) { awaitingHost_ = false; open(now); resetSeen_ = true; }
     }
     void configured() { active_ = false; awaitingHost_ = true; }
     void stopped() { active_ = false; awaitingHost_ = false; armed_ = true; }
     bool quiet(uint32_t now) {
-        if (active_ && int32_t(now - startedAt_) >= int32_t(BudgetMs)) { active_ = false; awaitingHost_ = !resetSeen_; }
+        const bool unanswered = connecting_ && int32_t(now - connectedAt_) >= int32_t(FirstResetMs);
+        if (active_ && (unanswered || int32_t(now - startedAt_) >= int32_t(BudgetMs))) {
+            active_ = connecting_ = false; awaitingHost_ = !resetSeen_;
+        }
         return active_;
     }
 
 private:
-    void open(uint32_t now) { active_ = true; startedAt_ = now; resetSeen_ = false; }
-    uint32_t startedAt_ = 0;
+    void open(uint32_t now) { active_ = true; startedAt_ = now; resetSeen_ = connecting_ = false; }
+    uint32_t startedAt_ = 0, connectedAt_ = 0;
     bool active_ = false, resetSeen_ = false, awaitingHost_ = false, armed_ = true; // The boot is a request.
+    bool connecting_ = false; // Connected within this window, waiting for the host's first reset.
 };
 
 // Every attach of the device to the bus goes through here: the start (USBD_Start after a full
@@ -100,7 +110,7 @@ public:
         if (wanted && !proven) { refused_ = true; return true; }
         const Kind kind = pending_;
         pending_ = Kind::None; refused_ = false;
-        if (connect_(context_, kind)) return true;
+        if (connect_(context_, kind)) return true; // connect_ marks window().connected at D+.
         abandon();
         return false;
     }

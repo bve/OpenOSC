@@ -29,7 +29,7 @@ SECTIONS {
     .data : { . = ALIGN(4); _sdata = .; *(.data*) . = ALIGN(4); _edata = .; } > RAM AT> FLASH
     _sidata = LOADADDR(.data);
     .bss (NOLOAD) : { . = ALIGN(1024); _sbss = .; *(.bss*) *(COMMON) . = ALIGN(8); _ebss = .; } > RAM
-    .framebuffer (NOLOAD) : { . = ALIGN(64); KEEP(*(.framebuffer)) . = ALIGN(64); } > AXI
+    .framebuffer (NOLOAD) : { . = ALIGN(64); __openosc_framebuffer = .; KEEP(*(.framebuffer)) . = ALIGN(64); } > AXI
     .dma (NOLOAD) : { . = ALIGN(32); *(.dma .dma.*) . = ALIGN(32); } > AXI
     .dma_data : {
         . = ALIGN(32); _sdma_data = .; KEEP(*(.dma_data))

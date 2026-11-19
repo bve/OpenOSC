@@ -26,7 +26,9 @@ public:
     void autoSetup(bool active) { automatic_=active; status(health_,statusHeld_); }
     void calibrating(bool active) { calibrating_=active; status(health_,statusHeld_); }
     void triggerState(scope::TriggerMode mode, bool waiting) {
+        const bool label = triggerMode_ != mode;
         triggerMode_ = mode; waiting_ = waiting; status(health_, statusHeld_);
+        if (label) cards();
     }
 
 private:
@@ -42,5 +44,8 @@ private:
     scope::TriggerMode triggerMode_ = scope::TriggerMode::Auto;
     DataStatus health_ = DataStatus::NoData;
     bool waiting_ = false, statusHeld_ = false,automatic_=false,calibrating_=false;
+    static constexpr uint32_t TrigdHoldMs = 500;
+    bool trigd_ = false;
+    uint32_t trigdAt_ = 0;
 };
 } // namespace openosc::ui

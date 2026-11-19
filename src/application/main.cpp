@@ -5,6 +5,7 @@
 #include "openosc/platform/clocks.hpp"
 #include "openosc/application/controller.hpp"
 #include "openosc/application/boot_guard.hpp"
+#include "openosc/application/boot_timing.hpp"
 #include "openosc/update/crc32.hpp"
 #include "openosc/update/layout.hpp"
 #include <new>
@@ -28,28 +29,38 @@ int main() {
     using namespace openosc;
     StackGuard::arm(); // The lowest stack words, far below main's frame now; checked by the main loop.
     if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
+    BootTiming::mark(BootTiming::Start);
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
+    BootTiming::mark(BootTiming::Crc);
     NorFlash nor;
     BlockDevice disk(nor);
     Filesystem fs(disk);
-    if (nor.initialize() && disk.initialize()) {
-        fs.mountPrepared();
+    const bool norReady = nor.initialize();
+    BootTiming::mark(BootTiming::Nor);
+    const bool diskReady = norReady && disk.initialize();
+    BootTiming::mark(BootTiming::Disk);
+    if (diskReady) {
+        fs.mountPrepared([] { BootTiming::mark(BootTiming::Fat); });
         boot_diagnostics.flashStatus=fs.result();
     }
+    BootTiming::mark(BootTiming::Mounted);
     Watchdog::progress(); // Boot stages are the boot's progress (one pass, WatchdogPolicy::OperationMs).
     PreferencesFile preferences(fs);
     preferences.load();
+    BootTiming::mark(BootTiming::Settings);
     Watchdog::progress();
     // The 360 MHz profile only through its guard (BootGuard), before USB starts (STORE-02).
     BootGuard guard(fs);
     RunModeSetting setting(preferences);
     const auto start = guard.start(preferences.values().scope.runMode, setting);
+    BootTiming::mark(BootTiming::Guard);
     Watchdog::progress();
     if (!ClockControl::selectPerformance(start.mode)) {
         boot_diagnostics.error=4;
         // Keep a usable instrument if the profile cannot be locked; no high-rate metadata is fabricated.
         if (!ClockControl::selectPerformance(0)) Watchdog::fatal(4);
     }
+    BootTiming::mark(BootTiming::Clocks);
 #ifdef OPENOSC_USB_TRACE
     // Both the DWT timestamp scale and TIM7 divider depend on the selected profile.
     usbtrace::start();

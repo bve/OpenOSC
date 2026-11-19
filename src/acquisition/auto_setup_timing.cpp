@@ -26,8 +26,21 @@ bool AutoSetup::timing(const SignalBand &band,const Periodicity &raw,double samp
     }
     if (counters && !counterRejected_) {
         const auto &hardware=counters->channels[channel_];
-        if ((counters->enabled&(1U<<channel_)) && hardware.settled() && hardware.edges>=4 &&
-            hardware.hertz>0 && std::isfinite(hardware.hertz)) {
+        const bool counted=(counters->enabled&(1U<<channel_)) && hardware.settled() && hardware.edges>=4 &&
+                           hardware.hertz>0 && std::isfinite(hardware.hertz);
+        // Edges but no period (aliased): FCNT decides; a completed wait per search and source, the deadline moved past it.
+        if (!counted && !raw.coherent && raw.edges>=2 && (counters->enabled&(1U<<channel_)) && counterWait_!=CounterWait::Done) {
+            const uint32_t end=now+CounterWaitMs+2*recordMs()+2000;
+            if (counterWait_==CounterWait::None && int32_t(totalDeadline_-end)>0) {
+                counterWait_=CounterWait::Waiting; counterWaitAt_=now;
+                if (int32_t(end-deadline_)>0) deadline_=end;
+            }
+            if (counterWait_==CounterWait::Waiting) {
+                if (uint32_t(now-counterWaitAt_)<CounterWaitMs) return false;
+                counterWait_=CounterWait::Done;
+            }
+        }
+        if (counted) {
             if (raw.coherent) {
                 // A slow noisy comparator crossing can count several edges per actual period, and
                 // a fast signal can alias in the ADC: FCNT is taken only if the raw period agrees

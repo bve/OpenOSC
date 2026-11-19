@@ -38,12 +38,15 @@ public:
     double uncertainty(Measurement kind) const { return unsigned(kind) < Count ? bounds_[unsigned(kind)] : 0; }
     unsigned digits(Measurement kind) const;
     bool approximate(Measurement kind) const;
+    // An ADC-clipped record: ">" (true value higher), "<" (lower), "?" (either), or nullptr.
+    const char *clipMark(Measurement kind) const;
 private:
     int supported(Measurement kind) const; // Significant digits the bound allows (MaximumDigits without one).
     double values_[Count]{};
     float bounds_[Count]{};
     double span_ = 0;
     unsigned valid_ = 0;
+    bool clipLow_ = false, clipHigh_ = false;
     FrequencySource source_ = FrequencySource::None;
 };
 // The hardware counter beside a record of the same signal: FCNT is suspect ("FC?") when it
