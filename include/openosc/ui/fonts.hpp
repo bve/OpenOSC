@@ -14,7 +14,13 @@ LV_FONT_DECLARE(openosc_numeric_40);
 LV_FONT_DECLARE(openosc_numeric_56);
 LV_FONT_DECLARE(openosc_ibm_52);
 LV_FONT_DECLARE(openosc_ibm_64);
+LV_FONT_DECLARE(openosc_ibm_72);
+LV_FONT_DECLARE(openosc_ibm_80);
 LV_FONT_DECLARE(openosc_mono_64);
+LV_FONT_DECLARE(openosc_mono_72);
+LV_FONT_DECLARE(openosc_mono_80);
 LV_FONT_DECLARE(openosc_segment_52);
 LV_FONT_DECLARE(openosc_segment_64);
+LV_FONT_DECLARE(openosc_segment_72);
+LV_FONT_DECLARE(openosc_segment_80);
 }

@@ -10,7 +10,7 @@ public:
     // Bound of a generator operation's wait (above generator::ModuleLink::ExchangeMs, checked in generator.cpp).
     static constexpr uint32_t GeneratorMs = 6000;
     // Bound of a DMM operation's wait (function, AUTO, range: above their own deadlines, checked in meter.cpp).
-    static constexpr uint32_t OperationMs = 7000;
+    static constexpr uint32_t OperationMs = 8000;
     explicit Engine(Backend &backend) : backend_(backend) {}
     bool feed(uint8_t byte, uint32_t now);
     bool endMessage(uint32_t now);

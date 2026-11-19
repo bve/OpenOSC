@@ -6,6 +6,18 @@
 #include <cstring>
 
 namespace openosc {
+namespace {
+// While a selected function is awaited (boot, restore, SCPI), the chip's old reading is not shown.
+const dmm::Result &shownReading(const dmm::Session &meter, dmm::Function selecting) {
+    static const dmm::Result none{};
+    return selecting != dmm::Function::Unknown ? none : meter.displayed();
+}
+} // namespace
+// The function a running selection awaits, unless a HOLD keeps a reading.
+dmm::Function ApplicationController::meterSelecting() const {
+    const auto &meter = data_.meter();
+    return data_.dmmSelectionStatus() == DataStatus::Busy && !meter.holding() ? meter.awaited() : dmm::Function::Unknown;
+}
 // Full-rate capture restarts under a large redraw, or while a host enumerates, have coincided with
 // USB33RDY dips and bus resets on the device (cause not established). A hidden trace needs no new
 // frames, and such a record takes under a millisecond when one is asked for, so those restarts wait.
@@ -124,10 +136,11 @@ void ApplicationController::displayData(uint32_t now) {
         uint32_t(now - meterBarAt_) >= 8) {
         meterBarAt_ = now;
         const auto &meter = data_.meter();
-        view_.multimeterBar(meter.displayed(), meter.status(data_.nowUs(),2000000), &meter.relative(), now);
+        view_.multimeterBar(shownReading(meter, meterSelecting()), meter.status(data_.nowUs(),2000000), &meter.relative(), now);
     }
     if (state_.mode != MeasurementMode::Oscilloscope) readouts_.reset(data_); // Left the Scope: nothing kept.
-    const unsigned interval = state_.mode == MeasurementMode::Oscilloscope && panel_ == Panel::None ? 16 : 40;
+    const unsigned interval = panel_ != Panel::None ? 40 : state_.mode == MeasurementMode::Oscilloscope ? 16
+                              : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
     if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
@@ -137,7 +150,7 @@ void ApplicationController::displayData(uint32_t now) {
             const auto &meter = data_.meter();
             char word[sizeof lastMeterHoldWord_];
             meterHoldWord(word, sizeof word);
-            view_.multimeterStatus(meter.displayed(), meter.holding(), meter.status(data_.nowUs(), 2000000), meter.relative().active(), word);
+            view_.multimeterStatus(shownReading(meter, meterSelecting()), meter.holding(), meter.status(data_.nowUs(), 2000000), meter.relative().active(), word);
         } else view_.generatorStatus(data_.generator().snapshot());
         return;
     }
@@ -223,18 +236,21 @@ void ApplicationController::displayData(uint32_t now) {
         // sound; a countdown second redraws only the pill.
         char word[sizeof lastMeterHoldWord_];
         meterHoldWord(word, sizeof word);
-        if (dataRefresh_ || lastMeterSequence_ != meter.displayed().sequence ||
+        const auto selecting = meterSelecting(); // Its sign over an empty reading (shownReading).
+        if (dataRefresh_ || (selecting == dmm::Function::Unknown && lastMeterSequence_ != meter.displayed().sequence) || lastMeterSelecting_ != selecting ||
             lastMeterHold_ != meter.holding() || lastMeterStatus_ != status) {
             const ui::MeterContext context{&meter.statistics(), &meter.history(), &meter.relative(), prefs_.meter.display,
                                           bool(prefs_.meter.statistics), prefs_.meter.face, prefs_.meter.palette,
-                                          &prefs_.meter.appearance, word};
-            view_.multimeter(meter.displayed(), meter.holding(), status, context);
+                                          &prefs_.meter.appearance, word, bool(prefs_.meter.bar), data_.meterLogger().active(),
+                                          selecting};
+            view_.multimeter(shownReading(meter, selecting), meter.holding(), status, context);
+            lastMeterSelecting_ = selecting;
             lastMeterSequence_ = meter.displayed().sequence;
             lastMeterStatus_ = status;
             lastMeterHold_ = meter.holding();
         } else if (std::strcmp(word, lastMeterHoldWord_))
-            view_.multimeterStatus(meter.displayed(), meter.holding(), status,
-                                   meter.relative().matches(meter.displayed()), word);
+            view_.multimeterStatus(shownReading(meter, selecting), meter.holding(), status,
+                                   meter.relative().matches(shownReading(meter, selecting)), word);
         std::snprintf(lastMeterHoldWord_, sizeof lastMeterHoldWord_, "%s", word);
     } else {
         dataAt_ = now;

@@ -64,6 +64,7 @@ public:
         if (result.primary.quantity != Quantity::Resistance) return false;
         if (result.primary.status == DataStatus::Overload) { left_ = Skipped; return false; }
         if (!left_) return false;
+        if (result.range == RangeMode::Manual) { left_ = 0; return false; } // No range hunt to settle: shown at once.
         --left_;
         return true;
     }
@@ -78,6 +79,7 @@ public:
     bool held() const { return userHold_ || latest_.packetHold; }
     bool userHeld() const { return userHold_; }
     DataStatus status(uint64_t nowUs, uint64_t staleAfterUs) const;
+    void expire(uint64_t nowUs) { freshFromUs_ = nowUs; } // Readings before nowUs are stale.
     // The last packet as decoded: its function, range, HOLD and REL flags for the commands, and the
     // raw stream (log, serial output). Settling readings (OverloadSettle) are here too.
     const Result &latest() const { return latest_; }
@@ -129,7 +131,7 @@ public:
     // snapshot restart; no function is awaited (the readings of the old one still in flight count until
     // the controller's function change restarts the statistics again, as the factory's).
     void reselect();
-    bool awaitingFunction() const { return awaiting_; }
+    Function awaited() const; // The selection's target while awaited, else Unknown.
     // The factory's no-reading placeholder: "--." in the first three characters.
     static bool placeholder(const Result &result) { return !std::strncmp(result.mainText, "--.", 3); }
 
@@ -144,7 +146,7 @@ private:
     unsigned function_ = ~0U;        // Its decoded Function (~0: none yet).
     bool functionCurrent_ = false, contextPeerRelative_ = false, contextKnown_ = false;
     Function awaited_{};
-    uint64_t awaitUntilUs_ = 0;
+    uint64_t awaitUntilUs_ = 0, freshFromUs_ = 0;
     Quantity trendQuantity_ = Quantity::Unknown; // The trend restarts on a quantity of its own.
     uint32_t sequence_ = 0;
     bool userHold_ = false, frozen_ = false, awaiting_ = false;

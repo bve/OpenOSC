@@ -76,6 +76,7 @@ bool DataAccess::select(MeasurementMode view) {
     }
     counters_.stop();
     const auto previous = measurement_;
+    if (previous == MeasurementMode::Multimeter && view != previous && !dmmOff_) { dmmOffAt_ = Board::milliseconds(); dmmLeft_ = true; }
     const bool restore = active_;
     active_ = false;
     if (activate(view))
@@ -86,6 +87,7 @@ bool DataAccess::select(MeasurementMode view) {
             status_ = DataStatus::HardwareError;
         else
             status_ = failure;
+        if (previous == MeasurementMode::Multimeter) dmmReselect_ = true; // Its function, if it was power-cycled.
     }
     return false;
 }
@@ -96,8 +98,24 @@ bool DataAccess::activate(MeasurementMode view) {
     framer_.reset();
     captureFailed_ = false;
     measurement_ = view;
+    if (view == MeasurementMode::Multimeter) meter_.expire(timeUs_); // A reading from before is not current.
+    const uint32_t off = Board::milliseconds() - dmmOffAt_;
+    if (view == MeasurementMode::Multimeter && !dmmOff_ && dmmLeft_ && off < DmmOffMs) {
+        dmmRecovering_ = dmmTripped_ = false;
+        dmmFutileRestarts_ = 0;
+        frontend_.multimeterOff();
+        dmmOff_ = true;
+        dmmActivatedAtUs_ = timeUs_ + uint64_t(DmmOffMs - off) * 1000; // A selection waits for the power-on.
+    }
+    if (dmmOff_ && view == MeasurementMode::Multimeter) { // serviceDmmWatchdog powers it back.
+        active_ = true;
+        status_ = DataStatus::NoData;
+        return true;
+    }
+    dmmOff_ = dmmRecovering_ = dmmTripped_ = false;
+    dmmFutileRestarts_ = 0;
     if (view == MeasurementMode::Multimeter) {
-        dmmActivatedAtUs_ = timeUs_;
+        dmmActivatedAtUs_ = dmmPacketUs_ = timeUs_;
         meterGeneratorBits_ = generator::controlBits(generator_.offConfirmed());
         frontend_.multimeter(meterGeneratorBits_);
         if (!uart_.start()) {
@@ -174,20 +192,22 @@ bool DataAccess::acquireScopeWait(scope::FrameLease &lease,uint32_t timeoutMs) {
     return true;
 }
 bool DataAccess::sendDmmGroup(dmm::CommandGroup group) {
-    if (unsigned(group) >= 5 || !active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (unsigned(group) >= 5 || !active_ || measurement_ != MeasurementMode::Multimeter || dmmOff_ ||
         !dmm_.pressGroup(group, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     meter_.reselect(); // No function is awaited: the packets show which one the key gave.
     return true;
 }
-bool DataAccess::selectDmmFunction(dmm::Function function) {
+bool DataAccess::selectDmmFunction(dmm::Function function) { // Also while off: it waits for packets.
+    // Held off (DmmOffMs): its deadline runs from the power-on.
+    const uint32_t waitMs = dmmActivatedAtUs_ > timeUs_ ? uint32_t(std::min<uint64_t>((dmmActivatedAtUs_ - timeUs_) / 1000, dmm::FunctionSelector::PowerOnWaitMs)) : 0;
     if (!active_ || measurement_ != MeasurementMode::Multimeter ||
-        !dmm_.selectFunction(function, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
+        !dmm_.selectFunction(function, meter_.latest(), Board::milliseconds() + waitMs, dmmActivatedAtUs_)) return false;
     // Accepted (a refusal above changes nothing): the statistics period starts with this function.
-    meter_.restart(function, timeUs_ + uint64_t(dmm::FunctionSelector::DeadlineMs) * 1000);
+    meter_.restart(function, timeUs_ + (uint64_t(dmm::FunctionSelector::DeadlineMs) + waitMs) * 1000);
     return true;
 }
 bool DataAccess::pressDmmRange() {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmOff_ ||
         !dmm_.pressRange(meter_.latest(), Board::milliseconds(), timeUs_, dmmActivatedAtUs_)) return false;
     meter_.rangeCommand();
     return true;
@@ -196,7 +216,7 @@ bool DataAccess::releaseDmmRange(bool sendRelease) { return dmm_.releaseRange(se
 bool DataAccess::holdDmmRange() { return dmm_.holdRange(Board::milliseconds()); }
 void DataAccess::closeDmmRange() { if (dmm_.rangeOpen()) dmm_.close(Board::milliseconds()); }
 bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmOff_ ||
         !dmm_.requestKey(action, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     using Action = dmm::KeyCommand::Action;
     if (action == Action::NextRange || action == Action::Auto || action == Action::Manual) meter_.rangeCommand();
@@ -225,7 +245,7 @@ bool DataAccess::relativeMeter(bool enabled) {
     return meter_.relative(enabled);
 }
 bool DataAccess::setDmmRange(unsigned index) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || dmmOff_ ||
         !dmm_.setRange(index, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     meter_.rangeCommand(); // A new scale: a hold mode's window starts again.
     return true;

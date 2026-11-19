@@ -314,6 +314,7 @@ private:
     bool autoCancelled_ = false;
     bool recordWatched_ = false, loggerWatched_ = false, serialWatched_=false;
     MeterRestore meterRestore_; // The DMM entry's range restore (meter_restore.hpp).
+    uint32_t dmmRestarts_ = 0, dmmReselects_ = 0;
     // REL hold (Preferences::holdMs) and Scope AUTO hold (AutoHoldMs): AUTO fires auto setup; its release then is not a short press.
     static constexpr uint32_t AutoHoldMs = 2000;
     uint32_t autoHeldAt_ = 0, autoUpAt_ = 0;
@@ -397,6 +398,8 @@ private:
     DataStatus lastMeterStatus_ = DataStatus::NoData;
     DataStatus lastScopeStatus_ = DataStatus::NoData;
     bool lastMeterHold_ = false, lastScopeHold_ = false;
+    dmm::Function lastMeterSelecting_ = dmm::Function::Unknown;
+    dmm::Function meterSelecting() const;
     char lastMeterHoldWord_[16] = ""; // The hold mode's state pill word as last shown.
     void meterHoldWord(char *output, size_t capacity) const; // "" under the manual/DMM HOLD or idle.
     plot::Options heldView_;

@@ -24,6 +24,7 @@ void Session::reselect() {
     detector_.reselect(); // The old function's snapshot and window go with the selection.
     awaiting_ = false;
 }
+Function Session::awaited() const { return awaiting_ ? awaited_ : Function::Unknown; }
 void Session::restart(Function function, uint64_t untilUs) {
     reselect();
     awaited_ = function;
@@ -93,7 +94,7 @@ bool Session::hold(bool enabled) {
 DataStatus Session::status(uint64_t nowUs, uint64_t staleAfterUs) const {
     if (!sequence_)
         return DataStatus::NoData;
-    if (nowUs < latest_.timestampUs || nowUs - latest_.timestampUs > staleAfterUs)
+    if (nowUs < latest_.timestampUs || nowUs - latest_.timestampUs > staleAfterUs || latest_.timestampUs < freshFromUs_)
         return DataStatus::Stale;
     return displayed().primary.status;
 }

@@ -110,6 +110,7 @@ public:
     void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
     void notify(const char *text, uint32_t now);
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
+    bool toastShowing() const { return toastActive_; }
     const char *toast() const { return toastActive_ && toast_ ? lv_label_get_text(toast_) : ""; } // On show now.
     void powerHold(int percent, const char *title) { powerHold_.show(percent, title); } // PowerHold::percent; -1 hides.
     void service(uint32_t now);

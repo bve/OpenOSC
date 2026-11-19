@@ -6,7 +6,8 @@
 #include <cstring>
 
 namespace openosc::scpi {
-static_assert(dmm::RangeSelector::DeadlineMs < Engine::OperationMs && dmm::FunctionSelector::DeadlineMs < Engine::OperationMs,
+static_assert(dmm::RangeSelector::DeadlineMs < Engine::OperationMs &&
+              dmm::FunctionSelector::DeadlineMs + dmm::FunctionSelector::PowerOnWaitMs < Engine::OperationMs,
               "A DMM operation ends before the SCPI wait for it");
 // AUTO ON: its hold stroke (20, then 22 HoldGapMs later; each pair's transmission bounded at 100 ms by
 // UartDma) and the confirmation after the 22.

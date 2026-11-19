@@ -119,6 +119,15 @@ void UartDma::receive() {
         written_.store(written + 1, std::memory_order_release);
     }
 }
+void UartDma::restartReceive() {
+    DMA1_Stream0->CR &= ~DMA_SxCR_EN;
+    for (unsigned n = 0; n < 1000 && (DMA1_Stream0->CR & DMA_SxCR_EN); ++n) {}
+    if (DMA1_Stream0->CR & DMA_SxCR_EN) return; // NDTR is locked: received_ still matches the buffer.
+    DMA1->LIFCR = 0x3d;
+    DMA1_Stream0->NDTR = 64;
+    received_ = 0;
+    DMA1_Stream0->CR |= DMA_SxCR_EN;
+}
 bool UartDma::read(uint8_t &byte) {
     const uint32_t read = read_.load(std::memory_order_relaxed);
     if (read == written_.load(std::memory_order_acquire))
@@ -176,8 +185,7 @@ void UartDma::uartInterrupt() {
 // only a transfer error (TEIF0) ends it. So FEIF/DMEIF on a running stream is a lost byte, counted
 // as a UART line error is (DataAccess resets the packet framer): the link and its commands stay up
 // (issue #23: it was HardwareError for good, every later command refused). TEIF, or a stream that
-// no longer runs, is HardwareError until the UART is started again (DataAccess::activate, a clock
-// change); it never restarts itself.
+// no longer runs, restarts the reception.
 void UartDma::dmaInterrupt() {
     if (!active_)
         return;
@@ -186,8 +194,8 @@ void UartDma::dmaInterrupt() {
     DMA1->LIFCR = 0x3d;
     if (flags & (Fifo | DirectMode | Transfer)) {
         ++active_->errors_;
-        if ((flags & Transfer) || !(DMA1_Stream0->CR & DMA_SxCR_EN)) {
-            active_->status_ = DataStatus::HardwareError;
+        if ((flags & Transfer) || !(DMA1_Stream0->CR & DMA_SxCR_EN)) { // Stopped: receive again, as stock re-arms per packet.
+            active_->restartReceive();
             return;
         }
     }

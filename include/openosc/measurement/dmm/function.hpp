@@ -46,6 +46,7 @@ public:
     // still the least spacing between keys.
     static constexpr uint32_t KeySettleMs = 900;
     static constexpr uint32_t DeadlineMs = 6500; // A selection the controller has not shown by then has failed.
+    static constexpr uint32_t PowerOnWaitMs = 1000; // Most it waits for a deferred power-on first (DataAccess::DmmOffMs).
     // The key poll() returned went out: its origin is the function poll() saw (a UART still busy
     // sends nothing, and poll() prepares again).
     void sent(uint32_t sequence, uint32_t now) { sequence_ = sequence; nextAt_ = now + KeySettleMs; origin_ = prepared_; ++attempts_; }

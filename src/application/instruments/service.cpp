@@ -1,4 +1,5 @@
 #include "openosc/application/controller.hpp"
+#include <cstdio>
 #include "openosc/application/meter_range_memory.hpp"
 
 namespace openosc {
@@ -12,16 +13,31 @@ void ApplicationController::serviceInstruments(uint32_t now) {
             if (uiReady_) { view_.notify(generator::faultText(generator.fault), now); dataRefresh_ = true; }
         }
     }
-    const auto selection = data_.dmmCommandStatus();
     const bool visible = uiReady_;
+    if (data_.dmmRestarts() != dmmRestarts_) { // The chip restarted in its default function.
+        dmmRestarts_ = data_.dmmRestarts();
+        if (data_.measurementMode() == MeasurementMode::Multimeter) {
+            meterRestore_.arm(data_.selectDmmFunction(dmm::Function(prefs_.meterFunction)));
+            if (visible) view_.notify("DMM stopped responding: restarted", now);
+        }
+    }
+    if (data_.dmmReselects() != dmmReselects_) {
+        dmmReselects_ = data_.dmmReselects();
+        if (data_.measurementMode() == MeasurementMode::Multimeter)
+            meterRestore_.arm(data_.selectDmmFunction(dmm::Function(prefs_.meterFunction)));
+    }
+    const auto selection = data_.dmmCommandStatus();
     if (serialWatched_ && !data_.meterSerial().enabled()) {
         if (visible && data_.meterSerial().status()!=DataStatus::Ok) view_.notify("Serial output failed",now);
         serialWatched_=false;
         if (visible) refreshMeterPanel();
     }
     if (selection != lastSelection_) {
-        if (visible && (selection == DataStatus::Timeout || selection == DataStatus::HardwareError))
-            view_.notify("Multimeter command was not confirmed", now);
+        if (visible && (selection == DataStatus::Timeout || selection == DataStatus::HardwareError)) {
+            char text[64];
+            std::snprintf(text, sizeof text, "Multimeter %s command was not confirmed", data_.dmmCommandName());
+            view_.notify(text, now);
+        }
         // One RANGE press answered by packets without MANU (KeyCommand, RangeSelector): no second press.
         if (visible && selection == DataStatus::Unsupported) view_.notify("Meter did not report a manual range", now);
         lastSelection_ = selection;

@@ -47,11 +47,17 @@ void MeterTrend::palette(const MeterLook &look) {
     Elements::textColor(reference_, palette.muted);
 }
 void MeterTrend::update(const dmm::History *history, Quantity quantity, double reference, bool relative, bool peerRelative) {
-    std::fill(std::begin(values_), std::end(values_), LV_CHART_POINT_NONE);
+    int32_t values[dmm::History::Capacity];
+    std::fill(std::begin(values), std::end(values), LV_CHART_POINT_NONE);
+    const auto commit = [&] {
+        if (std::equal(std::begin(values), std::end(values), std::begin(values_))) return;
+        std::copy(std::begin(values), std::end(values), std::begin(values_));
+        lv_chart_refresh(chart_);
+    };
     const unsigned count = history ? history->size() : 0;
     if (count < 2) {
-        lv_label_set_text(range_, "Need two valid samples"); lv_label_set_text(reference_, "");
-        lv_chart_refresh(chart_); return;
+        Elements::setText(range_, "Need two valid samples"); Elements::setText(reference_, "");
+        commit(); return;
     }
     double first; history->value(0, first);
     double minimum = first, maximum = first;
@@ -63,19 +69,20 @@ void MeterTrend::update(const dmm::History *history, Quantity quantity, double r
     for (unsigned i = 0; i < count; ++i) {
         double value; history->value(i, value);
         const double normalized = span > 0 && std::isfinite(span) ? (value - minimum) / span : .5;
-        values_[dmm::History::Capacity - count + i] = int(std::clamp(normalized, 0.0, 1.0) * 1000);
+        values[dmm::History::Capacity - count + i] = int(std::clamp(normalized, 0.0, 1.0) * 1000);
     }
     static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
     const char *unit = unsigned(quantity) < 6 ? units[unsigned(quantity)] : "";
     char low[32], high[32], text[112];
     plot::Format::quantity(minimum - (relative ? reference : 0), unit, low, sizeof low, 6);
     plot::Format::quantity(maximum - (relative ? reference : 0), unit, high, sizeof high, 6);
-    std::snprintf(text, sizeof text, "%s .. %s / AUTO SCALE", low, high); lv_label_set_text(range_, text);
+    std::snprintf(text, sizeof text, "%s .. %s / AUTO SCALE", low, high); Elements::setText(range_, text);
     if (relative) {
         plot::Format::quantity(reference, unit, low, sizeof low, 6);
         std::snprintf(text, sizeof text, "REL reference %s", low);
     } else if (peerRelative) std::snprintf(text, sizeof text, "REL reference: controller");
     else std::snprintf(text, sizeof text, "%u samples / session history", count);
-    lv_label_set_text(reference_, text); lv_chart_refresh(chart_);
+    Elements::setText(reference_, text);
+    commit();
 }
 } // namespace openosc::ui

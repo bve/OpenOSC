@@ -156,7 +156,11 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool serialMeter(bool enabled);
     const board::DmmSerialOutput &meterSerial() const { return serial_; }
     bool dmmBusy() const { return dmm_.busy(); }
+    // DMM chip restarts that brought it back (serviceDmmWatchdog); its function is then lost.
+    uint32_t dmmRestarts() const { return dmmRestarts_; }
+    uint32_t dmmReselects() const { return dmmReselects_; } // Powered again in its default function, silently.
     DataStatus dmmCommandStatus() const { return dmm_.status(); }
+    const char *dmmCommandName() const { return dmm_.operation(); }
     DataStatus dmmSelectionStatus() const { return dmm_.selectionStatus(); }
     bool recordScope(ScopeRecorder::Format format);
     ScopeRecorder &scopeRecorder() { return recorder_; }
@@ -346,6 +350,13 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // DmmCloseMs; past that, or a UART fault, the commands are abandoned and the UART stops all the same.
     void serviceDmmClose(uint32_t now);
     void stopDmmUart();
+    void serviceDmmWatchdog(uint32_t now);
+    static constexpr uint64_t DmmSilentUs = 5000000; // Doubled per restart without packets, up to 16x.
+    static constexpr uint32_t DmmOffMs = 1000; // Minimum unpowered time; stock always gets a reboot's worth.
+    static_assert(DmmOffMs <= dmm::FunctionSelector::PowerOnWaitMs, "A selection's deadline covers the power-on wait");
+    bool dmmOff_ = false, dmmRecovering_ = false, dmmTripped_ = false, dmmLeft_ = false, dmmReselect_ = false;
+    uint32_t dmmOffAt_ = 0, dmmRestarts_ = 0, dmmReselects_ = 0, dmmFutileRestarts_ = 0;
+    uint64_t dmmPacketUs_ = 0;
     static constexpr uint32_t DmmCloseMs = 500;
     bool dmmClosing_ = false;
     uint32_t dmmCloseDeadline_ = 0;

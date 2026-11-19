@@ -67,14 +67,15 @@ MeterLook MeterStyles::look(unsigned scheme, unsigned face, const MeterAppearanc
 }
 ReadingFonts MeterStyles::reading(unsigned face, unsigned size) {
     struct Sized { unsigned size; const lv_font_t *font; };
-    static const Sized faces[Faces][2] = {{{64, &openosc_ibm_64}, {52, &openosc_ibm_52}},
-                                          {{64, &openosc_mono_64}, {56, &openosc_numeric_56}},
-                                          {{64, &openosc_segment_64}, {52, &openosc_segment_52}}};
+    // 72 and 80: the large reading (Primary without bar graph and statistics).
+    static const Sized faces[Faces][4] = {{{80, &openosc_ibm_80}, {72, &openosc_ibm_72}, {64, &openosc_ibm_64}, {52, &openosc_ibm_52}},
+                                          {{80, &openosc_mono_80}, {72, &openosc_mono_72}, {64, &openosc_mono_64}, {56, &openosc_numeric_56}},
+                                          {{80, &openosc_segment_80}, {72, &openosc_segment_72}, {64, &openosc_segment_64}, {52, &openosc_segment_52}}};
     static const Sized shared[] = {{40, &openosc_numeric_40}, {32, &openosc_numeric_32}, {24, &openosc_ui_24},
                                    {14, &openosc_ui_14}, {12, &openosc_ui_12}};
     ReadingFonts result;
     const auto add = [&](const Sized &entry) {
-        if (entry.size <= size && result.count < ReadingFonts::Capacity) result.fonts[result.count++] = entry.font;
+        if (entry.font && entry.size <= size && result.count < ReadingFonts::Capacity) result.fonts[result.count++] = entry.font;
     };
     for (const auto &entry : faces[face < Faces ? face : unsigned(Ibm)]) add(entry);
     for (const auto &entry : shared) add(entry);
