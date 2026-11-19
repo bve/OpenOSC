@@ -339,6 +339,10 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // A record the trigger mode lets through: in Auto any, in Normal/Single a trigger or a forced capture.
     bool triggerAccepts(const scope::FrameMetadata &frame, bool found) const;
     void serviceStreams(uint32_t now);
+    // The ZT703S calibration reference's policy (GitHub #32), each pass: as the factory main firmware,
+    // in Scope only (its DMM start never runs the output); never while stopping, across a clock change,
+    // during a zero calibration or while the DMM serial output has the jack.
+    bool referenceAllowed() const;
     void serviceScopeCapture(uint32_t now);
     static constexpr uint32_t ConfigQuietMs = 20;
     static constexpr double FullRateSamples = 100e6;

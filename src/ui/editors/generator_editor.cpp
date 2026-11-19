@@ -91,10 +91,11 @@ bool GeneratorEditor::choose(unsigned index, unsigned option) {
     case Row::Level: draft_.settings.level = generator::Level(option); break;
     case Row::Drive: draft_.settings.squareDrive = generator::SquareDrive(option); break;
     case Row::Preset:
-        if (option == Reference) { // main OUTPUT selector 0: TIM13 1 kHz, compare 500 of 1000.
-            draft_.settings.shape = generator::Shape::Square; draft_.settings.level = generator::Level::Dedicated;
-            draft_.settings.dutyPermille = 500;
-            draft_.settings.frequencyHz = {1000, 1};
+        if (option == Reference) { // main OUTPUT selector 0 (generator::referenceSettings): its shape, level, duty, 1 kHz.
+            const auto reference = generator::referenceSettings();
+            draft_.settings.shape = reference.shape; draft_.settings.level = reference.level;
+            draft_.settings.dutyPermille = reference.dutyPermille;
+            draft_.settings.frequencyHz = reference.frequencyHz;
         } else draft_.settings.frequencyHz = {Presets[option], 1};
         break;
     default: return false;

@@ -23,6 +23,26 @@ struct Settings {
                 uint64_t(other.frequencyHz.numerator) * frequencyHz.denominator;
     }
 };
+// The ZT703S calibration reference (GitHub #32): the factory main OUTPUT's selector 0, a TIM13 PWM
+// square of 1 kHz at 50 % on the jack (controller 0804EE6C stage 0, PSC core_MHz-1, ARR 999, CCR 500;
+// zt_fw docs/subsystems/main_dac_output.md). The same setting is the editor's `Reference 1kHz` preset.
+// PWM always (no DMA): its plan comes from the timer clock that runs, not the factory's core MHz.
+inline Settings referenceSettings() {
+    Settings s;
+    s.shape = Shape::Square; s.level = Level::Dedicated; s.squareDrive = SquareDrive::Pwm;
+    s.dutyPermille = 500; s.frequencyHz = {1000, 1};
+    return s;
+}
+// When the ZT703S calibration reference may drive the jack (GitHub #32), decided from the instrument's
+// state each pass (DataAccess::referenceAllowed). As the factory main firmware: in Scope only (its DMM
+// start never runs the output wrapper); never while the instrument stops (shutdown), across a clock
+// change, during a zero calibration (the inputs quiet) or while the DMM serial output has the jack.
+struct ReferencePolicy {
+    struct Inputs { bool initialized, active, stopping, clockSuspended, scope, zeroCalibrating, serialOutput; };
+    static constexpr bool allowed(const Inputs &in) {
+        return in.initialized && in.active && !in.stopping && !in.clockSuspended && in.scope && !in.zeroCalibrating && !in.serialOutput;
+    }
+};
 struct CodeRange { uint16_t minimum, maximum; };
 // ZT703S level profiles: the DAC codes of the factory firmware's two generator paths (zt_fw
 // docs/subsystems/generator.md, main_dac_output.md). Dedicated: GEN 703S V1.6.27 builders (sine

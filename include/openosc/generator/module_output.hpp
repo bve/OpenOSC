@@ -28,6 +28,9 @@ public:
     // OFF whenever the module may not be off: ON asked, or not acknowledged as off (the boot, after
     // a timeout or a stuck UART) - so a failed OFF is tried again; not again while one is queued.
     void disable();
+    // The ZT703S calibration reference (Output::reference) has no counterpart: the ZT706S jack is the
+    // module's, and OFF stays the module's zero waveform (its factory MSP gives PA6 no AF either).
+    void reference(bool) {}
     void service();
     bool clockBusy() const { return !link_.suspendable(); }
     bool suspendForClock();

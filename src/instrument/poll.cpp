@@ -45,12 +45,17 @@ void DataAccess::serviceDmmWatchdog(uint32_t now) {
     }
 }
 // The streams: no FAT, no UI and no LVGL. Also run while a refresh waits on DMA2D.
+bool DataAccess::referenceAllowed() const {
+    return generator::ReferencePolicy::allowed({initialized_, active_, stopping_, clockSuspended_,
+                                                measurement_ == MeasurementMode::Oscilloscope, zeroBusy(), serial_.enabled()});
+}
 void DataAccess::serviceStreams(uint32_t now) {
     timeUs_ += uint64_t(uint32_t(now - previousTick_)) * 1000;
     previousTick_ = now;
     StorageAdmission::service(now); // A NOR SPI stop that failed is tried again: the barrier goes once it holds.
     followMeterGenerator(); // Before the frame starts: an ON asked under the DMM has its bits first.
     generator_.service();
+    generator_.reference(referenceAllowed()); // Output::reference keeps the jack quiet after a fault until OFF.
     followBusLoad(); // After a generator fault too: the plans follow the bus load it leaves.
     if (active_ && !stopping_ && measurement_==MeasurementMode::Oscilloscope) counters_.service(now);
     uart_.service(now);
