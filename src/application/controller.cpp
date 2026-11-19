@@ -77,9 +77,9 @@ namespace openosc {
         if (bootStart_.notice) view_.notify(bootStart_.notice, Board::milliseconds());
         else if (!applied.ok()) view_.notify(result,Board::milliseconds());
         else if (preferences_.error()) view_.notify(preferences_.error(), Board::milliseconds());
-        else if (preferences_.repaired() && preferences_.restored()) view_.notify("Bad settings archived; previous copy restored", Board::milliseconds());
+        else if (preferences_.repaired() && preferences_.restored()) view_.notify("Bad settings archived; backup copy restored", Board::milliseconds());
         else if (preferences_.repaired()) view_.notify("Bad settings archived; defaults written", Board::milliseconds());
-        else if (preferences_.restored()) view_.notify("Settings restored from previous copy", Board::milliseconds());
+        else if (preferences_.restored()) view_.notify("Settings restored from a backup copy", Board::milliseconds());
         else if (const char *theme = ThemeNotice::text(themes_)) view_.notify(theme, Board::milliseconds());
         else if (themes_.error()) view_.notify(themes_.error(), Board::milliseconds());
         else if (data_.zeroFile().error()) view_.notify(data_.zeroFile().error(),Board::milliseconds());
@@ -302,7 +302,7 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     } else if (state_.settingsOpen) settingsKeys(keys, now);
     else panelKeys(keys, now, !(events.repeat & (Keypad::Up|Keypad::Down|Keypad::Left|Keypad::Right)));
 }
-void ApplicationController::changed(uint32_t now) { saves_.settingsChanged(now); }
+void ApplicationController::changed(uint32_t) { saves_.settingsChanged(); }
 // The guarded profile confirmed after its stable time (BootConfirmation); no NOR write while a host is
 // active (STORE-02) or a shutdown or the Recovery handoff runs.
 void ApplicationController::serviceBootGuard(uint32_t now) {
@@ -334,21 +334,37 @@ bool ApplicationController::SettingsStore::savePreferences() {
     Watchdog::progress();
     return saved;
 }
-// Erasing the external Flash dips the supply shared with the USB PHY hard enough to drop the host, so
-// saves wait until no host is present (STORE-02). A running shutdown or Recovery handoff saves once
-// itself (ShutdownSequence), so the background save stays out of its way (PendingSaves).
+// Settings and theme are saved only by ShutdownSequence (PendingSaves).
 void ApplicationController::store(uint32_t now) {
+    // The block cache's pulse (a NOR erase, a stall) only while nobody uses the device.
+    const bool unused = idle_.quietMs(now) >= UnusedMs && !(usb_ && usb_->hostActive(now)) && !autoBusy() && !data_.zeroBusy() &&
+                        !shots_.busy() && !imageReader_.busy() &&
+                        !(state_.mode == MeasurementMode::Oscilloscope && data_.scopeRequest().trigger.mode == scope::TriggerMode::Single && !data_.scopeHeld());
+    fs_.service(now, unused);
     followGeneratorOutput(now); // A confirmed OUTP ON just before a save is in it.
-    SettingsStore files(*this);
-    const uint32_t outcome = saves_.service(now, shutdownSequence_, recoveryPending_, usb_ && usb_->hostActive(now),
-                                            data_.scopeHoldPending(), files);
-    if (!uiReady_) return;
-    if (outcome & PendingSaves::ThemeFailed) view_.notify(themes_.error(), now);
-    if (outcome & PendingSaves::SettingsFailed) view_.notify(preferences_.error(), now);
-    if ((outcome & PendingSaves::SettingsAttempted) && state_.settingsOpen && !settingsMenu_.information()) showSettings();
+    // The power-off save's volume while changes wait (UI only): every minute, at once when they start or Settings opens.
+    const bool pending = saves_.settingsPending() && uiReady_;
+    const char *before = saveProblem_;
+    const bool opened = state_.settingsOpen && !saveSettingsOpen_;
+    saveSettingsOpen_ = state_.settingsOpen;
+    if (!pending) { saveProblem_ = saveWarned_ = nullptr; saveCheckedAt_ = now - 60000; saveWarnedAt_ = now - 600000; }
+    else if (opened || int32_t(now - saveCheckedAt_) >= 60000) {
+        saveCheckedAt_ = now;
+        saveProblem_ = !fs_.mounted() ? "No storage: settings will not save" : !fs_.refreshFree() ? "Storage error: settings may not save"
+                     : fs_.freeBytes() < 16384 ? "Storage full: settings will not save" : nullptr;
+    }
+    if (uiReady_ && state_.settingsOpen && !settingsMenu_.information() && (saveProblem_ != before || pending != saveShownPending_))
+        showSettings();
+    // The same problem every 10 minutes, another one at least 2 after the last notice; never over another notice.
+    if (!saveProblem_) saveWarned_ = nullptr;
+    if (int32_t(now - saveWarnedAt_) > 600000) saveWarnedAt_ = now - 600000; // No int32 wrap on long uptimes.
+    const int32_t since = int32_t(now - saveWarnedAt_);
+    if (saveProblem_ && !view_.toastShowing() && (since >= 600000 || (saveProblem_ != saveWarned_ && since >= 120000))) {
+        saveWarned_ = saveProblem_; saveWarnedAt_ = now; view_.notify(saveProblem_, now);
+    }
 }
 void ApplicationController::queuePlotSave(uint32_t now) {
-    saves_.plotChanged(now);
+    saves_.plotChanged();
     prefs_.useBuiltinTheme = 0;
     changed(now);
 }
@@ -359,8 +375,9 @@ void ApplicationController::showSettings() {
     }
     char saved[48];
     std::snprintf(saved, sizeof saved, "Saved: %s", storage::Layout::SettingsFile);
-    const char* status = saves_.settingsPending() ? (usb_ && usb_->connected() ? "Saves when USB host disconnects" : "Saving settings...")
-        : preferences_.error() ? preferences_.error() : saved;
+    saveShownPending_ = saves_.settingsPending();
+    const char* status = preferences_.error() ? preferences_.error() : !saves_.settingsPending() ? saved
+                       : saveProblem_ ? saveProblem_ : "Saved at power-off";
     view_.settings(settingsMenu_, settingsRows(), navigator_, status);
 }
 }

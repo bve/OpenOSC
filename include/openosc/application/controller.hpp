@@ -317,6 +317,7 @@ private:
     uint32_t dmmRestarts_ = 0, dmmReselects_ = 0;
     // REL hold (Preferences::holdMs) and Scope AUTO hold (AutoHoldMs): AUTO fires auto setup; its release then is not a short press.
     static constexpr uint32_t AutoHoldMs = 2000;
+    static constexpr uint32_t UnusedMs = 10000; // No key this long: the block cache may flush (BlockDevice::service).
     uint32_t autoHeldAt_ = 0, autoUpAt_ = 0;
     bool powerFired_ = false, autoDown_ = false, autoFired_ = false, autoArmed_ = false;
     bool autoShown_ = false; // The AUTO countdown appeared: its release is a cancelled hold, not a short AUTO.
@@ -367,7 +368,7 @@ private:
     unsigned imageProgress_=0;
     ui::SettingsMenu settingsMenu_;
     DeviceInfo settingsInfo_;
-    PendingSaves saves_; // Theme/plot and settings files to write (background or once at shutdown).
+    PendingSaves saves_; // Theme/plot and settings files to write once, at shutdown.
     BootGuard *guard_ = nullptr;                // Without it (tests) the 360 MHz profile is refused.
     BootGuard::Start bootStart_{0, false, nullptr};
     BootConfirmation guardConfirmation_;
@@ -400,6 +401,10 @@ private:
     bool lastMeterHold_ = false, lastScopeHold_ = false;
     dmm::Function lastMeterSelecting_ = dmm::Function::Unknown;
     dmm::Function meterSelecting() const;
+    const char *saveProblem_ = nullptr, *saveWarned_ = nullptr; // store(): the power-off save's volume, its notice.
+    uint32_t saveCheckedAt_ = 0U - 60000U, saveWarnedAt_ = 0U - 600000U; // Due at once if changes wait from boot.
+    bool saveShownPending_ = false; // The open Settings page's status line, as drawn.
+    bool saveSettingsOpen_ = false; // store(): settingsOpen at the last pass (a recheck when Settings opens).
     char lastMeterHoldWord_[16] = ""; // The hold mode's state pill word as last shown.
     void meterHoldWord(char *output, size_t capacity) const; // "" under the manual/DMM HOLD or idle.
     plot::Options heldView_;

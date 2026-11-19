@@ -12,7 +12,7 @@ bool Filesystem::mount() {
     return mounted_;
 }
 bool Filesystem::unmount() {
-    if (!mounted_) return true;
+    if (!mounted_) return disk_.flush(); // Raw writes (formatter, FAT repair) may be cached; else no NOR access.
     if (!disk_.sync()) return false;
     result_ = f_mount(nullptr, "", 0);
     if (result_ == FR_OK) mounted_ = false;

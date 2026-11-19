@@ -176,6 +176,11 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
             return false;
         candidate.generatorShape = index;
     }
+    constexpr unsigned shapes = sizeof generator::ShapeNames / sizeof *generator::ShapeNames, levels = unsigned(generator::Level::Custom) + 1;
+    if (candidate.generatorShape < shapes && candidate.generatorLevel < levels) { // A limit lowered since the save: clamped, the rest kept.
+        const uint64_t limit = generator::Capabilities::maximumMillihertz(generator::Shape(candidate.generatorShape), generator::Level(candidate.generatorLevel));
+        if (limit && candidate.generatorMillihertz > limit) candidate.generatorMillihertz = limit;
+    }
     if (!InstrumentJson::parse(scope, meter, candidate) || !candidate.valid())
         return false;
     output = candidate;

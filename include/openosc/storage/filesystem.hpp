@@ -14,6 +14,7 @@ public:
     uint32_t freeBytes() const { return freeBytes_; }
     FRESULT result() const { return result_; }
     bool refreshFree();
+    bool service(uint32_t now, bool idle) { return disk_.service(now, idle); } // The block cache's idle pulse.
 private:
     BlockDevice& disk_;
     FATFS fs_{};

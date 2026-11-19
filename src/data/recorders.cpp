@@ -1,6 +1,7 @@
 #include "openosc/data/recorders.hpp"
 #include "openosc/storage/layout.hpp"
 #include "openosc/data/csv.hpp"
+#include "openosc/platform/board.hpp"
 #include <cstring>
 #include <utility>
 
@@ -82,8 +83,8 @@ void ScopeRecorder::service() {
         cancel();
     }
 }
-void ScopeRecorder::cancel() {
-    file_.cancel();
+void ScopeRecorder::cancel(bool keep) {
+    file_.cancel(keep);
     lease_.release();
     busy_ = finishing_ = false;
     if (status_ == DataStatus::Busy)
@@ -108,6 +109,7 @@ bool DmmCsvLogger::begin(uint64_t maximum, HeldPolicy policy) {
     maximum_ = maximum;
     bytes_ = header;
     heldPolicy_ = policy;
+    syncedAt_ = Board::milliseconds();
     active_ = true;
     finishing_ = hasSequence_ = false;
     status_ = DataStatus::Ok;
@@ -139,6 +141,11 @@ bool DmmCsvLogger::append(const dmm::Result &result, bool held) {
     bytes_ += bytes;
     sequence_ = result.sequence;
     hasSequence_ = true;
+    const uint32_t now = Board::milliseconds();
+    if (uint32_t(now - syncedAt_) >= SyncMs) {
+        syncedAt_ = now;
+        if (!file_.sync()) { status_ = file_.status(); cancel(); return false; }
+    }
     return true;
 }
 void DmmCsvLogger::service() {
@@ -151,8 +158,8 @@ void DmmCsvLogger::service() {
         status_ = result;
     active_ = finishing_ = false;
 }
-void DmmCsvLogger::cancel() {
-    file_.cancel();
+void DmmCsvLogger::cancel(bool keep) {
+    file_.cancel(keep);
     active_ = finishing_ = false;
 }
 } // namespace openosc
