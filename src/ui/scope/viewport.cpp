@@ -3,7 +3,7 @@
 #include <cmath>
 
 namespace openosc::plot {
-bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsigned w, unsigned h) {
+bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsigned w, unsigned h, uint32_t phase) {
     if (!m.valid() || !o.valid() || w < 2 || h < 2 || w > MaximumWidth || h > MaximumHeight)
         return false;
     width = w;
@@ -27,8 +27,12 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     const int64_t full = int64_t(record), pan = o.panPpb; // record < 2^37: both products fit int64.
     startQ16 = origin + full / Options::PanFull * pan + full % Options::PanFull * pan / Options::PanFull;
     if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
-    if (o.lockTrigger && m.triggered)
+    phaseQ16 = 0;
+    if (o.lockTrigger && m.triggered) {
         startQ16 += int64_t(m.triggerIndex) * 65536 - origin - int64_t(pretrigger(m, anchored));
+        // The crossing, not the first sample past it, at the trigger's place (GitHub #34).
+        if (phase < 65536 && phased(m, o)) { phaseQ16 = phase; startQ16 -= phase; }
+    }
     // Without a trigger, Auto still needs captured history on both sides of the initial
     // window. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
     else if (!m.rolling && !m.triggered && o.lockTrigger &&
@@ -36,6 +40,9 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
         startQ16 += (int64_t(record) - int64_t(spanQ16)) / 2;
     if (o.zoomOut > 1) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
     return true;
+}
+bool Viewport::phased(const scope::FrameMetadata &m, const Options &o) const {
+    return o.lockTrigger && m.triggered && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay) && !aggregates();
 }
 uint64_t Viewport::pretrigger(const scope::FrameMetadata &m, bool anchored) const {
     if (m.samples < 2) return 0;
@@ -52,10 +59,10 @@ void Viewport::column(unsigned x, uint32_t samples, uint32_t &first, uint32_t &l
     last = uint32_t(std::clamp<int64_t>(end, 0, samples));
 }
 int64_t Viewport::position(unsigned x) const { return startQ16 + int64_t(spanQ16 * x / (width - 1)); }
-int Viewport::sampleX(uint32_t index) const {
+int Viewport::positionX(int64_t positionQ16) const {
     if (!spanQ16 || width < 2)
         return 0;
-    const int64_t value = (int64_t(index) * 65536 - startQ16) * (width - 1) / int64_t(spanQ16);
+    const int64_t value = (positionQ16 - startQ16) * (width - 1) / int64_t(spanQ16);
     return int(std::clamp<int64_t>(value, -4096, 4096));
 }
 bool Axis::configure(const scope::ChannelMetadata &m, const ChannelOptions &o, unsigned height) {

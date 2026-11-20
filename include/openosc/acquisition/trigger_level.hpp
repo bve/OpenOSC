@@ -8,17 +8,20 @@ namespace openosc::scope {
 class HeldTrigger {
 public:
     void forget() { known_ = false; }
-    void remember(uint32_t sequence, bool found, uint32_t index) {
-        sequence_ = sequence; found_ = found; index_ = index; known_ = true;
+    // `edge`: what the index was found for (FrameMetadata::triggerEdge), kept with it.
+    void remember(uint32_t sequence, bool found, uint32_t index, TriggerEdge edge = {}) {
+        sequence_ = sequence; found_ = found; index_ = index; edge_ = edge; known_ = true;
     }
-    bool recall(uint32_t sequence, bool &found, uint32_t &index) const {
+    bool recall(uint32_t sequence, bool &found, uint32_t &index, TriggerEdge *edge = nullptr) const {
         if (!known_ || sequence_ != sequence) return false;
         found = found_; index = index_;
+        if (edge) *edge = edge_;
         return true;
     }
 
 private:
     uint32_t sequence_ = 0, index_ = 0;
+    TriggerEdge edge_;
     bool known_ = false, found_ = false;
 };
 class TriggerLevel {

@@ -18,9 +18,19 @@ struct Viewport {
     // no edge the ring held the record around) is placed in a trigger-locked Time/SpectrumOverlay view
     // as the record cut at its pretrigger point would be (panned and zoomed out too): its window
     // reaches past the record by the shift. Unlocked, X-Y and FFT views keep the real record origin.
-    bool calculate(const scope::FrameMetadata &frame, const Options &options, unsigned w, unsigned h);
+    // `phaseQ16` (TriggerPhase::before): how far before triggerIndex the drawn curve crosses the
+    // level. A phased() window is placed by that crossing instead of the index; any other ignores it.
+    bool calculate(const scope::FrameMetadata &frame, const Options &options, unsigned w, unsigned h, uint32_t phaseQ16 = 0);
+    // A trigger-locked Time or Y-T+FFT window that draws the curve between its points (fewer points
+    // than columns): the only one a crossing between points places (an aggregating window keeps the
+    // index: a fraction of a point moves its columns by less than one). After calculate().
+    bool phased(const scope::FrameMetadata &frame, const Options &options) const;
     int64_t position(unsigned x) const;
-    int sampleX(uint32_t index) const;
+    int sampleX(uint32_t index) const { return positionX(int64_t(index) * 65536); }
+    int positionX(int64_t positionQ16) const; // The x of a record position, clamped to +-4096.
+    // The crossing's distance before triggerIndex this window is placed by (0: by the index). The
+    // marker subtracts it too where the zoom-out clamp then moved the window: the crossing stays there.
+    uint32_t phaseQ16 = 0;
     // Every record point lands in a column (the window spans at least a point per column).
     bool aggregates() const { return spanQ16 >= uint64_t(width - 1) * 65536; }
     // Column x's record points [first, last) of a record of `samples` (aggregating windows).
@@ -29,7 +39,7 @@ struct Viewport {
         return positionQ16 >= 0 ? positionQ16 / 65536 : -((-positionQ16 + 65535) / 65536);
     }
     bool operator==(const Viewport &o) const {
-        return startQ16 == o.startQ16 && spanQ16 == o.spanQ16 && width == o.width && height == o.height;
+        return startQ16 == o.startQ16 && spanQ16 == o.spanQ16 && width == o.width && height == o.height && phaseQ16 == o.phaseQ16;
     }
 private:
     // The window's Q16 length before the trigger: spanQ16 * point / (samples - 1), exact (floor)

@@ -19,10 +19,10 @@ public:
     // as this one does, released on its own. False when this one is not valid or `out` already is.
     // Foreground only, as acquire/release.
     bool share(FrameLease &out) const;
-    bool annotateTrigger(bool found, uint32_t index) {
+    bool annotateTrigger(bool found, uint32_t index, TriggerEdge edge = {}) {
         if (!valid())
             return false;
-        auto next = view_.withTrigger(found, index);
+        auto next = view_.withTrigger(found, index, edge);
         if (!next.valid())
             return false;
         view_ = next;

@@ -18,6 +18,8 @@ struct TriggerSettings {
     bool reject = false;
     static constexpr int RejectCodes = 4;
     bool valid() const;
+    // What an index found with these settings is tagged with (FrameMetadata::triggerEdge).
+    TriggerEdge tag() const { return {level, channel, edge == Edge::Rising, true}; }
     // The code a rising (falling) edge must have come from at or below (above): the level itself
     // without reject, else RejectCodes beyond it, within the ADC's codes.
     int armLevel() const;

@@ -61,6 +61,9 @@ Theme Theme::defaults(LayoutPreset preset) {
         }
         for (unsigned i = 0; i < ElementCount; ++i) e[i].zOrder = i;
     }
+    // Sinc between the points of a zoomed trace (GitHub #34: a 20 MHz sine at 100 MS/s is 5 points a
+    // period; linear draws it as a zigzag). For a new or reset theme only: theme.json keeps its choice.
+    theme.plot.interpolation = plot::Interpolation::Sinc;
     return theme;
 }
 }

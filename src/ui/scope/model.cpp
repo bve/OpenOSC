@@ -1,4 +1,5 @@
 #include "openosc/ui/scope/model.hpp"
+#include "openosc/ui/scope/trigger_phase.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -76,8 +77,11 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
                 a.probeDenominator != b.probeDenominator || a.voltsPerCode != b.voltsPerCode ||
                 a.zeroCode != b.zeroCode || a.analogPosition != b.analogPosition || a.coupling != b.coupling;
     }
+    const auto &edge = m.triggerEdge, &before = metadata_.triggerEdge; // What the crossing is found for (#34).
     const bool alignment = m.origin != metadata_.origin || m.layout != metadata_.layout ||
-                           m.triggered != metadata_.triggered || m.triggerIndex != metadata_.triggerIndex;
+                           m.triggered != metadata_.triggered || m.triggerIndex != metadata_.triggerIndex ||
+                           edge.known != before.known || edge.level != before.level || edge.rising != before.rising ||
+                           edge.channel != before.channel;
     if (!fresh && !dirty_ && !reset && !alignment)
         return true;
     if (!fresh && alignment)
@@ -87,6 +91,11 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
         reference_ = false;
     } else if (fresh && m.rolling) // Each Roll snapshot moves the samples under the columns: no frame average.
         std::memset(storage_.averageValid, 0, sizeof storage_.averageValid);
+    // Only for a projection that runs (a new frame, a change): the drawn curve's crossing (GitHub #34).
+    // A new frame's own crossing keeps its averages (they are aligned by it); the same frame with
+    // another trigger tag was reset above as any re-annotated frame.
+    if (next.phased(m, options_))
+        if (const uint32_t phase = TriggerPhase::before(frame, options_)) next.calculate(m, options_, width, height, phase);
     viewport_ = next;
     metadata_ = m;
     statistics_.sourceReads = statistics_.columns = 0;

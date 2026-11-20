@@ -78,7 +78,8 @@ public:
     unsigned xyCount() const { return xyCount_; }
     void agePersistence(uint32_t now) { storage_.persistence.advance(now, options_.persistenceMs); }
     uint32_t frameTime() const { return frameAt_; }
-    int triggerX() const { return viewport_.sampleX(metadata_.triggerIndex); }
+    // The trigger's place: the crossing the window is placed by (Viewport::phaseQ16), else its index.
+    int triggerX() const { return viewport_.positionX(int64_t(metadata_.triggerIndex) * 65536 - viewport_.phaseQ16); }
     int triggerY() const { return axes_[unsigned(triggerChannel_)].pixel(int32_t(triggerLevel_ * 256)); }
     scope::Channel triggerChannel() const { return triggerChannel_; }
     const scope::SpectrumResult &spectrum() const { return spectrum_.result; }

@@ -445,8 +445,9 @@ bool FrameView::PairCursor::next(int16_t &ch1, int16_t &ch2) {
     if (++logical_ == 0 || ++position_ == f.metadata_.ring) position_ = 0;
     return true;
 }
-FrameView FrameView::withTrigger(bool found, uint32_t index) const {
+FrameView FrameView::withTrigger(bool found, uint32_t index, TriggerEdge edge) const {
     const bool same = found && metadata_.triggered && index == metadata_.triggerIndex;
+    if (same && metadata_.triggerEdge.known) edge = metadata_.triggerEdge; // The capture's own.
     FrameView view = *this;
     view.metadata_.clearTrigger();
     view.metadata_.triggered = found;
@@ -455,14 +456,16 @@ FrameView FrameView::withTrigger(bool found, uint32_t index) const {
         view.metadata_.triggerShift = metadata_.triggerShift; view.metadata_.eventOffset = metadata_.eventOffset;
         view.metadata_.eventKnown = metadata_.eventKnown;
     }
+    if (found) view.metadata_.triggerEdge = edge;
     view.valid_ = view.validate();
     return view;
 }
-FrameView FrameView::withShiftedTrigger(uint32_t index, int32_t shift) const {
+FrameView FrameView::withShiftedTrigger(uint32_t index, int32_t shift, TriggerEdge edge) const {
     FrameView view = *this;
     view.metadata_.triggered = true;
     view.metadata_.triggerIndex = index;
     view.metadata_.triggerShift = shift;
+    view.metadata_.triggerEdge = edge;
     view.valid_ = view.validate();
     return view;
 }

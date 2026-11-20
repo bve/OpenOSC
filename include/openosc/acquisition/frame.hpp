@@ -39,6 +39,14 @@ struct ChannelMetadata {
     int16_t analogPosition = 80; // Screen line 0..160 the analog zero was set to for this record.
     bool enabled = true, calibrated = false;
 };
+// The edge a record's triggerIndex was found for: its source, slope and level code (GitHub #34: a view
+// places the crossing between triggerIndex - 1 and triggerIndex on the curve it draws, TriggerPhase).
+// Display only: not in any file format, SCPI reply or the record's samples.
+struct TriggerEdge {
+    int16_t level = 0;
+    Channel channel = Channel::Ch1;
+    bool rising = true, known = false;
+};
 struct FrameMetadata {
     static constexpr uint32_t MaximumRing = 524288; // Points a capture, Roll or imported ring may hold.
     uint64_t timestampUs = 0;
@@ -55,12 +63,13 @@ struct FrameMetadata {
     // the edge where the pretrigger point is. Zero for every other record; not in any file format.
     int32_t triggerShift = 0;
     int32_t eventOffset = 0; bool eventKnown = false; // The comparator event, in points from triggerIndex (WAV:EVENt?).
+    TriggerEdge triggerEdge; // What triggerIndex was found for (known only while triggered).
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
     ChannelMetadata channels[2];
     bool valid() const;
     // No trigger: not triggered, index and shift zero (the one reset of all three).
-    void clearTrigger() { triggered = false; triggerIndex = 0; triggerShift = 0; eventOffset = 0; eventKnown = false; }
+    void clearTrigger() { triggered = false; triggerIndex = 0; triggerShift = 0; eventOffset = 0; eventKnown = false; triggerEdge = {}; }
 };
 // A FourBanks or InterleavedCh1 record in two parts (CaptureBuffer::split): each lane keeps its newest
 // ahbWords in the capture ring (bank i of the view, a power of two) and its older words in a history
@@ -98,9 +107,10 @@ public:
     const FrameMetadata &metadata() const { return metadata_; }
     // The trigger at `index` (none without `found`): a record annotated again with its own trigger
     // keeps its triggerShift, any other trigger has none.
-    FrameView withTrigger(bool found, uint32_t index) const;
+    // `edge`: what the index was found for; the record's own is kept when it already holds this index.
+    FrameView withTrigger(bool found, uint32_t index, TriggerEdge edge = {}) const;
     // The trigger at `index`, `shift` points past the record's pretrigger point (FrameMetadata::triggerShift).
-    FrameView withShiftedTrigger(uint32_t index, int32_t shift) const;
+    FrameView withShiftedTrigger(uint32_t index, int32_t shift, TriggerEdge edge = {}) const;
     FrameView withEvent(int32_t offset) const { FrameView view = *this; view.metadata_.eventOffset = offset; view.metadata_.eventKnown = true; return view; }
     FrameView slice(uint32_t first,uint32_t count) const;
     const uint16_t *bank(unsigned index) const { return index < 4 ? banks_[index] : nullptr; }

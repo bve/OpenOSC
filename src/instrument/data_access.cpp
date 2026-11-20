@@ -145,11 +145,14 @@ bool DataAccess::acquireScope(scope::FrameLease &lease, bool consume) {
     const uint32_t sequence = lease.view().metadata().sequence;
     uint32_t trigger = 0;
     bool found = false;
-    if (!scopeHeld_ || !heldTrigger_.recall(sequence, found, trigger)) {
+    // The settings an index is found for now; a held record keeps those it was first shown with. A
+    // capture's own edge (a gated record) is kept by the annotation itself.
+    scope::TriggerEdge edge = request_.trigger.tag();
+    if (!scopeHeld_ || !heldTrigger_.recall(sequence, found, trigger, &edge)) {
         found = findTrigger(lease.view(), trigger);
-        if (scopeHeld_) heldTrigger_.remember(sequence, found, trigger);
+        if (scopeHeld_) heldTrigger_.remember(sequence, found, trigger, edge);
     }
-    lease.annotateTrigger(found, trigger);
+    lease.annotateTrigger(found, trigger, edge);
     if (!scopeHeld_ && !triggerAccepts(lease.view().metadata(), found)) {
         lease.release();
         return false;

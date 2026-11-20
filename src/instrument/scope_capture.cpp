@@ -580,8 +580,8 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
             if (!interleaveMeasure_.active()) finishInterleaveOffset();
         }
         if (accepted && request_.trigger.mode == scope::TriggerMode::Single) {
-            inspected_.annotateTrigger(found, index);
-            heldTrigger_.remember(inspected_.view().metadata().sequence, found, index);
+            inspected_.annotateTrigger(found, index, request_.trigger.tag());
+            heldTrigger_.remember(inspected_.view().metadata().sequence, found, index, inspected_.view().metadata().triggerEdge);
             scopeHeld_ = true; singleDone_ = true; triggerWaiting_ = false; forcePending_ = false;
             stopCapture(false); heldFrame_ = std::move(inspected_);
         }
