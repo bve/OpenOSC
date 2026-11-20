@@ -7,6 +7,17 @@ body:
       value: |
         Thanks for reporting a problem. Please search the existing issues first.
         Questions about installation and usage go to [Discussions](https://github.com/bve/OpenOSC/discussions).
+
+        > [!IMPORTANT]
+        > **One problem per report.** Open a separate issue for each bug. Put several problems in one
+        > report only when they have the same cause or always appear together.
+  - type: checkboxes
+    id: single
+    attributes:
+      label: One problem
+      options:
+        - label: This report describes one problem, or problems that are clearly related.
+          required: true
   - type: dropdown
     id: model
     attributes:
