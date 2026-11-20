@@ -98,7 +98,7 @@ void ScreenHost::activate(MeasurementMode mode) {
     MeterReading::release(elements_.get(ElementId::Reading)); // The DMM sets its sign column again on activation.
     // Status is part of the instrument shell, never a hideable body element.
     auto *status = elements_.get(ElementId::Status);
-    lv_obj_set_size(status, StatusBarLayout::MaximumStatus, 19);
+    lv_obj_set_size(status, StatusBarLayout::MaximumStatus, StatusBarLayout::PillHeight);
     placeStatus();
     lv_obj_set_style_text_font(status, Elements::font(12), 0);
     lv_obj_set_hidden(status, false);
