@@ -55,9 +55,10 @@ void BatteryIndicator::update(const power::BatteryState &state) {
         (mode_<<8)|(uint32_t(mode_ ? state.millivolts/10 : 0)<<12)|(uint32_t(mode_ ? state.percent : 0)<<24);
     if (code==cached_ || !root_) return;
     cached_=code;
+    const bool charging=state.external && !state.full;
     if (mode_) {
         char text[12];
-        if (state.external) std::snprintf(text,sizeof text,"%s",!state.full ? "CHG" : mode_==1 ? "FULL" : "100%"); // Percent: 100%.
+        if (charging && (mode_!=2 || !state.measured || state.percent<100)) std::snprintf(text,sizeof text,"CHG");
         else if (!state.measured) std::snprintf(text,sizeof text,mode_==1 ? "--V" : "--%%");
         else if (mode_==1) std::snprintf(text,sizeof text,"%u.%02uV",state.millivolts/1000U,(state.millivolts%1000U)/10U);
         else std::snprintf(text,sizeof text,"%u%%",state.percent);
@@ -65,12 +66,12 @@ void BatteryIndicator::update(const power::BatteryState &state) {
         lv_obj_set_style_text_color(text_,lv_color_hex(state.low ? 0xf87171 : 0x94a3b8),0);
         return;
     }
-    lv_bar_set_value(bar_,state.valid && !state.external ? state.bars : state.full ? 5 : 0,LV_ANIM_OFF);
+    lv_bar_set_value(bar_,state.valid && !charging ? state.bars : 0,LV_ANIM_OFF);
     lv_obj_set_style_bg_color(bar_,lv_color_hex(state.low ? 0xf87171 : 0x4ade80),LV_PART_INDICATOR);
     // One bar is narrower than a pixel at this size: a red outline is what tells "low" from empty.
     const auto outline=lv_color_hex(state.low ? 0xf87171 : 0x94a3b8);
     lv_obj_set_style_border_color(bar_,outline,0);
     lv_obj_set_style_bg_color(cap_,outline,0);
-    lv_label_set_text(symbol_,!state.valid ? "?" : state.external && !state.full ? "+" : "");
+    lv_label_set_text(symbol_,charging ? "+" : !state.valid ? "?" : "");
 }
 } // namespace openosc::ui

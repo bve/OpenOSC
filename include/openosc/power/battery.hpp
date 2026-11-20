@@ -4,7 +4,8 @@
 namespace openosc::power {
 struct BatteryState {
     uint8_t bars=0;
-    bool valid=false,low=false,external=false,full=false;
+    bool valid=false,low=false,external=false;
+    bool full=false; // Digital charge status HIGH while PC9 is HIGH, independent of the measured level.
     uint16_t millivolts=0; // On the factory ADC scale, so an estimate rather than a calibrated reading.
     uint8_t percent=0;
     bool measured=false;
@@ -20,38 +21,38 @@ class BatteryGauge {
 public:
     static constexpr uint16_t BarMv[4] = {3650, 3730, 3820, 3950}; // At or above: 2, 3, 4, 5 bars.
     static constexpr uint16_t LowMv = 3450;
+    static constexpr uint16_t FullMv = 4200;
     static constexpr uint16_t HysteresisMv = 40;
-    static constexpr uint16_t ShownStepMv = 20; // The volts/percent readout moves by at least this.
+    static constexpr uint16_t ShownStepMv = 20; // Display deadband, except at the full-charge boundary.
     static constexpr unsigned Window = 20;      // Samples per average: 2 s at the 100 ms poll.
     static constexpr uint8_t LowWindows = 3;   // 6 s of consecutive raw windows for a low verdict (and to clear it).
 
     const BatteryState &state() const { return state_; }
-    void digital(bool external,bool full) {
-        const uint8_t bits=uint8_t(external)|(uint8_t(full)<<1);
+    void digital(bool external,bool chargeStatusHigh) {
+        const uint8_t bits=uint8_t(external)|(uint8_t(chargeStatusHigh)<<1);
         if (bits!=candidate_) { candidate_=bits; stable_=1; }
         else if (stable_<11) ++stable_;
         if (stable_==11) {
             if (state_.external!=external) { sum_=0; averaged_=0; }
-            if (state_.external && !external) state_.valid=state_.measured=false; // Re-measured from scratch.
-            state_.external=external; state_.full=external && full;
-            if (external) { state_.low=false; state_.valid=true; state_.bars=full ? 5 : 0; state_.measured=false; }
+            state_.external=external; state_.full=external && chargeStatusHigh;
+            if (external) state_.low=false;
             if (state_.external || !state_.measured) { lowRun_=clearRun_=0; low_=false; }
         }
     }
     void sample(uint16_t raw) {
-        if (raw>4095 || state_.external) return; // On external power PC4 does not read the battery.
+        if (raw>4095) return;
         sum_+=raw;
         if (++averaged_<Window) return;
-        const int32_t mv=int32_t(sum_*5000/4166/Window);
+        const int32_t mv=int32_t(sum_*AdcScaleMv/AdcScaleCounts/Window);
         sum_=0; averaged_=0;
         filtered_=state_.measured ? filtered_+(mv*16-filtered_)/4 : mv*16; // 1/16 mV; about 8 s to settle.
         if (!state_.measured) { lowRun_=clearRun_=0; low_=false; }
-        qualify(mv);
+        if (!state_.external) qualify(mv);
         update(uint16_t((filtered_+8)/16));
     }
     static uint8_t percent(uint32_t millivolts) {
         static constexpr struct { uint16_t mv; uint8_t pct; } curve[]={
-            {3450,0},{3550,5},{3650,15},{3700,25},{3750,35},{3800,45},{3850,55},{3900,65},{3950,75},{4000,82},{4100,92},{4150,100}};
+            {3450,0},{3550,5},{3650,15},{3700,25},{3750,35},{3800,45},{3850,55},{3900,65},{3950,75},{4000,82},{4100,92},{FullMv,100}};
         if (millivolts<=curve[0].mv) return 0;
         for (unsigned i=1;i<sizeof curve/sizeof curve[0];++i)
             if (millivolts<curve[i].mv)
@@ -59,6 +60,10 @@ public:
         return 100;
     }
 private:
+    static constexpr uint32_t AdcScaleMv = 5000, AdcScaleCounts = 4166;
+    // The nearest ADC code to 4.20 V converts back to 4199 mV on the factory scale.
+    static constexpr uint32_t FullCode = (FullMv * AdcScaleCounts + AdcScaleMv / 2) / AdcScaleMv;
+    static constexpr uint16_t FullCodeMv = FullCode * AdcScaleMv / AdcScaleCounts;
     static uint8_t level(int32_t mv) {
         uint8_t bars=1;
         for (auto threshold:BarMv) if (mv>=threshold) ++bars;
@@ -71,6 +76,7 @@ private:
         else if (clearRun_>=LowWindows) low_=false;
     }
     void update(uint16_t mv) {
+        if (mv == FullCodeMv) mv = FullMv;
         if (!state_.valid || !state_.measured) {
             state_.bars=level(mv);
             state_.millivolts=mv;
@@ -78,7 +84,8 @@ private:
             const uint8_t up=level(int32_t(mv)-HysteresisMv), down=level(int32_t(mv)+HysteresisMv);
             if (up>state_.bars) state_.bars=up;
             else if (down<state_.bars) state_.bars=down;
-            if (mv>=state_.millivolts+ShownStepMv || mv+ShownStepMv<=state_.millivolts) state_.millivolts=mv;
+            const bool fullChanged = (mv >= FullMv) != (state_.millivolts >= FullMv);
+            if (fullChanged || mv>=state_.millivolts+ShownStepMv || mv+ShownStepMv<=state_.millivolts) state_.millivolts=mv;
         }
         state_.low=low_;
         state_.percent=percent(state_.millivolts);

@@ -56,7 +56,8 @@ void BatteryMonitor::poll(uint32_t now) {
     next_=now+100;
     const uint32_t pins=GPIOC->IDR;
     gauge_.digital(pins&ExternalMask,pins&ChargeMask);
-    if (ready_ && !gauge_.state().external && HAL_ADC_Start(&adc_)==HAL_OK) {
+    // PC9 can stay high after unplugging USB. Keep the PC4 measurement running in either state.
+    if (ready_ && HAL_ADC_Start(&adc_)==HAL_OK) {
         pending_=true; started_=now;
     }
 }
