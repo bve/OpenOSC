@@ -63,8 +63,10 @@ void WaveformWidget::clear() {
         lv_obj_invalidate(object_);
 }
 void WaveformWidget::held(bool value) {
-    if (value && !held_)
+    if (value && !held_) {
         frozenAt_ = lv_tick_get();
+        if (model_.agePersistence(frozenAt_) && object_) lv_obj_invalidate(object_);
+    }
     held_ = value;
 }
 void WaveformWidget::trigger(scope::Channel channel, double codes) {
@@ -114,15 +116,13 @@ void WaveformWidget::setFrame(const scope::FrameView &frame) {
 }
 void WaveformWidget::service(uint32_t now) {
     // The fade pass: only a finite persistence fades (an infinite one changes only with a frame).
-    if (!object_ || held_ || !lv_obj_is_visible(object_) || !model_.options().persistenceMs ||
+    if (!object_ || held_ || !model_.options().persistenceMs ||
         model_.options().persistenceMs == plot::InfinitePersistence || !model_.hasFrame())
         return;
     if (uint32_t(now - fadeAt_) < 50)
         return;
-    if (uint32_t(now - model_.frameTime()) > uint32_t(model_.options().persistenceMs) * 16 / 14 + 100)
-        return;
     fadeAt_ = now;
-    lv_obj_invalidate(object_);
+    if (model_.agePersistence(now) && lv_obj_is_visible(object_)) lv_obj_invalidate(object_);
 }
 bool WaveformWidget::captureReference(unsigned channel) {
     if (!model_.captureReference(channel))
@@ -150,9 +150,7 @@ void WaveformWidget::draw(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     lv_area_t area;
     lv_obj_get_coords(self.object_, &area);
-    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_,
-                  self.held_ ? self.frozenAt_ : lv_tick_get(), self.inlineScales_)
-        .draw();
+    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_).draw();
 }
 void WaveformWidget::cover(lv_event_t *event) {
     auto *info = static_cast<lv_cover_check_info_t *>(lv_event_get_param(event));

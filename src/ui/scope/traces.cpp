@@ -67,8 +67,8 @@ void Painter::traces() {
             return;
         }
         if (o.glow)
-            xy(s.xy, model_.xyCount(), palette_.channels[0], 35U * o.channels[0].opacity / 255, 3,
-               Style::Vectors);
+            xy(s.xy, model_.xyCount(), palette_.channels[0], o.channels[0].opacity / 4, o.channels[0].width + 4,
+               o.style);
         xy(s.xy, model_.xyCount(), palette_.channels[0], o.channels[0].opacity, o.channels[0].width, o.style);
         return;
     }
@@ -79,7 +79,7 @@ void Painter::traces() {
         if (o.peakHold)
             trace(s.peaks[c], palette_.channels[c], 65U * channel.opacity / 255, 1, Style::Envelope);
         if (o.glow)
-            trace(s.traces[c], palette_.channels[c], 30U * channel.opacity / 255, 3, Style::Vectors, true);
+            trace(s.traces[c], palette_.channels[c], channel.opacity / 4, channel.width + 4, o.style);
         trace(s.traces[c], palette_.channels[c], channel.opacity, channel.width, o.style);
     }
     if (o.math != Math::Off) {

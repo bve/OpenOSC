@@ -76,8 +76,7 @@ public:
     bool hasFrame() const { return valid_; }
     bool hasReference() const { return reference_; }
     unsigned xyCount() const { return xyCount_; }
-    void agePersistence(uint32_t now) { storage_.persistence.advance(now, options_.persistenceMs); }
-    uint32_t frameTime() const { return frameAt_; }
+    bool agePersistence(uint32_t now) { return storage_.persistence.advance(now, options_.persistenceMs); }
     // The trigger's place: the crossing the window is placed by (Viewport::phaseQ16), else its index.
     int triggerX() const { return viewport_.positionX(int64_t(metadata_.triggerIndex) * 65536 - viewport_.phaseQ16); }
     int triggerY() const { return axes_[unsigned(triggerChannel_)].pixel(int32_t(triggerLevel_ * 256)); }
@@ -102,7 +101,6 @@ private:
     Axis axes_[2];
     scope::FrameMetadata metadata_;
     Statistics statistics_;
-    uint32_t frameAt_ = 0;
     unsigned xyCount_ = 0;
     bool spectrumDirty_ = true;
     double firstBin_=0,binSpan_=0;

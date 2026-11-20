@@ -117,10 +117,7 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
         return false;
     }
     if (options_.persistenceMs && fresh && options_.mode!=Mode::Spectrum) accumulate();
-    if (fresh) {
-        ++statistics_.frames;
-        frameAt_ = now;
-    }
+    if (fresh) ++statistics_.frames;
     dirty_ = false;
     ++statistics_.projections;
     valid_ = true;

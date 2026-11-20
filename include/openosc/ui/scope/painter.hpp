@@ -20,9 +20,9 @@ struct Palette {
 class Painter {
 public:
     // frame: the whole waveform object; the plot is frame less the PlotFrame margins.
-    Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette, uint32_t now,
+    Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette,
             bool inlineScales = true)
-        : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), now_(now), inlineScales_(inlineScales) {}
+        : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), inlineScales_(inlineScales) {}
     void draw();
     static lv_area_t plotArea(const lv_area_t &frame) {
         return {frame.x1 + PlotFrame::Left, frame.y1 + PlotFrame::Top, frame.x2 - PlotFrame::Right, frame.y2 - PlotFrame::Bottom};
@@ -53,7 +53,6 @@ private:
     lv_area_t frame_, area_; // area_: the plot; drawing coordinates are relative to its corner.
     Model &model_;
     const Palette &palette_;
-    uint32_t now_;
     bool inlineScales_;
 };
 class Path {

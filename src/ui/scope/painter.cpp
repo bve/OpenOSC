@@ -20,7 +20,6 @@ void Painter::draw() {
     if (plot) {
         layer_->_clip_area = clipped;
         model_.statistics().drawBatches = 0;
-        model_.agePersistence(now_);
         // Time traces only: X-Y and the spectrum have no time axis to run off the record.
         const auto mode = model_.options().mode;
         const RecordGaps gaps = model_.hasFrame() && (mode == Mode::Time || mode == Mode::SpectrumOverlay)

@@ -49,6 +49,26 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         plotControls_.options = view_.waveform().options();
         return false;
     };
+    auto &widget = view_.waveform();
+    if (row == plot::Controls::Clear) {
+        widget.clearHistory();
+        widget.clearReference();
+        view_.notify("History and reference cleared", now);
+        return true;
+    }
+    if (row == plot::Controls::Reference) {
+        const auto &options = widget.options();
+        const unsigned channel = plotControls_.channel;
+        constexpr auto VisibleTrace = "Reference needs a visible Y-T channel";
+        if ((options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay) ||
+            !options.channels[channel].visible) return refuse(VisibleTrace);
+        scope::FrameLease frame;
+        if (!data_.acquireScopeWait(frame)) return refuse("Reference needs a completed frame");
+        widget.setFrame(frame.view());
+        if (!widget.captureReference(channel)) return refuse(VisibleTrace);
+        view_.notify(channel ? "CH2 reference captured" : "CH1 reference captured", now);
+        return true;
+    }
     const auto &frontend=data_.scopeRequest().frontend;
     const bool heldXy = data_.scopeHeld() && view_.waveform().options().mode == plot::Mode::XY;
     const bool ch1 = heldXy ? channelShown(0) : frontend.enabled[0];
@@ -59,25 +79,8 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
     }
     if (!plotControls_.enabled[plotControls_.options.spectrum.channel])
         plotControls_.options.spectrum.channel ^= 1;
-    if (row == plot::Controls::Reference &&
-        ((plotControls_.options.mode != plot::Mode::Time && plotControls_.options.mode != plot::Mode::SpectrumOverlay) ||
-         !plotControls_.options.channels[plotControls_.channel].visible)) {
-        return refuse("Reference needs a visible Y-T channel");
-    }
-    // Everything that can refuse comes first, so a refusal leaves the panel, the record and HOLD as they were.
-    scope::FrameLease frame;
-    if (row == plot::Controls::Reference && !data_.acquireScopeWait(frame)) return refuse("Reference needs a completed frame");
     if (!changePlotMode(plotControls_.options,view_.waveform().options().mode,now)) return refuse("Finish data transfer first");
-    auto &widget = view_.waveform();
     widget.configure(plotControls_.options);
-    if (frame.valid()) {
-        widget.setFrame(frame.view());
-        widget.captureReference(plotControls_.channel);
-    }
-    if (row == plot::Controls::Clear) {
-        widget.clearHistory();
-        widget.clearReference();
-    }
     selectedChannel_ = plotControls_.channel;
     plotControls_.options = widget.options(); // As the view took it (X-Y adds its own).
     queuePlotSave(now);
