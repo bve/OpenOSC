@@ -107,8 +107,20 @@ void ApplicationController::prepareColumns() {
     }
     plot::applicationColumns().prepare(ahead_.view(), model.options(), model.viewport().width, model.viewport().height);
 }
+// Each entry to the Scope without a factory record asks once that the defaults be said; a notice already
+// on show (a boot message, another action's) is never replaced: this one follows when it has gone.
+void ApplicationController::nominalNotice(uint32_t now) {
+    const bool scope = state_.mode == MeasurementMode::Oscilloscope;
+    if (scope && !scopeShown_) nominalNoticeDue_ = data_.scopeNominal();
+    if (!scope) nominalNoticeDue_ = false;
+    scopeShown_ = scope;
+    if (!nominalNoticeDue_ || !uiReady_ || view_.toastShowing()) return;
+    view_.notify("Factory calibration unavailable\nScope readings use approximate defaults", now);
+    nominalNoticeDue_ = false;
+}
 void ApplicationController::displayData(uint32_t now) {
     refreshSoftKeys();
+    nominalNotice(now);
     const bool rolled = uint32_t(now-fpsAt_) >= 1000; // FPS over each second, whatever is shown.
     if (rolled) {
         const uint32_t flushes=display_.flushes();
@@ -126,6 +138,8 @@ void ApplicationController::displayData(uint32_t now) {
         }
     } else if (rolled || counterStale_) { view_.fps(prefs_.showFps != 0, fps_); counterStale_ = false; }
     view_.generatorActive(data_.generator().enabled());
+    if (ClockControl::changes() != clockChanges_) { clockChanges_ = ClockControl::changes(); clockMode_ = ClockControl::activeMode(); }
+    view_.clockProfile(prefs_.clockIndicator != 0, clockMode_); // Redraws only on a change of its own.
     // The DAC stream halves the capture's maximum rate: said once as it starts (output on, PWM to DAC,
     // a Dedicated square below 1 kHz, a startup restore); the Scope's GEN note keeps ", ADC max /2".
     const bool captureHalved = data_.generatorLoadsBus();
@@ -196,8 +210,9 @@ void ApplicationController::displayData(uint32_t now) {
         {
             const auto &options = view_.waveform().options();
             char text[40];
-            // A new clock profile or Scope entry (counterEpoch_) starts the mean again (S13).
-            counterText_.update(data_.scopeCounters(), options.counter, text, sizeof text, ClockControl::activeMode() | counterEpoch_ << 8);
+            // A new clock profile or Scope entry (counterEpoch_) starts the mean again (S13). The profile as
+            // read above on its last change (clockMode_), not an RCC read every pass.
+            counterText_.update(data_.scopeCounters(), options.counter, text, sizeof text, clockMode_ | counterEpoch_ << 8);
             const unsigned source = options.counter.source ? options.counter.source - 1U : 0;
             const bool room = options.mode == plot::Mode::Time; // X-Y and FFT label that corner.
             view_.waveform().counter(room ? text : "", view_.waveform().palette().channels[source]);

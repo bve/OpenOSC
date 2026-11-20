@@ -107,6 +107,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.idle = chosen.idle;
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
+    prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();
     changed(now);

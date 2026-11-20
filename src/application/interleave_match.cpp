@@ -94,7 +94,10 @@ void ApplicationController::openInterleaveMatch(uint32_t now) {
         view_.notify("Select Scope before calibration", now); return;
     }
     const auto ready = data_.interleaveMatchReady();
-    if (ready != DataStatus::Ok) { view_.notify(readiness(ready), now); return; }
+    if (ready != DataStatus::Ok) {
+        view_.notify(ready == DataStatus::Uncalibrated && data_.scopeNominal() ? "Factory calibration required" : readiness(ready), now);
+        return;
+    }
     data_.interleaveMatchCalibrating(true);
     interleaveMatch_.begin(coreHz(), data_.scopeMetadata());
     state_.settingsOpen = false;

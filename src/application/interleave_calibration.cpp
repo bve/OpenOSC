@@ -21,6 +21,7 @@ void ApplicationController::beginInterleaveOffset(uint32_t now) {
     leaveConfirmation(now);
     switch (data_.beginInterleaveOffset(now)) {
     case DataStatus::Ok: interleaveWatched_ = true; view_.notify("Measuring interleave offset...", now); break;
+    case DataStatus::Uncalibrated: view_.notify("Factory calibration required", now); break;
     case DataStatus::InvalidArgument: view_.notify("Needs Interleave active and trigger Auto", now); break;
     case DataStatus::Unsupported: view_.notify("No interleave offset on this model", now); break;
     default: view_.notify("Finish HOLD, calibration or recording first", now); break;

@@ -77,8 +77,15 @@ public:
     bool hasReference() const { return reference_; }
     unsigned xyCount() const { return xyCount_; }
     bool agePersistence(uint32_t now) { return storage_.persistence.advance(now, options_.persistenceMs); }
-    // The trigger's place: the crossing the window is placed by (Viewport::phaseQ16), else its index.
-    int triggerX() const { return viewport_.positionX(int64_t(metadata_.triggerIndex) * 65536 - viewport_.phaseQ16); }
+    // Whether the record has a trigger position to mark: its trigger, or (untriggered: Auto's newest
+    // points, an edge Noise reject refused, a forced record) its configured pretrigger point (#65).
+    bool triggerPlaced() const { return metadata_.triggered || metadata_.pretriggerKnown; }
+    // The trigger's place: the crossing the window is placed by (Viewport::phaseQ16), else its index;
+    // untriggered, the record's pretrigger point.
+    int triggerX() const {
+        if (!metadata_.triggered && metadata_.pretriggerKnown) return viewport_.sampleX(metadata_.pretrigger);
+        return viewport_.positionX(int64_t(metadata_.triggerIndex) * 65536 - viewport_.phaseQ16);
+    }
     int triggerY() const { return axes_[unsigned(triggerChannel_)].pixel(int32_t(triggerLevel_ * 256)); }
     scope::Channel triggerChannel() const { return triggerChannel_; }
     const scope::SpectrumResult &spectrum() const { return spectrum_.result; }

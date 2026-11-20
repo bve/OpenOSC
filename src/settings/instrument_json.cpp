@@ -28,7 +28,7 @@ template<size_t N> bool choice(JsonObjectConst object, const char *name, uint32_
 }
 constexpr const char *couplings[] = {"dc", "ac"}, *edges[] = {"rising", "falling"};
 constexpr const char *triggerModes[] = {"auto", "normal", "single"};
-constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact"}; // FactoryRecordPolicy.
+constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact", "mkr"}; // FactoryRecordPolicy.
 constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
 constexpr const char *faces[] = {"ibm", "mono", "segment"}, *palettes[] = {"dark", "amber", "paper"};
 static_assert(sizeof displays / sizeof *displays == MeterPreferences::Displays && sizeof faces / sizeof *faces == MeterPreferences::Faces &&

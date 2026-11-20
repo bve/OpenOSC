@@ -25,6 +25,7 @@ bool FrameMetadata::valid() const {
         return false; // Bound fixed-point projection arithmetic even for hostile imports.
     if ((rolling && (!timebaseNs || triggered)) || (triggered && triggerIndex >= samples))
         return false;
+    if (pretriggerKnown && (rolling || pretrigger >= samples)) return false;
     // The pretrigger point of a shifted trigger lies in the record.
     if (triggerShift && (!triggered || int64_t(triggerIndex) - triggerShift < 0 || int64_t(triggerIndex) - triggerShift >= samples))
         return false;
@@ -692,6 +693,13 @@ FrameView FrameView::withTrigger(bool found, uint32_t index, TriggerEdge edge) c
         view.metadata_.eventKnown = metadata_.eventKnown;
     }
     if (found) view.metadata_.triggerEdge = edge;
+    view.valid_ = view.validate();
+    return view;
+}
+FrameView FrameView::withPretrigger(uint32_t point) const {
+    FrameView view = *this;
+    view.metadata_.pretrigger = point;
+    view.metadata_.pretriggerKnown = true;
     view.valid_ = view.validate();
     return view;
 }

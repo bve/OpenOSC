@@ -34,7 +34,7 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     if (CalibrationRows::handles(entry.action)) return calibration_.kind(entry.action);
     switch (entry.action) {
     case Action::Brightness: return PropertyKind::Number;
-    case Action::ShowFps: case Action::PanDirection: case Action::HoldTime:
+    case Action::ShowFps: case Action::ClockIndicator: case Action::PanDirection: case Action::HoldTime:
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
     case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave: return PropertyKind::Choice;
@@ -48,6 +48,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     if (CalibrationRows::handles(action(row))) return calibration_.options(action(row));
     switch (action(row)) {
     case Action::ShowFps: return 3;
+    case Action::ClockIndicator: return 2;
     case Action::PanDirection: return 2;
     case Action::HoldTime: return 3;
     case Action::BatteryDisplay: return 3;
@@ -65,6 +66,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     if (CalibrationRows::handles(action(row))) return calibration_.option(action(row));
     switch (action(row)) {
     case Action::ShowFps: return prefs_.showFps;
+    case Action::ClockIndicator: return prefs_.clockIndicator;
     case Action::PanDirection: return prefs_.panReverse;
     case Action::HoldTime: return prefs_.holdTime;
     case Action::BatteryDisplay: return prefs_.batteryDisplay;
@@ -85,6 +87,7 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
     case Action::BatteryDisplay: std::snprintf(output, capacity, "%s", Batteries[index % 3]); break;
     case Action::ShowFps: { static constexpr const char *counters[] = {"Off", "FPS", "Sample rate"}; std::snprintf(output, capacity, "%s", counters[index % 3]); break; }
     case Action::PanDirection: std::snprintf(output, capacity, "%s", index ? "Move waveform" : "Move view"); break;
+    case Action::ClockIndicator: std::snprintf(output, capacity, "%s", index ? "On" : "Off"); break;
     case Action::HoldTime: { static constexpr const char *holds[] = {"1 s", "1.5 s", "2 s"}; std::snprintf(output, capacity, "%s", holds[index % 3]); break; }
     case Action::RunProfile: {
         const auto &mode = RunModes[index % RunModeCount];
@@ -178,6 +181,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     if (CalibrationRows::handles(action(row))) return calibration_.choose(action(row), index);
     switch (action(row)) {
     case Action::ShowFps: prefs_.showFps = index; break;
+    case Action::ClockIndicator: prefs_.clockIndicator = index; break;
     case Action::PanDirection: prefs_.panReverse = index; break;
     case Action::HoldTime: prefs_.holdTime = index; break;
     case Action::BatteryDisplay: prefs_.batteryDisplay = index; break;

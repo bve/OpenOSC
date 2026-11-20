@@ -65,6 +65,12 @@ struct FrameMetadata {
     int32_t triggerShift = 0;
     int32_t eventOffset = 0; bool eventKnown = false; // The comparator event, in points from triggerIndex (WAV:EVENt?).
     TriggerEdge triggerEdge; // What triggerIndex was found for (known only while triggered).
+    // The record's configured pretrigger point, (samples - 1) * position / 1000 of the settings it was
+    // cut with (TriggerRecord::select), also when no edge qualified (Auto's newest points, a forced
+    // record, an edge Noise reject refused): an untriggered record shows its trigger position marker
+    // there (GitHub #65), a place only, never a trigger (not `triggered`, no TRIG'D). Display only: not
+    // in any file format, SCPI reply or the record's samples; a record cut elsewhere has none.
+    uint32_t pretrigger = 0; bool pretriggerKnown = false;
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
     // Immutable boot profile entry. Transferred file payloads already hold the corrected codes.
@@ -118,6 +124,8 @@ public:
     FrameView withTrigger(bool found, uint32_t index, TriggerEdge edge = {}) const;
     // The trigger at `index`, `shift` points past the record's pretrigger point (FrameMetadata::triggerShift).
     FrameView withShiftedTrigger(uint32_t index, int32_t shift, TriggerEdge edge = {}) const;
+    // The record's configured pretrigger point (FrameMetadata::pretrigger), in its own points.
+    FrameView withPretrigger(uint32_t point) const;
     FrameView withEvent(int32_t offset) const { FrameView view = *this; view.metadata_.eventOffset = offset; view.metadata_.eventKnown = true; return view; }
     // Calibration compares the same captured words with and without new coefficients.
     FrameView withInterleaveMatch(const InterleaveMatch *match) const;

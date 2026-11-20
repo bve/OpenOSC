@@ -422,6 +422,13 @@ private:
     uint32_t hiddenAt_ = 0xffff0000U;
     uint32_t fpsAt_ = 0, fpsFlushes_ = 0, fps_ = 0;
     double counterRate_ = -1; bool counterStale_ = true; // The top bar's counter as last drawn.
+    // The run profile as the top bar's glyph last read it: ClockControl::activeMode() again only when
+    // ClockControl::changes() moved (a change, its rollback or fallback, Remote), never each pass.
+    uint32_t clockChanges_ = ~0U, clockMode_ = RunModeCount;
+    // No factory record: once on each entry to the Scope (the boot's included), when no other notice is on
+    // show, that the scale is the factory's defaults (nominalNotice). scopeShown_: the Scope last pass.
+    bool nominalNoticeDue_ = false, scopeShown_ = false;
+    void nominalNotice(uint32_t now);
     uint32_t dataAt_ = 0, lastScopeSequence_ = 0, lastMeterSequence_ = 0;
     uint32_t meterBarAt_ = 0;
     unsigned selectedChannel_ = 0;

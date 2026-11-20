@@ -12,5 +12,10 @@ public:
     // The profile the core actually runs (SYSCLK from PLL1 at its frequency); RunModeCount if none
     // (the HSI fallback left by a failed change).
     static uint32_t activeMode();
+    // Counts every attempt to retime SYSCLK (startup, a profile change, its rollback or HSI fallback,
+    // Remote, shutdown): a reader of activeMode() asks again only when this moved, so no RCC read
+    // runs on every display pass (an SRD access the capture shares, GitHub #33). RAM only.
+    static uint32_t changes() { return changes_; }
+    static inline uint32_t changes_ = 0;
 };
 }

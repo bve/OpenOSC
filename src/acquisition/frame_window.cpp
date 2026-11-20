@@ -29,6 +29,9 @@ FrameView FrameView::slice(uint32_t first,uint32_t count) const {
     // A shifted trigger keeps its pretrigger point only while that point stays in the slice.
     const int64_t anchor=int64_t(metadata.triggerIndex)-metadata.triggerShift;
     if (anchor<0 || anchor>=int64_t(count)) metadata.triggerShift=0;
+    // The configured pretrigger point too, while it stays in the slice.
+    if (metadata.pretriggerKnown && metadata.pretrigger>=first && metadata.pretrigger-first<count) metadata.pretrigger-=first;
+    else { metadata.pretrigger=0; metadata.pretriggerKnown=false; }
     view.valid_=view.validate();
     return view;
 }

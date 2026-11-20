@@ -57,6 +57,10 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["show_sample_rate"].is<bool>()) return false;
         if (indicators["show_sample_rate"].as<bool>()) candidate.showFps = 2;
     }
+    if (indicators.containsKey("clock_indicator")) { // Absent in older files: off.
+        if (!indicators["clock_indicator"].is<bool>()) return false;
+        candidate.clockIndicator = indicators["clock_indicator"].as<bool>();
+    }
     if (indicators.containsKey("pan_moves_waveform")) {
         if (!indicators["pan_moves_waveform"].is<bool>()) return false;
         candidate.panReverse = indicators["pan_moves_waveform"].as<bool>();
@@ -205,6 +209,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["show_fps"] = values.showFps == 1;
     document["display"]["show_sample_rate"] = values.showFps == 2;
     document["display"]["pan_moves_waveform"] = values.panReverse == 1;
+    document["display"]["clock_indicator"] = values.clockIndicator == 1;
     document["hold_ms"] = values.holdMs();
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
     document["usb"]["controller"] = usbControllers[values.usbController];

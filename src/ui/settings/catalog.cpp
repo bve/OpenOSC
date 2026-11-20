@@ -15,6 +15,7 @@ constexpr SettingsEntry display[] = {
     {"Brightness", Action::Brightness},
     {"Top bar counter", Action::ShowFps},
     {"Battery", Action::BatteryDisplay},
+    {"Clock indicator", Action::ClockIndicator}, // The Scope top bar's L/M/H run profile glyph (GitHub #47).
     {"Pan direction", Action::PanDirection},
     {"Generator layout", Action::GeneratorLayout},
     {"Appearance", Action::None, Page::Appearance},

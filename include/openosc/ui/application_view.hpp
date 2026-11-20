@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/settings/preferences.hpp"
+#include "openosc/ui/components/profile_glyph.hpp"
 #include "openosc/settings/scope_appearance.hpp"
 #include "openosc/ui/components/scope_styles.hpp"
 #include "openosc/ui/scope/controls.hpp"
@@ -91,6 +92,11 @@ public:
     void batteryDisplay(uint32_t mode);
     void fps(bool visible, uint32_t value);
     void counter(bool visible, const char *text); // The top bar's counter: FPS or the sample rate.
+    // The run profile glyph (GitHub #47): `mode` is ClockControl::activeMode(), RunModeCount none. Enabled
+    // in the Scope: left of the battery (StatusBarLayout::clock), the glyph unless no profile runs;
+    // LVGL is touched only when the letter, ink, slot or visibility changes.
+    void clockProfile(bool enabled, uint32_t mode);
+    lv_obj_t *clockGlyph() const { return clock_; } // Tests: its place and visibility.
     WaveformWidget &waveform() { return host_.waveform(); }
     const WaveformWidget &waveform() const { return host_.waveform(); }
     const ui::MeterSummary &meterSummary() { return host_.meterSummary(); }
@@ -153,8 +159,17 @@ private:
     ui::PowerHoldOverlay powerHold_;
     void refreshIndicators();
     void placeFps(bool force = false);
+    void placeClock();
+    void paintClock();
+    static void drawClock(lv_event_t *event);
     int statusRight_ = -1; // The pill edge the indicators were last laid out for.
     bool fpsWanted_ = false, fpsVisible_ = false;
+    lv_obj_t *clock_ = nullptr;
+    bool clockEnabled_ = false;
+    // Where the glyph and the right side are: 0 the usual places (Off, outside the Scope), 1 beside the
+    // battery icon, 2 beside a text battery with USB/GEN/overview closed up (StatusBarLayout::clock).
+    uint8_t clockLayout_ = 0;
+    uint32_t clockMode_ = RunModeCount, clockInk_ = 0; // The letter and the ink drawn.
     uint32_t toastUntil_ = 0;
     bool generatorOn_ = false, toastActive_ = false, usbConnected_ = false;
     MeasurementMode mode_ = MeasurementMode::Oscilloscope;

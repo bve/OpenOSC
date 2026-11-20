@@ -10,7 +10,7 @@ enum class SettingsAction : uint8_t {
     CalibrateZero,ReloadZero,FactoryZero,ShowFps,BatteryDisplay,BufferSize,CalibrateHardwareZero,
     GainChannel,GainRange,GainReference,GainReferenceStep,GainProbe,GainSpan,GainInForce,CalibrateGain,FactoryGain,
     InterleaveOffset,InterleaveInForce,InterleaveSaved,SaveInterleave,CancelInterleave,ResetInterleave,
-    GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch
+    GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch, ClockIndicator
 };
 struct SettingsEntry {
     const char *name;

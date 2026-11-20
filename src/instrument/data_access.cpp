@@ -28,7 +28,7 @@ DataAccess::DataAccess(Filesystem &fs)
 bool DataAccess::initialize(MeasurementMode view, FactoryRecordPolicy factoryRecord) {
     CalibrationRecord record;
     factoryRecordPolicy_ = factoryRecord;
-    record.load(calibration_, factoryRecord); // Refused: calibration_ stays invalid (no record, no scale).
+    record.load(calibration_, factoryRecord); // Refused: the record stays invalid and ScopeCalibration uses defaults.
     if (calibration_.valid()) {
         zeroFile_.load(calibration_.crc());
         if (pwmFile_.load()) scopeCalibration_.setPwm(pwmFile_.values());

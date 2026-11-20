@@ -82,6 +82,7 @@ bool ApplicationController::centerTrigger(uint32_t now) {
     view_.waveform().configure(options);
     if (plotChanged) queuePlotSave(now);
     dataRefresh_ = true;
+    view_.notify("Trigger centered", now); // Also when already centered: the action is done (#65).
     return true;
 }
 void ApplicationController::beginHeldView() {

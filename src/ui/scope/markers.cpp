@@ -47,8 +47,9 @@ void Painter::markers() {
         line(0, y, w, y, color, 65, true);
         triangle({int16_t(outer), int16_t(y - 4)}, {int16_t(right), int16_t(y)}, {int16_t(outer), int16_t(y + 4)}, color);
     }
-    // Trigger position: top margin, pointing down at the plot edge.
-    if (!model_.metadata().triggered) return;
+    // Trigger position: top margin, pointing down at the plot edge. An untriggered record (Auto's
+    // newest points, an edge Noise reject refused) marks its configured pretrigger point (#65).
+    if (!model_.triggerPlaced()) return;
     const int x = model_.triggerX(), top = -PlotFrame::Top, edge = -1;
     if (x < 0) triangle({6, int16_t(top)}, {6, int16_t(edge)}, {0, int16_t((top + edge) / 2)}, color);
     else if (x > w) triangle({int16_t(w - 6), int16_t(top)}, {int16_t(w - 6), int16_t(edge)}, {int16_t(w), int16_t((top + edge) / 2)}, color);

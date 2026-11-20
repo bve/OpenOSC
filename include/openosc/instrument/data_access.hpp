@@ -211,6 +211,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // profile (applied or saved) else the factory record's (ScopeCalibration::interleaveOffset); and
     // the saved one.
     float interleaveOffset() const { return scopeCalibration_.interleaveOffset(); }
+    // No factory record: the Scope runs on the built-in defaults (ScopeCalibration::nominal), approximate.
+    bool scopeNominal() const { return scopeCalibration_.nominal(); }
     const calibration::InterleaveProfile &savedInterleave() const { return interleaveFile_.values(); }
     // Interleave of CH1 (InterleaveRule): the ZT703S user's choice (Settings > Device > Performance >
     // Interleave CH1; off by default, any other board accepts only off), what keeps a request from it.

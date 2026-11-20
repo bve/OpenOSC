@@ -23,7 +23,9 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     // bounds place it as an unshifted record, its missing part outside the record (RecordGaps). Any
     // other view (unlocked, X-Y, FFT) keeps the real record's origin and the trigger's own fraction.
     const bool anchored = o.lockTrigger && m.triggered && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay);
-    const bool centered = anchored && o.centerHeldTrigger;
+    // Center trigger on a held record: its trigger, or an untriggered one's pretrigger point (#65).
+    const bool centered = o.centerHeldTrigger && o.lockTrigger && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay) &&
+                          !m.rolling && (m.triggered || m.pretriggerKnown);
     const int64_t origin = anchored ? int64_t(m.triggerShift) * 65536 : 0;
     const int64_t full = int64_t(record), pan = o.panPpb; // record < 2^37: both products fit int64.
     startQ16 = origin + full / Options::PanFull * pan + full % Options::PanFull * pan / Options::PanFull;
@@ -39,7 +41,7 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     // window. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
     else if (!m.rolling && !m.triggered && o.lockTrigger &&
              (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay))
-        startQ16 += (int64_t(record) - int64_t(spanQ16)) / 2;
+        startQ16 += centered ? int64_t(m.pretrigger) * 65536 - int64_t(spanQ16 / 2) : (int64_t(record) - int64_t(spanQ16)) / 2;
     // An explicitly centered held trigger can leave part of the viewport outside the record.
     if (o.zoomOut > 1 && !centered) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
     return true;

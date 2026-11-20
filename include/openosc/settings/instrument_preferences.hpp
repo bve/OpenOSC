@@ -25,7 +25,7 @@ struct ScopePreferences {
     uint32_t rollAuto=1;
     // InterleaveMode: Off/On, with legacy Auto as the ZT706S default.
     uint32_t interleave = board::Current::Features.adcInterleave ? 2 : 0;
-    // A service choice (FactoryRecordPolicy: 0 auto, 1 long, 2 compact) for reading the factory record
+    // A service choice (FactoryRecordPolicy: 0 auto, 1 long, 2 compact, 3 mkr) for reading the factory record
     // at the NEXT start (DataAccess::initialize); Reload settings never re-reads the record. Only on
     // outside evidence about an ambiguous record (docs/ZERO_CALIBRATION.md); files without it: auto.
     uint32_t factoryRecordFormat=0;

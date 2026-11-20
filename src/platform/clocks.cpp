@@ -60,6 +60,7 @@ bool ClockControl::selectPerformance(uint32_t mode) {
     const uint32_t target = profile.coreHz;
     if (SystemCoreClock == target && __HAL_RCC_GET_SYSCLK_SOURCE()==RCC_SYSCLKSOURCE_STATUS_PLLCLK)
         return true;
+    ++changes_; // Whatever follows (the target, HSI after a failure): activeMode() is read again.
     RCC_ClkInitTypeDef bus{};
     bus.ClockType = RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1
         | RCC_CLOCKTYPE_PCLK2 | RCC_CLOCKTYPE_D1PCLK1 | RCC_CLOCKTYPE_D3PCLK1;

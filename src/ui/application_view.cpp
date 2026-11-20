@@ -21,6 +21,8 @@ void ApplicationView::build(const Theme &theme) {
     if (edge_) lv_obj_delete(edge_);
     if (channelTag_) lv_obj_delete(channelTag_);
     channelTag_ = nullptr;
+    if (clock_) lv_obj_delete(clock_);
+    clock_ = nullptr; clockInk_ = 0; clockLayout_ = 0; // The icons and the overview below are created at their usual places.
     channelTagChannel_ = NoTriggerChannel;
     overview_.clear();
     powerHold_.theme(theme);
@@ -65,6 +67,12 @@ void ApplicationView::build(const Theme &theme) {
     lv_obj_set_pos(channelTag_,Layout::level(Layout::Trigger).x,5);
     lv_obj_add_event_cb(channelTag_,drawChannelTag,LV_EVENT_DRAW_MAIN,this);
     lv_obj_set_hidden(channelTag_,true);
+    clock_ = lv_obj_create(screen); // Nothing of its own but the glyph: no background, no border.
+    lv_obj_remove_style_all(clock_);
+    lv_obj_set_size(clock_, Layout::ClockWidth, Layout::ClockHeight);
+    lv_obj_set_pos(clock_, Layout::ClockBesideIcon.x, Layout::ClockYIcon); // Placed by placeClock().
+    lv_obj_add_event_cb(clock_, drawClock, LV_EVENT_DRAW_MAIN, this);
+    lv_obj_set_hidden(clock_, true);
     trigger_ = label(screen,"",Layout::level(Layout::Trigger).x+plot::PlotFrame::TagWidth+1,4);
     lv_obj_set_size(trigger_,Layout::LevelWidth-plot::PlotFrame::TagWidth-1,14);
     lv_obj_set_style_text_font(trigger_,ui::Elements::font(12),0);
@@ -95,6 +103,64 @@ void ApplicationView::refreshIndicators() {
     if (edge_) lv_obj_set_hidden(edge_, !trigger);
     if (channelTag_) lv_obj_set_hidden(channelTag_, !trigger || channelTagChannel_ == NoTriggerChannel);
     placeFps();
+    placeClock();
+}
+// The run profile glyph: enabled in the Scope, left of the battery; beside a text battery USB, GEN and
+// the overview close up. Moved only when the setting, the mode or the battery display changes (never
+// by a reading, a state or the profile); the glyph unless no profile runs. No pill reaches either.
+void ApplicationView::placeClock() {
+    if (!clock_ || !usbIndicator_ || !generatorIndicator_ || !overview_.root()) return;
+    using Layout = ui::StatusBarLayout;
+    const bool on = clockEnabled_ && mode_ == MeasurementMode::Oscilloscope;
+    const uint8_t layout = !on ? 0 : battery_.text() ? 2 : 1;
+    if (layout != clockLayout_) {
+        clockLayout_ = layout;
+        const bool dense = layout == 2;
+        lv_obj_set_x(usbIndicator_, (dense ? Layout::UsbDense : Layout::Usb).x);
+        lv_obj_set_x(generatorIndicator_, (dense ? Layout::GeneratorDense : Layout::Generator).x);
+        lv_obj_set_x(overview_.root(), (dense ? Layout::OverviewDense : Layout::Overview).x);
+        lv_obj_set_pos(clock_, Layout::clock(dense).x, Layout::clockY(dense));
+    }
+    const bool visible = on && ui::ProfileGlyph::shown(clockMode_);
+    if (visible == !lv_obj_is_hidden(clock_)) return;
+    lv_obj_set_hidden(clock_, !visible);
+    if (visible) lv_obj_move_foreground(clock_);
+}
+// Its ink on the bar as shown (the Scope's look, light or dark); invalidated only when it changes.
+void ApplicationView::paintClock() {
+    if (!clock_) return;
+    const auto &t = shown();
+    const uint32_t ink = ui::ProfileGlyph::color(clockMode_, t.background, t.muted);
+    if (ink == clockInk_) return;
+    clockInk_ = ink;
+    lv_obj_invalidate(clock_);
+}
+void ApplicationView::clockProfile(bool enabled, uint32_t mode) {
+    if (!ui::ProfileGlyph::shown(mode)) mode = RunModeCount;
+    if (enabled == clockEnabled_ && mode == clockMode_) return; // Each display pass: nothing to do.
+    const bool letter = mode != clockMode_;
+    clockEnabled_ = enabled; clockMode_ = mode;
+    if (letter && clock_) lv_obj_invalidate(clock_);
+    paintClock();
+    placeClock();
+}
+void ApplicationView::drawClock(lv_event_t *event) {
+    auto &self = *static_cast<ApplicationView *>(lv_event_get_user_data(event));
+    auto *layer = lv_event_get_layer(event);
+    lv_area_t area;
+    lv_obj_get_coords(self.clock_, &area);
+    lv_draw_rect_dsc_t ink;
+    lv_draw_rect_dsc_init(&ink);
+    ink.bg_color = lv_color_hex(self.clockInk_);
+    using Glyph = ui::ProfileGlyph;
+    for (int y = 0; y < Glyph::Height; ++y)
+        for (int x = 0; x < Glyph::Width;) {
+            if (!Glyph::ink(self.clockMode_, x, y)) { ++x; continue; }
+            const int start = x;
+            while (x < Glyph::Width && Glyph::ink(self.clockMode_, x, y)) ++x;
+            lv_area_t run = {lv_coord_t(area.x1 + start), lv_coord_t(area.y1 + y), lv_coord_t(area.x1 + x - 1), lv_coord_t(area.y1 + y)};
+            lv_draw_rect(layer, &ink, &run);
+        }
 }
 // The counter has its own column; only a pill wide enough to reach it hides it.
 void ApplicationView::placeFps(bool force) {
@@ -192,6 +258,7 @@ void ApplicationView::paintShell() {
     lv_obj_set_style_text_color(fps_, lv_color_hex(t.muted), 0);
     refreshTriggerColors(channelTagChannel_);
     overview_.palette(t);
+    paintClock();
 }
 // The Scope's theme: the base theme under the appearance's look (ScopeStyles); the host repaints the
 // Scope with it when it shows, nothing is rebuilt.

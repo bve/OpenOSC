@@ -11,6 +11,7 @@ bool ScopeCalibration::node(unsigned channel, unsigned range, unsigned point, ui
 }
 bool ScopeCalibration::offsetCompare(unsigned channel, unsigned range, int position, uint16_t &compare) const {
     if (channel >= PwmProfile::Channels || range >= PwmProfile::Ranges) return false;
+    if (nominal()) return interpolateCompare(NominalRow, position, compare); // No trial or profile without a record.
     const auto &trial = trial_[channel];
     if (trial.active && trial.range == range && position == ZeroProfile::Positions[trial.point]) {
         compare = trial.compare;
@@ -27,8 +28,10 @@ bool ScopeCalibration::setPwm(const PwmProfile &profile) {
 }
 bool ScopeCalibration::scale(unsigned channel, unsigned range, int position, double &voltsPerCode, double &zeroCode,
                              double displayGain) const {
-    if (range >= GainProfile::Ranges ||
-        !factory_.scopeScale(channel, scope::VoltageRanges::millivolts(range), position, voltsPerCode, zeroCode, displayGain)) return false;
+    if (channel >= PwmProfile::Channels || range >= GainProfile::Ranges) return false;
+    const uint32_t millivolts = scope::VoltageRanges::millivolts(range);
+    if (nominal() ? !CalibrationData::transfer(NominalGain, millivolts, position, displayGain, voltsPerCode, zeroCode)
+                  : !factory_.scopeScale(channel, millivolts, position, voltsPerCode, zeroCode, displayGain)) return false;
     voltsPerCode *= gain_.factor(channel, range);
     return true;
 }
@@ -39,6 +42,7 @@ bool ScopeCalibration::setGain(const GainProfile &profile) {
 }
 float ScopeCalibration::interleaveOffset() const {
     if (interleave_.enabled) return interleave_.offset;
+    if (nominal()) return NominalInterleave;
     const float factory = factory_.interleaveCorrection();
     return std::isfinite(factory) && InterleaveProfile::allowed(factory) ? factory : 0;
 }

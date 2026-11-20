@@ -6,8 +6,13 @@
 
 namespace openosc {
 namespace {
-constexpr unsigned OffsetBytes = 336, LongDataBytes = 344;
+constexpr unsigned OffsetBytes = 336, LongDataBytes = 344, MkrDataBytes = 340;
 bool plausibleGain(uint16_t word) { return word >= 100 && word <= 199; }
+// Every offset word a compare the interpolator takes (interpolateCompare: <= 9999).
+bool plausibleNodes(const uint8_t *bytes) {
+    for (unsigned i = 0; i < OffsetBytes; i += 2) if (Binary::readLe(bytes + i, 2) > 9999) return false;
+    return true;
+}
 } // namespace
 bool CalibrationData::load(const uint8_t *bytes, size_t length, FactoryRecordPolicy policy) {
     if (!bytes || length != RecordBytes) return false;
@@ -16,11 +21,18 @@ bool CalibrationData::load(const uint8_t *bytes, size_t length, FactoryRecordPol
     for (unsigned i = OffsetBytes + 2; i < RecordBytes; ++i) tailZero = tailZero && !bytes[i];
     const uint16_t prefixWord = Binary::readLe(bytes + OffsetBytes, 2);
     const bool compactValid = tailZero && Crc16::compute(bytes, OffsetBytes) == prefixWord; // Implies longValid.
+    const uint16_t secondWord = Binary::readLe(bytes + OffsetBytes + 2, 2), mkrCrc = Binary::readLe(bytes + MkrDataBytes, 2);
+    const bool mkrValid = Crc16::compute(bytes, MkrDataBytes) == mkrCrc;
+    // What Auto takes as MKR: its CRC, both gains written and in the factory's band, every node a compare.
+    const bool mkrPlausible = mkrValid && plausibleGain(prefixWord) && plausibleGain(secondWord) && plausibleNodes(bytes);
+    bool padding = true; // Zeros after the MKR CRC: then also long-valid with CRC 0 (the zero residue).
+    for (unsigned i = MkrDataBytes + 2; i < RecordBytes; ++i) padding = padding && !bytes[i];
     CalibrationData candidate;
     switch (policy) {
     case FactoryRecordPolicy::Auto:
         if (compactValid) candidate.format_ = plausibleGain(prefixWord) ? FactoryRecordFormat::Ambiguous : FactoryRecordFormat::Compact;
-        else if (longValid) candidate.format_ = FactoryRecordFormat::Long;
+        else if (longValid) candidate.format_ = mkrPlausible && padding ? FactoryRecordFormat::Ambiguous : FactoryRecordFormat::Long;
+        else if (mkrPlausible) candidate.format_ = FactoryRecordFormat::Mkr;
         else return false;
         break;
     case FactoryRecordPolicy::Long:
@@ -31,6 +43,10 @@ bool CalibrationData::load(const uint8_t *bytes, size_t length, FactoryRecordPol
         if (!compactValid) return false;
         candidate.format_ = FactoryRecordFormat::Compact;
         break;
+    case FactoryRecordPolicy::Mkr: // Outside evidence: its CRC alone (gains outside the band give no scale).
+        if (!mkrValid) return false;
+        candidate.format_ = FactoryRecordFormat::Mkr;
+        break;
     default: return false;
     }
     for (unsigned c = 0; c < 2; ++c)
@@ -40,9 +56,12 @@ bool CalibrationData::load(const uint8_t *bytes, size_t length, FactoryRecordPol
                     Binary::readLe(bytes + 2 * ((c * 12 + row) * 7 + column), 2);
     if (candidate.format_ == FactoryRecordFormat::Compact) {
         candidate.crc_ = prefixWord; // No gain words (0: the default) and no correction.
-    } else { // Long, and Ambiguous read as long (as before this decoder): identity 0, the CRC as CH1's gain.
+    } else if (candidate.format_ == FactoryRecordFormat::Mkr) {
+        candidate.gains_[0] = prefixWord; candidate.gains_[1] = secondWord;
+        candidate.crc_ = mkrCrc; // Its identity; no correction (0). Bytes past the CRC are not read.
+    } else { // Long and Ambiguous both use the long layout for the gain, correction, and identity.
         candidate.gains_[0] = prefixWord;
-        candidate.gains_[1] = Binary::readLe(bytes + OffsetBytes + 2, 2);
+        candidate.gains_[1] = secondWord;
         uint32_t raw = Binary::readLe(bytes + OffsetBytes + 4, 4);
         std::memcpy(&candidate.correction_, &raw, sizeof raw);
         if (!std::isfinite(candidate.correction_))

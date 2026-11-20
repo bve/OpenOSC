@@ -210,6 +210,7 @@ bool DataAccess::interleaveCalibrated() const {
 // it with the profile in force unchanged; HOLD and records already captured are never touched.
 DataStatus DataAccess::beginInterleaveOffset(uint32_t now) {
     if (!board::Current::Features.selectableInterleave) return DataStatus::Unsupported;
+    if (!calibration_.valid()) return DataStatus::Uncalibrated; // The saved offset needs a factory CRC.
     if (interleaveMeasure_.active() || zeroBusy() || internalCapture() || recorder_.busy() || scopeHeld_ ||
         !active_ || measurement_ != MeasurementMode::Oscilloscope) return DataStatus::Busy;
     if (!interleaving(request_) || request_.rolling() || request_.trigger.mode != scope::TriggerMode::Auto)

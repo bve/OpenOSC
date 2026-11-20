@@ -9,7 +9,8 @@ DataStatus DataAccess::interleaveMatchReady() const {
     if (interleaveMeasure_.active() || zeroBusy() || zeroBlocked_ || internalCapture() || recorder_.busy() ||
         scopeHeld_ || holdPending_ || !active_ || stopping_ || measurement_ != MeasurementMode::Oscilloscope ||
         generator_.enabled()) return DataStatus::Busy;
-    if (!interleaveCalibrated() || !configuration_.channels[0].calibrated) return DataStatus::Uncalibrated;
+    // A real factory record: the profile is bound to its CRC (the defaults' scale is no identity).
+    if (!calibration_.valid() || !interleaveCalibrated() || !configuration_.channels[0].calibrated) return DataStatus::Uncalibrated;
     if (!interleaving(request_) || configuration_.layout != scope::Layout::InterleavedCh1 ||
         request_.rolling() || request_.trigger.mode != scope::TriggerMode::Auto ||
         configuration_.samplesPerSecond.value() != scope::SelectableInterleave::rate(TimerClock::apb1()) ||

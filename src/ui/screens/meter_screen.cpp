@@ -6,6 +6,7 @@
 #include "openosc/ui/components/meter_style.hpp"
 #include "openosc/data/decimal.hpp"
 #include "openosc/measurement/dmm/terminals.hpp"
+#include "openosc/measurement/dmm/ranges.hpp"
 #include "openosc/measurement/dmm/resolution.hpp"
 #include <cstring>
 #include <initializer_list>
@@ -171,8 +172,12 @@ void MeterScreen::feed(const dmm::Result &result, DataStatus status, const dmm::
     if (analog_) {
         const auto bar = dmm::BarReading::from(result, status, relative, &temperatureAxis_);
         auto &dial = host_.dial();
-        const auto decimals = bar.temperature ? dmm::TemperatureAxis::Decimals
-                             : result.primary.valid() ? dmm::Resolution::decimals(result) : result.decimals;
+        auto decimals = result.primary.valid() ? dmm::Resolution::decimals(result) : result.decimals;
+        if (bar.temperature) decimals = dmm::TemperatureAxis::Decimals;
+        else if (result.primary.status == DataStatus::Overload) {
+            // OL may omit the range's decimal layout (ZT703S, 25 MOhm). Match the range label.
+            if (const auto *range = dmm::Ranges::current(result)) decimals = range->decimals;
+        }
         const bool scaleChanged = decimals != 255 && dial.scale(decimals, MeterText::unit(result.unit), bar.scale);
         dial.reading(bar, held_, bar.temperature && scaleChanged);
     }

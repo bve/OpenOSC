@@ -47,17 +47,17 @@ FrameView TriggerRecord::select(const FrameView &ring, const TriggerSettings &se
         const uint32_t first = std::max(lowest, target > Nearby ? target - Nearby : 0);
         const uint32_t last = std::min(highest, target + Nearby);
         if (TriggerSearch::nearestStablePair(ring, settings, target, first, last, index))
-            return ring.slice(index - pre, count).withTrigger(true, pre, settings.tag());
+            return ring.slice(index - pre, count).withTrigger(true, pre, settings.tag()).withPretrigger(pre);
     }
     bool found=false;
     if (nearestIn(ring,settings,target,lowest,highest,found,index))
-        return ring.slice(index-pre,count).withTrigger(true,pre,settings.tag());
+        return ring.slice(index-pre,count).withTrigger(true,pre,settings.tag()).withPretrigger(pre);
     // Normal, Single and a manual force can still use an edge in the rest of the record.
     if (automatic) {
         const uint32_t radius = autoEventRadius(ring.metadata(), reach);
         if (!comparatorEvent ||
             !TriggerSearch::nearest(ring, settings, target, target > radius ? target - radius : 1, target + radius, index))
-            return ring.slice(samples-count,count).withTrigger(false,0);
+            return ring.slice(samples-count,count).withTrigger(false,0).withPretrigger(pre); // Marked there (#65).
         found = true;
     } else if (lowest>highest) nearestIn(ring,settings,target,1,samples-1,found,index);
     else {
@@ -67,7 +67,7 @@ FrameView TriggerRecord::select(const FrameView &ring, const TriggerSettings &se
     if (!found && !forced) return {};
     const uint32_t at=found ? index : target;
     const uint32_t first=std::min(at>pre ? at-pre : 0,samples-count);
-    if (!found) return ring.slice(first,count).withTrigger(false,0);
-    return ring.slice(first,count).withShiftedTrigger(index-first,int32_t(int64_t(index-first)-pre),settings.tag());
+    if (!found) return ring.slice(first,count).withTrigger(false,0).withPretrigger(pre);
+    return ring.slice(first,count).withShiftedTrigger(index-first,int32_t(int64_t(index-first)-pre),settings.tag()).withPretrigger(pre);
 }
 } // namespace openosc::scope
