@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include "openosc/ui/scope/format.hpp"
+#include "openosc/ui/scope/tag_digits.hpp"
 #include "openosc/ui/components/status_bar_layout.hpp"
 #include "openosc/ui/components/status_icons.hpp"
 #include <algorithm>
@@ -18,6 +19,9 @@ void ApplicationView::build(const Theme &theme) {
     if (fps_) lv_obj_delete(fps_);
     if (trigger_) lv_obj_delete(trigger_);
     if (edge_) lv_obj_delete(edge_);
+    if (channelTag_) lv_obj_delete(channelTag_);
+    channelTag_ = nullptr;
+    channelTagChannel_ = NoTriggerChannel;
     overview_.clear();
     powerHold_.theme(theme);
     theme_ = &theme;
@@ -55,8 +59,14 @@ void ApplicationView::build(const Theme &theme) {
     lv_obj_set_pos(edge_,Layout::edge(Layout::Trigger).x,5);
     lv_obj_set_style_line_color(edge_,lv_color_hex(theme.muted),0);
     lv_obj_set_style_line_width(edge_,1,0);
-    trigger_ = label(screen,"",Layout::level(Layout::Trigger).x,4);
-    lv_obj_set_size(trigger_,Layout::LevelWidth,14);
+    channelTag_ = lv_obj_create(screen);
+    lv_obj_remove_style_all(channelTag_);
+    lv_obj_set_size(channelTag_,plot::PlotFrame::TagWidth,plot::PlotFrame::TagHeight);
+    lv_obj_set_pos(channelTag_,Layout::level(Layout::Trigger).x,5);
+    lv_obj_add_event_cb(channelTag_,drawChannelTag,LV_EVENT_DRAW_MAIN,this);
+    lv_obj_set_hidden(channelTag_,true);
+    trigger_ = label(screen,"",Layout::level(Layout::Trigger).x+plot::PlotFrame::TagWidth+1,4);
+    lv_obj_set_size(trigger_,Layout::LevelWidth-plot::PlotFrame::TagWidth-1,14);
     lv_obj_set_style_text_font(trigger_,ui::Elements::font(12),0);
     fps_ = label(screen,"",Layout::Fps.x,4);
     lv_obj_set_size(fps_,Layout::Fps.width,14);
@@ -83,6 +93,7 @@ void ApplicationView::refreshIndicators() {
     const bool trigger = scope && trigger_ && edge_ && Layout::trigger(statusRight_);
     if (trigger_) lv_obj_set_hidden(trigger_, !trigger);
     if (edge_) lv_obj_set_hidden(edge_, !trigger);
+    if (channelTag_) lv_obj_set_hidden(channelTag_, !trigger || channelTagChannel_ == NoTriggerChannel);
     placeFps();
 }
 // The counter has its own column; only a pill wide enough to reach it hides it.
@@ -105,16 +116,47 @@ void ApplicationView::batteryDisplay(uint32_t mode) {
     battery_.display(mode);
     refreshIndicators();
 }
+void ApplicationView::drawChannelTag(lv_event_t *event) {
+    auto &self = *static_cast<ApplicationView *>(lv_event_get_user_data(event));
+    auto *layer = lv_event_get_layer(event);
+    lv_area_t area;
+    lv_obj_get_coords(self.channelTag_, &area);
+    lv_draw_rect_dsc_t box, ink;
+    lv_draw_rect_dsc_init(&box); lv_draw_rect_dsc_init(&ink);
+    box.bg_color = lv_color_hex(self.channelTagColor_);
+    ink.bg_color = lv_color_hex(self.channelTagInk_);
+    lv_draw_rect(layer, &box, &area);
+    const int x0 = area.x1 + plot::TagDigits::Left, y0 = area.y1 + plot::TagDigits::Top;
+    for (int y = 0; y < plot::TagDigits::Height; ++y)
+        for (int x = 0; x < plot::TagDigits::Width;) {
+            if (!plot::TagDigits::ink(self.channelTagChannel_, x, y)) { ++x; continue; }
+            const int start = x;
+            while (x < plot::TagDigits::Width && plot::TagDigits::ink(self.channelTagChannel_, x, y)) ++x;
+            lv_area_t run = {lv_coord_t(x0 + start), lv_coord_t(y0 + y), lv_coord_t(x0 + x - 1), lv_coord_t(y0 + y)};
+            lv_draw_rect(layer, &ink, &run);
+        }
+}
+void ApplicationView::refreshTriggerColors(unsigned channel) {
+    if (!channelTag_ || channel >= NoTriggerChannel) return;
+    const uint32_t color = scopeLook_.trigger(channel ? scopeTheme_.channel2 : scopeTheme_.channel1);
+    const uint32_t ink = scopeLook_.tagText(color);
+    ui::Elements::textColor(trigger_, color);
+    if (channel == channelTagChannel_ && color == channelTagColor_ && ink == channelTagInk_) return;
+    const bool first = channelTagChannel_ == NoTriggerChannel;
+    channelTagChannel_ = channel;
+    channelTagColor_ = color;
+    channelTagInk_ = ink;
+    if (first) lv_obj_set_hidden(channelTag_, lv_obj_is_hidden(trigger_));
+    lv_obj_invalidate(channelTag_);
+}
 void ApplicationView::scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel) {
-    char level[24], text[40];
+    char level[24];
     if (!channel.calibrated || !channel.probeDenominator ||
         !plot::Format::quantity((trigger.level - channel.zeroCode) * channel.voltsPerCode * channel.probeNumerator / channel.probeDenominator, "V", level, sizeof level, 3))
         std::snprintf(level, sizeof level, "%d", trigger.level);
-    std::snprintf(text, sizeof text, "%u %s", unsigned(trigger.channel) + 1, level); // The colour names the channel.
     if (!trigger_ || !edge_) return;
-    if (std::strcmp(lv_label_get_text(trigger_), text)) { lv_label_set_text(trigger_, text); placeFps(); }
-    const auto &t = shown();
-    ui::Elements::textColor(trigger_, scopeLook_.trigger(trigger.channel == scope::Channel::Ch1 ? t.channel1 : t.channel2));
+    if (std::strcmp(lv_label_get_text(trigger_), level)) { lv_label_set_text(trigger_, level); placeFps(); }
+    refreshTriggerColors(unsigned(trigger.channel));
     static const lv_point_precise_t rising[] = {{0, 9}, {3, 9}, {3, 1}, {7, 1}}, falling[] = {{0, 1}, {3, 1}, {3, 9}, {7, 9}};
     const auto *points = trigger.edge == scope::Edge::Rising ? rising : falling;
     if (lv_line_get_points(edge_) != points) lv_line_set_points(edge_, points, 4);
@@ -148,6 +190,7 @@ void ApplicationView::paintShell() {
     lv_obj_set_style_image_recolor(generatorIndicator_, lv_color_hex(t.generator), 0);
     lv_obj_set_style_line_color(edge_, lv_color_hex(t.muted), 0);
     lv_obj_set_style_text_color(fps_, lv_color_hex(t.muted), 0);
+    refreshTriggerColors(channelTagChannel_);
     overview_.palette(t);
 }
 // The Scope's theme: the base theme under the appearance's look (ScopeStyles); the host repaints the

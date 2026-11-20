@@ -29,8 +29,8 @@ struct StatusBarLayout {
     static constexpr Column Generator{Overview.x - IconGap - 9, 9};
     static constexpr Column Usb{Generator.x - IconGap - 9, 9};
     static constexpr Column Fps{Usb.x - Gap - 54, 54}; // The top bar counter, right-aligned: "12.5MS/s" (52.9 px).
-    // Trigger edge glyph and level ("1 -12.3mV"): one fixed place for every state up to "SGL WAIT";
-    // a wider state hides it.
+    // Trigger edge glyph, channel tag and level ("1 -12.3mV"): one fixed place for every state up to
+    // "SGL WAIT"; a wider state hides it.
     static constexpr int EdgeWidth = 8, LevelWidth = 58, TriggerWidth = EdgeWidth + Tight + LevelWidth;
     static constexpr Column Trigger{Fps.x - Gap - TriggerWidth, TriggerWidth};
     static constexpr Column edge(Column trigger) { return {trigger.x, EdgeWidth}; }
