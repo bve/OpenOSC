@@ -35,6 +35,8 @@ public:
     const dmm::Result &meter() const override;
     DataStatus meterStatus() const override;
     bool selectFunction(dmm::Function) override;
+    dmm::TemperatureSettings meterTemperature() const override;
+    bool meterTemperature(dmm::TemperatureSettings settings) override;
     bool setAuto(bool) override;
     bool setRange(unsigned) override;
     bool holdMeter(bool) override;

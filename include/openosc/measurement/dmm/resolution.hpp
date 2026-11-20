@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/measurement/dmm/result.hpp"
+#include "openosc/measurement/dmm/temperature.hpp"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -27,11 +28,12 @@ public:
         Resolution resolution;
         NumericValue unit;
         const unsigned places = decimals(result);
+        const bool temperature = result.primary.quantity == Quantity::Temperature;
         if (!result.primary.valid() || places > MaxDecimals || std::strlen(result.unit) >= sizeof resolution.unit_ ||
-            !UnitParser::parse("1", result.unit, unit) || !(unit.si > 0))
+            (!temperature && (!UnitParser::parse("1", result.unit, unit) || !(unit.si > 0))))
             return resolution;
         resolution.decimals_ = places;
-        resolution.unitSi_ = unit.si;
+        resolution.unitSi_ = temperature ? (TypeK::fahrenheit(result.unit) ? 5. / 9 : 1) : unit.si;
         resolution.quantity_ = result.primary.quantity;
         std::strcpy(resolution.unit_, result.unit);
         return resolution;
@@ -51,11 +53,12 @@ public:
     // False when invalid, not finite or wider than MaxDigits here.
     bool format(double si, char *output, size_t capacity) const { return format(si, unit_, output, capacity); }
     // The same with the unit written as `unit` (a display form of unit(): "kΩ" for "kOhm").
-    bool format(double si, const char *unit, char *output, size_t capacity) const {
+    bool format(double si, const char *unit, char *output, size_t capacity, bool relative = false) const {
         if (!valid() || !output || !capacity || !unit || !std::isfinite(si)) return false;
         uint32_t scale = 1;
         for (unsigned i = 0; i < decimals_; ++i) scale *= 10;
-        const double counts = std::round(si / unitSi_ * scale);
+        const double value = quantity_ == Quantity::Temperature ? TypeK::display(si, unit_, relative) : si / unitSi_;
+        const double counts = std::round(value * scale);
         if (!(std::fabs(counts) < 1e5)) return false; // MaxDigits digits: 99999 at most.
         const auto magnitude = uint32_t(std::fabs(counts));
         const char *sign = counts < 0 && magnitude ? "-" : "";

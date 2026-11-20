@@ -1,6 +1,7 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/application/generator_startup.hpp"
 #include "openosc/board/current.hpp"
+#include "openosc/platform/board.hpp"
 #include "openosc/settings/instrument_state.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/ui/screens/screen_layout.hpp"
@@ -8,6 +9,17 @@
 #include <cstring>
 
 namespace openosc {
+bool ApplicationController::meterTemperatureSettings(dmm::TemperatureSettings settings, uint32_t now) {
+    if (!settings.valid()) return false;
+    const auto previous = prefs_.meter.temperature;
+    if (settings.junctionDeciC == previous.junctionDeciC && settings.fahrenheit == previous.fahrenheit) return true;
+    prefs_.meter.temperature = settings;
+    data_.meter().configureTemperature(settings, data_.nowUs());
+    changed(now);
+    dataRefresh_ = true;
+    return true;
+}
+
 // The saved settings onto the instruments (boot, Reload settings JSON). `prefs_` keeps what was saved
 // wherever a part could not be applied (the screen shows what runs): a failed start never overwrites
 // the user's choice in the next save with the fallback or a default.
@@ -16,6 +28,7 @@ PreferencesResult ApplicationController::applyDataPreferences() {
     const auto previousMeasurement = data_.measurementMode();
     result.mode = data_.select(state_.mode);
     if (!result.mode) state_.mode = data_.measurementMode();
+    Board::configurePe10(state_.mode == MeasurementMode::Generator);
     if (previousMeasurement != data_.measurementMode() && usb_) usb_->profileChanged(HAL_GetTick());
     data_.selectInterleave(scope::InterleaveMode(prefs_.scope.interleave));
     auto request = InstrumentState::scope(prefs_);
@@ -25,6 +38,7 @@ PreferencesResult ApplicationController::applyDataPreferences() {
     result.generator = data_.generator().configure(InstrumentState::generator(prefs_));
     if (result.generator) InstrumentState::capture(data_.generator().settings(),prefs_);
     result.meterRequested = data_.measurementMode() == MeasurementMode::Multimeter;
+    data_.meter().configureTemperature(prefs_.meter.temperature, data_.nowUs());
     if (result.meterRequested) {
         result.meter = data_.selectDmmFunction(dmm::Function(prefs_.meterFunction));
         meterRestore_.arm(result.meter);
@@ -57,6 +71,7 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     if (!data_.select(next)) return ModeChange::Refused; // The menu and its edit stay as they are.
     dropEdit(now);
     state_.mode = next;
+    Board::configurePe10(state_.mode == MeasurementMode::Generator);
     ++counterEpoch_; // The counter overlay averages a Scope visit only.
     state_.settingsOpen = false;
     panel_ = Panel::None;

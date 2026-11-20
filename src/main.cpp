@@ -26,20 +26,19 @@ int main() {
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
 #ifndef OPENOSC_RAM_TEST
     if (!recoveryRequested && update.installed()) {
-        if (logoShown) Display::offerBootFrame();
+        if (logoShown) screen.offerBootFrame();
         Handoff::jump(layout::VectorBase);
     }
 #else
     (void)recoveryRequested;
 #endif
-    if (!logoShown && !screen.initialize()) {
+    if (!logoShown && !screen.initialize(true)) {
         boot_diagnostics.error = 2;
         Watchdog::fatal(2);
     }
-    if (logoShown) screen.clear();
     boot_diagnostics.stage = 3;
-    screen.text(8, 10, "OPENOSC RECOVERY", Display::Cyan);
-    screen.text(8, 40, "INITIALIZING STORAGE...");
+    screen.text(12, 82, "RECOVERY", Display::Cyan);
+    screen.text(12, 102, "INITIALIZING STORAGE...");
     screen.present();
     NorFlash nor;
     BlockDevice disk(nor);

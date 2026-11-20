@@ -85,7 +85,7 @@ void DataAccess::poll(uint32_t now) {
             if (meter_.accept(packet, sizeof packet, timeUs_)) {
                 status_ = meter_.latest().primary.status;
                 if (logger_.active())
-                    logger_.append(meter_.latest(), meter_.userHeld());
+                    logger_.append(meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest(), meter_.userHeld());
             }
         }
         meter_.service(timeUs_); // The hold mode's countdown and freshness, with or without packets.

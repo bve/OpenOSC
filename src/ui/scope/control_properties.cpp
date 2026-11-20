@@ -16,7 +16,7 @@ Kind Controls::kind(unsigned row) const {
     switch (row) {
     case PeakHold: case Glow: case Visible: case Invert: case TimeCursors: case VoltageCursors: case FftDc: return Kind::Toggle;
     case Pan: case Gain: case Position: case CursorAX: case CursorBX: case CursorAY: case CursorBY: case CounterPpm: return Kind::Number;
-    case Reference: case Clear: return Kind::Action;
+    case CenterTrigger: case Reference: case Clear: return Kind::Action;
     default: return Kind::Choice;
     }
 }
@@ -34,6 +34,7 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case Glow: std::snprintf(text, capacity, "Glow"); break;
     case Zoom: std::snprintf(text, capacity, "Zoom"); break;
     case Pan: std::snprintf(text, capacity, "Horizontal position"); break;
+    case CenterTrigger: std::snprintf(text, capacity, "Center trigger"); break;
     case Visible: std::snprintf(text, capacity, "CH%u visible", channel + 1); break;
     case Invert: std::snprintf(text, capacity, "CH%u invert", channel + 1); break;
     case Gain: std::snprintf(text, capacity, "CH%u digital gain", channel + 1); break;
@@ -135,11 +136,9 @@ void Controls::value(unsigned row, char *text, size_t capacity) const {
     const auto &o = options;
     const auto &cursor = o.cursors;
     switch (row) {
-    case Pan: { // Permille, to 1 ppm.
-        const long ppm = long((int64_t(o.panPpb) + (o.panPpb < 0 ? -500 : 500)) / 1000), a = ppm < 0 ? -ppm : ppm;
-        std::snprintf(text, capacity, "%s%ld.%03ld/1000", ppm < 0 ? "-" : "", a / 1000, a % 1000);
+    case Pan:
+        std::snprintf(text, capacity, "%ld/1000", long(number(row)));
         break;
-    }
     case Gain: std::snprintf(text, capacity, "%u%%", o.channels[channel].gainPercent); break;
     case Position: std::snprintf(text, capacity, "%d/1000", o.channels[channel].positionPermille - 500); break;
     case CursorAX: std::snprintf(text, capacity, "%u/1000", cursor.xA); break;
@@ -156,7 +155,7 @@ void Controls::value(unsigned row, char *text, size_t capacity) const {
 int32_t Controls::number(unsigned row) const {
     const auto &cursor = options.cursors;
     switch (row) {
-    case Pan: return int32_t((int64_t(options.panPpb) + (options.panPpb < 0 ? -500000 : 500000)) / 1000000); // Permille.
+    case Pan: return (options.panPpb + (options.panPpb < 0 ? -PpbPerPermille / 2 : PpbPerPermille / 2)) / PpbPerPermille;
     case Gain: return options.channels[channel].gainPercent;
     case Position: return options.channels[channel].positionPermille;
     case CursorAX: return cursor.xA;
@@ -170,7 +169,7 @@ int32_t Controls::number(unsigned row) const {
 void Controls::setNumber(unsigned row, int32_t value) {
     auto &cursor = options.cursors;
     switch (row) {
-    case Pan: options.panPpb = int32_t(std::clamp<int64_t>(int64_t(value) * 1000000, -Options::PanFull, Options::PanFull)); break;
+    case Pan: options.panPpb = std::clamp(value, int32_t(-1000), int32_t(1000)) * PpbPerPermille; break;
     case Gain: options.channels[channel].gainPercent = uint16_t(value); break;
     case Position: options.channels[channel].positionPermille = int16_t(value); break;
     case CursorAX: cursor.xA = uint16_t(value); break;

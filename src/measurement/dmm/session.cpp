@@ -1,9 +1,64 @@
 #include "openosc/measurement/dmm/session.hpp"
 #include "openosc/measurement/dmm/function.hpp"
+#include "openosc/data/decimal.hpp"
 #include <cmath>
 #include <limits>
 
 namespace openosc::dmm {
+namespace {
+Result asTemperature(const Result &packet, const TemperatureSettings &settings, bool typeK) {
+    Result result;
+    result.sequence = packet.sequence;
+    result.timestampUs = packet.timestampUs;
+    result.packetHold = packet.packetHold;
+    result.currentInput = packet.currentInput;
+    result.peerRelative = !typeK && packet.peerRelative;
+    result.primary = {0, Quantity::Temperature, DataStatus::NoReading};
+    const char *unit = TypeK::unit(settings.fahrenheit);
+    std::strcpy(result.unit, unit);
+    std::strcpy(result.rawUnit, unit);
+    std::strcpy(result.mainText, "--");
+    const bool source = !typeK || (Functions::identify(packet) == Function::MillivoltsDc && !packet.peerRelative);
+    if (!source) return result;
+    result.primary.status = packet.primary.status;
+    if (!packet.primary.valid()) return result;
+    double celsius = packet.primary.si;
+    if (typeK && !TypeK::convert(packet.primary.si, settings.junctionCelsius(), celsius)) {
+        result.primary.status = DataStatus::Overload;
+        return result;
+    }
+    result.decimals = 1;
+    result.primary.si = celsius;
+    const double shown = TypeK::display(celsius, unit, result.peerRelative);
+    result.rawMagnitude = unsigned(std::lround(std::fabs(shown) * 10));
+    Decimal::fixed(shown, result.decimals, result.mainText, sizeof result.mainText);
+    return result;
+}
+}
+
+void Session::resetTemperatureReading(uint64_t nowUs) {
+    userHold_ = frozen_ = false;
+    relative_.clear();
+    reselect();
+    expire(nowUs);
+    shown_ = (typeK_ || latest_.primary.quantity == Quantity::Temperature)
+                 ? asTemperature(Result{}, temperatureSettings_, true) : Result{};
+    shown_.primary.status = DataStatus::NoData;
+}
+void Session::configureTemperature(TemperatureSettings settings, uint64_t nowUs) {
+    if (!settings.valid()) return;
+    const bool changed = settings.fahrenheit != temperatureSettings_.fahrenheit ||
+                         (typeK_ && settings.junctionDeciC != temperatureSettings_.junctionDeciC);
+    temperatureSettings_ = settings;
+    if (typeK_ && !settings.configured()) typeK(false, nowUs);
+    else if (changed && (typeK_ || shown_.primary.quantity == Quantity::Temperature)) resetTemperatureReading(nowUs);
+}
+void Session::typeK(bool enabled, uint64_t nowUs) {
+    if (enabled == typeK_ || (enabled && !temperatureSettings_.configured())) return;
+    typeK_ = enabled;
+    resetTemperatureReading(nowUs);
+}
+
 void History::push(double value) {
     if (!std::isfinite(value))
         return;
@@ -40,6 +95,10 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     rawBytes_ = uint8_t(bytes < sizeof raw_ ? bytes : sizeof raw_);
     std::memcpy(raw_, packet, rawBytes_);
     latest_ = candidate;
+    // Keep the wire result for DMM command confirmation. The rest of the session works in the
+    // displayed quantity, so HOLD, REL, statistics and history see temperature, not millivolts.
+    if (typeK_ || candidate.primary.quantity == Quantity::Temperature)
+        candidate = asTemperature(candidate, temperatureSettings_, typeK_);
     // The hold mode sees the packet in the context it settles (before HOLD's stop: a mode's cycle never
     // freezes with the display): a packet ending the wait for a selected function counts, a local REL
     // this packet's function change clears does not apply to it.

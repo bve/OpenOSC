@@ -1,5 +1,4 @@
 #include "openosc/ui/scope/controls.hpp"
-#include "openosc/ui/scope/trace_move.hpp"
 #include <algorithm>
 
 namespace openosc::plot {
@@ -16,9 +15,23 @@ template <class T, size_t N> void cycle(T &value, int direction, const T (&choic
     value = choices[(index + N + direction) % N];
 }
 } // namespace
+void Controls::adjustPan(int direction, bool fine) {
+    const int sign = direction > 0 ? 1 : -1;
+    constexpr unsigned RepeatsPerStep = 5, MaxRepeats = 4 * RepeatsPerStep;
+    constexpr int Steps[] = {1, 2, 5, 10, 25};
+    panEditRepeats_ = fine || sign != panEditSign_ ? 0 : std::min<unsigned>(MaxRepeats, panEditRepeats_ + 1);
+    panEditSign_ = sign;
+    const int step = std::max(direction * sign, Steps[panEditRepeats_ / RepeatsPerStep]);
+    // A plot pan can land between editor ticks. The first step lands on the next tick in that direction.
+    const int32_t pan = options.panPpb;
+    int32_t ticks = pan / PpbPerPermille;
+    if (pan % PpbPerPermille && (pan > 0) != (sign > 0)) ticks -= sign;
+    setNumber(Pan, ticks + sign * step);
+}
 void Controls::adjust(unsigned row, int direction, bool fine) {
     if (!direction)
         return;
+    if (row == Pan) { adjustPan(direction, fine); return; }
     direction = direction > 0 ? 1 : -1;
     auto &c = options.channels[channel];
     auto &cursor = options.cursors;
@@ -71,9 +84,6 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
         break;
     case Zoom:
         cycle(options.zoom, direction, zooms);
-        break;
-    case Pan:
-        step(options.panPpb, direction, TraceMove::panStep(model, fine), -Options::PanFull, Options::PanFull);
         break;
     case Visible:
         c.visible = !c.visible;

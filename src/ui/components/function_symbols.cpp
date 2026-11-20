@@ -1,11 +1,15 @@
 #include "openosc/ui/components/function_symbols.hpp"
 #include "openosc/ui/components/elements.hpp"
+#include "openosc/ui/fonts.hpp"
 #include <algorithm>
 #include <cmath>
 
 namespace openosc::ui {
 namespace {
 using S = FunctionSymbols::Symbol;
+constexpr char TemperatureGlyph[] = u8"\ueb38"; // Tabler Icons Webfont, temperature.
+const lv_font_t *temperatureFont(int height) { return height >= 20 ? &openosc_icons_24 : &openosc_icons_12; }
+int temperatureWidth(const lv_font_t *font) { return lv_font_get_glyph_width(font, U'\ueb38', 0); }
 struct Quantity { const char *letters; bool ac; };
 bool quantity(S s, Quantity &q) {
     static constexpr Quantity table[] = {{"V", false}, {"V", true}, {"mV", false}, {"mV", true},
@@ -84,6 +88,7 @@ FunctionSymbols::Symbol FunctionSymbols::of(dmm::Function f, bool beeper) {
     case F::Continuity: return S::Continuity;
     case F::Diode: return beeper ? S::DiodeBeeper : S::Diode;
     case F::Capacitance: return S::Capacitor;
+    case F::Temperature: return S::Temperature;
     default: return S::Unknown;
     }
 }
@@ -92,6 +97,7 @@ int FunctionSymbols::width(Symbol s, int height, bool bare) {
     if (bare && quantity(s, q)) return Elements::textWidth(q.ac ? "AC" : "DC", fontSize(height));
     if (quantity(s, q)) return Elements::textWidth(q.letters, fontSize(height)) + height / 8 + markWidth(height);
     if (s == S::DiodeBeeper) return 2 * height;
+    if (s == S::Temperature) return temperatureWidth(temperatureFont(height));
     if (s == S::Unknown) return Elements::textWidth("?", fontSize(height));
     return height;
 }
@@ -99,11 +105,15 @@ void FunctionSymbols::draw(lv_layer_t *layer, Symbol s, int x, int y, int height
     const Pen pen{layer, float(x), float(y), height / 24.f, color};
     Quantity q;
     const auto text = [&](const char *value) {
+        const bool temperature = s == S::Temperature;
         lv_draw_label_dsc_t d;
         lv_draw_label_dsc_init(&d);
-        d.font = Elements::font(fontSize(height)); d.color = color; d.text = value; d.text_local = 1;
+        d.font = temperature ? temperatureFont(height) : Elements::font(fontSize(height));
+        d.color = color; d.text = value; d.text_local = 1;
         const int line = lv_font_get_line_height(d.font);
-        const lv_area_t area = {x, y + (height - line) / 2, x + Elements::textWidth(value, fontSize(height)), y + (height - line) / 2 + line - 1};
+        const int width = temperature ? temperatureWidth(d.font) : Elements::textWidth(value, fontSize(height));
+        const int top = y + (height - line) / 2;
+        const lv_area_t area = {x, top, x + width, top + line - 1};
         lv_draw_label(layer, &d, &area);
     };
     if (bare && quantity(s, q)) { text(q.ac ? "AC" : "DC"); return; }
@@ -141,6 +151,7 @@ void FunctionSymbols::draw(lv_layer_t *layer, Symbol s, int x, int y, int height
     case S::Diode: diode(pen); break;
     case S::DiodeBeeper: diode(pen); sounder({layer, float(x + height), float(y), height / 24.f, color}); break;
     case S::Capacitor: capacitor(pen); break;
+    case S::Temperature: text(TemperatureGlyph); break;
     default: text("?"); break;
     }
 }

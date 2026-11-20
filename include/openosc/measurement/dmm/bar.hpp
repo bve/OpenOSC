@@ -1,9 +1,10 @@
 #pragma once
 #include "openosc/measurement/dmm/relative.hpp"
 #include "openosc/measurement/dmm/resolution.hpp"
-#include "openosc/measurement/dmm/scale.hpp"
+#include "openosc/measurement/dmm/temperature_axis.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace openosc::dmm {
 // The magnitude the bar and the dial show, in counts of the reading's own scale (scaleFor: the
@@ -12,14 +13,32 @@ struct BarReading {
     CountScale scale = BoardScale;
     int counts = 0;
     DataStatus status = DataStatus::NoData;
-    // The share of full scale (0..1) the magnitude reaches.
+    bool temperature = false;
+    // Position within the scale. Temperature counts are measured from its signed lower bound.
     float fraction() const { return float(std::abs(counts)) / float(scale.fullScale); }
     static BarReading from(const Result &result, DataStatus health,
-                           const RelativeReading *relative = nullptr) {
+                           const RelativeReading *relative = nullptr, TemperatureAxis *axis = nullptr) {
         BarReading bar;
         bar.scale = scaleFor(result.primary.quantity);
-        const int full = bar.scale.fullScale;
+        bar.temperature = result.primary.quantity == Quantity::Temperature;
         bar.status = health == DataStatus::Ok ? result.primary.status : health;
+        const bool delta = relative && relative->matches(result);
+        if (bar.temperature) {
+            const bool live = bar.status == DataStatus::Ok && result.primary.valid();
+            const double degrees = live ? TypeK::display(delta ? relative->apply(result).si : result.primary.si,
+                                                         result.unit, delta || result.peerRelative)
+                                        : std::numeric_limits<double>::quiet_NaN();
+            TemperatureAxis singleReading;
+            bar.scale = (axis ? *axis : singleReading).select(degrees, TypeK::fahrenheit(result.unit), delta || result.peerRelative);
+            if (std::isfinite(degrees))
+                bar.counts = int(std::lround(std::clamp(degrees * TemperatureAxis::CountsPerDegree - bar.scale.minimum,
+                                                        0., double(bar.scale.fullScale))));
+            else if (bar.status == DataStatus::Overload) bar.counts = bar.scale.fullScale;
+            else if (bar.status == DataStatus::Ok) bar.status = DataStatus::Unsupported;
+            return bar;
+        }
+        if (axis && result.primary.quantity != Quantity::Unknown) axis->reset();
+        const int full = bar.scale.fullScale;
         if (bar.status == DataStatus::Overload) {
             bar.counts = result.mainText[0] == '-' ? -full : full;
             return bar;
@@ -28,7 +47,7 @@ struct BarReading {
         if (!result.primary.valid()) { bar.status = DataStatus::Unsupported; return bar; }
         double magnitude = result.rawMagnitude;
         bool negative = result.primary.si < 0;
-        if (relative && relative->matches(result)) {
+        if (delta) {
             NumericValue unit;
             const unsigned decimals = Resolution::decimals(result);
             if (decimals > 4 || !UnitParser::parse("1", result.unit, unit) || unit.si <= 0) {

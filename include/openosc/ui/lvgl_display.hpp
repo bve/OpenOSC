@@ -1,5 +1,6 @@
 #pragma once
 #include "lvgl.h"
+#include "openosc/display/boot_splash.hpp"
 #include "openosc/ui/frame_flip.hpp"
 #include <cstdint>
 
@@ -11,6 +12,7 @@ namespace openosc {
 // on screen (lv_refr_now: screenshots).
 class LvglDisplay {
 public:
+    bool showBootSplash(bool inherited, boot_splash::Style style);
     bool initialize();
     void render();
     void enabled(bool enabled);
@@ -26,6 +28,8 @@ private:
     lv_display_t* display_ = nullptr;
     const uint16_t* front_ = nullptr;
     uint32_t flushes_ = 0;
+    uint32_t bootShownAt_ = 0;
+    bool bootShowing_ = false;
     bool waking_ = false; // Switched on, the LTDC restart has not succeeded yet.
     FrameFlip flip_; // On the LTDC (lvgl_display.cpp).
 };

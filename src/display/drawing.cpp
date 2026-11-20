@@ -19,26 +19,6 @@ void Display::rectangle(unsigned x, unsigned y, unsigned w, unsigned h, uint16_t
     for (unsigned row = y; row < y + h; ++row)
         for (unsigned col = x; col < x + w; ++col) pixels()[row * Width + col] = color;
 }
-void Display::drawBootLogo() {
-    // Five-column glyphs for the mixed-case OpenOSC wordmark. Bit 0 is the top pixel.
-    constexpr uint8_t wordmark[][5] = {{0x3e, 0x41, 0x41, 0x41, 0x3e}, // O
-                                      {0x7c, 0x14, 0x14, 0x14, 0x08}, // p
-                                      {0x18, 0x2c, 0x2c, 0x2c, 0x10}, // e
-                                      {0x3c, 0x04, 0x04, 0x04, 0x38}, // n
-                                      {0x3e, 0x41, 0x41, 0x41, 0x3e}, // O
-                                      {0x26, 0x49, 0x49, 0x49, 0x32}, // S
-                                      {0x3e, 0x41, 0x41, 0x41, 0x22}}; // C
-    constexpr unsigned scale = 5, glyphs = sizeof wordmark / sizeof wordmark[0];
-    constexpr unsigned left = (Width - (glyphs * 6 - 1) * scale) / 2;
-    constexpr unsigned top = (Height - 7 * scale) / 2;
-    clear();
-    for (unsigned glyph = 0; glyph < glyphs; ++glyph)
-        for (unsigned col = 0; col < 5; ++col)
-            for (unsigned row = 0; row < 7; ++row)
-                if (wordmark[glyph][col] & (1U << row))
-                    rectangle(left + (glyph * 6 + col) * scale, top + row * scale, scale, scale,
-                              glyph < 4 ? White : Cyan);
-}
 void Display::text(unsigned x, unsigned y, const char* message, uint16_t color) {
     for (; *message && x < Width; ++message, x += 6) {
         char ch = *message;

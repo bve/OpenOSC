@@ -4,7 +4,6 @@
 #include <cstddef>
 
 namespace openosc::plot {
-class Model;
 class Controls {
 public:
     enum Row : unsigned {
@@ -18,6 +17,7 @@ public:
         Glow,
         Zoom,
         Pan,
+        CenterTrigger,
         Visible,
         Invert,
         Gain,
@@ -55,7 +55,6 @@ public:
     static const char *groupName(unsigned group);
     Options options;
     int32_t savedPanPpb = 0; // An edit's exact pan (DisplayProperties: the list is rebuilt per key).
-    const Model *model = nullptr; // The view the Pan row steps through: a pixel (fine) or a division (TraceMove::panStep).
     unsigned channel = 0;
     bool enabled[2] = {true, true};
     // One row (Row) as a property: what it is, its name and value, its options, its steps.
@@ -68,5 +67,10 @@ public:
     void adjust(unsigned row, int direction, bool fine = true);
     int32_t number(unsigned row) const;
     void setNumber(unsigned row, int32_t value);
+private:
+    static constexpr int32_t PpbPerPermille = Options::PanFull / 1000;
+    void adjustPan(int direction, bool fine);
+    int8_t panEditSign_ = 0;
+    uint8_t panEditRepeats_ = 0;
 };
 } // namespace openosc::plot

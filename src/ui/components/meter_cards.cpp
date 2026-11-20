@@ -28,8 +28,10 @@ unsigned MeterCards::signs(unsigned index, S (&output)[MaximumSigns]) const {
     case 0: output[0] = S::VoltsDc; output[1] = S::VoltsAc; return 2;
     case 1: output[0] = S::Ohm; output[1] = S::Continuity; output[2] = S::Diode; output[3] = S::Capacitor; return 4;
     case 2: output[0] = S::AmpsDc; output[1] = S::AmpsAc; return 2;
-    case 3: output[0] = currentInput_ ? S::MilliampsDc : S::MillivoltsDc; output[1] = currentInput_ ? S::MilliampsAc : S::MillivoltsAc;
-            return 2;
+    case 3:
+        if (currentInput_) { output[0] = S::MilliampsDc; output[1] = S::MilliampsAc; return 2; }
+        output[0] = S::MillivoltsDc; output[1] = S::MillivoltsAc; output[2] = S::Temperature;
+        return 3;
     default: return 0;
     }
 }
@@ -55,11 +57,15 @@ void MeterCards::draw(lv_event_t *event) {
     const bool accented = self.bar_->accented(index);
     const uint32_t lit = accented ? ink : ParameterBar::readable(self.highlight_, fill);
     const uint32_t unlit = accented ? ParameterBar::faded(ink, fill) : self.muted_;
+    const bool fineVoltage = index == 3 && count == 3;
+    const int height = fineVoltage ? SignHeight - 2 : SignHeight;
+    const int gap = fineVoltage ? 1 : Gap;
     int x = area.x1 + Inset;
+    const int y = area.y1 + (SignHeight - height) / 2;
     for (unsigned i = 0; i < count; ++i) {
         const bool on = signs[i] == self.active_ || (signs[i] == S::Diode && self.active_ == S::DiodeBeeper);
-        FunctionSymbols::draw(lv_event_get_layer(event), signs[i], x, area.y1, SignHeight, lv_color_hex(on ? lit : unlit));
-        x += FunctionSymbols::width(signs[i], SignHeight) + Gap;
+        FunctionSymbols::draw(lv_event_get_layer(event), signs[i], x, y, height, lv_color_hex(on ? lit : unlit));
+        x += FunctionSymbols::width(signs[i], height) + gap;
     }
 }
 } // namespace openosc::ui

@@ -55,6 +55,7 @@ struct Options {
     // The time/div a held record is shown at: the next capture's, chosen in HOLD (issue #7), so the
     // held view shows what RUN will use. 0: the record's own. View only, never the record's metadata.
     uint64_t heldTimebaseNs = 0;
+    bool centerHeldTrigger = false; // View-only override of a held record's original pretrigger.
     bool valid() const;
     bool sameTransform(const Options &other) const;
     // What HOLD may change to explore one record; a new capture starts from `saved` again.

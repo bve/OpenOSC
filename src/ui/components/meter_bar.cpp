@@ -61,17 +61,20 @@ void MeterBar::visible(bool value) {
 }
 // A label every major thousand counts along the bar, the first left-aligned at zero, the last
 // right-aligned at full scale; labels a smaller scale does not use stay hidden.
-void MeterBar::scale(dmm::CountScale counts) {
+void MeterBar::scale(dmm::CountScale counts, bool temperature) {
     scale_ = counts;
     const int last = counts.labels() - 1;
+    const int labelWidth = temperature ? 38 : TickWidth;
+    const int divisor = temperature ? dmm::TemperatureAxis::CountsPerDegree : 1000;
     for (int i = 0; i <= last; ++i) {
-        char text[4]; std::snprintf(text, sizeof text, "%d", i * counts.major);
+        char text[12]; std::snprintf(text, sizeof text, "%d", counts.tickValue(i * counts.major) / divisor);
         const int tick = BarX + i * Segments / last * Pitch;
-        const int left = i == last ? tick - TickWidth : i ? tick - TickWidth / 2 : tick;
+        const int left = i == last ? tick - labelWidth : i ? tick - labelWidth / 2 : tick;
         auto *label = ticks_[i];
         lv_label_set_text(label, text);
+        lv_obj_set_width(label, labelWidth);
         lv_obj_set_x(label, left);
-        covered_[i] = left < StateX + StateWidth && left + TickWidth > StateX;
+        covered_[i] = left < StateX + StateWidth && left + labelWidth > StateX;
         lv_obj_set_style_text_align(label, i == last ? LV_TEXT_ALIGN_RIGHT : i ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT, 0);
     }
     showTicks();
@@ -82,14 +85,14 @@ void MeterBar::showTicks() {
         lv_obj_set_hidden(ticks_[i], !visible_ || i >= scale_.labels() || (caption && covered_[i]));
 }
 void MeterBar::update(const dmm::Result &result, DataStatus health, uint32_t accent,
-                      const dmm::RelativeReading *relative) {
-    const auto value = dmm::BarReading::from(result,health,relative);
+                      const dmm::RelativeReading *relative, dmm::TemperatureAxis *axis) {
+    const auto value = dmm::BarReading::from(result,health,relative,axis);
     const bool over = value.status == DataStatus::Overload;
     const auto color = over ? overload_ : value.status == DataStatus::Ok ? accent : 0x64748b;
     const int magnitude = std::abs(value.counts);
     const int full = value.scale.fullScale;
     const int lit = over ? Segments : std::min(Segments, (magnitude * Segments + full - 1) / full);
-    if (value.scale != scale_) scale(value.scale);
+    if (value.scale != scale_) scale(value.scale, value.temperature);
     const bool negative = value.counts < 0;
     if (initialized_ && lit == lit_ && negative == negative_ && status_ == value.status && color_ == color) return;
     const bool repaint = !initialized_ || lit != lit_ || color_ != color;

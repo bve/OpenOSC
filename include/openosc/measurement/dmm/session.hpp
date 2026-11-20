@@ -2,6 +2,7 @@
 #include "openosc/measurement/dmm/hold.hpp"
 #include "openosc/measurement/dmm/result.hpp"
 #include "openosc/measurement/dmm/relative.hpp"
+#include "openosc/measurement/dmm/temperature.hpp"
 #include <cstddef>
 #include <cstring>
 
@@ -83,6 +84,11 @@ public:
     // The last packet as decoded: its function, range, HOLD and REL flags for the commands, and the
     // raw stream (log, serial output). Settling readings (OverloadSettle) are here too.
     const Result &latest() const { return latest_; }
+    const Result &live() const { return shown_; }
+    const TemperatureSettings &temperatureSettings() const { return temperatureSettings_; }
+    bool typeK() const { return typeK_; }
+    void configureTemperature(TemperatureSettings settings, uint64_t nowUs);
+    void typeK(bool enabled, uint64_t nowUs);
     // The newest packet that decoded, as received (SYST:DMM:PACK?); 0 bytes before the first.
     size_t packet(const uint8_t *&data) const { data = raw_; return rawBytes_; }
     // What the screen, the needle and SCPI show: the manual HOLD's reading, else the Delayed/Stable/
@@ -139,6 +145,7 @@ public:
     static bool placeholder(const Result &result) { return !std::strncmp(result.mainText, "--.", 3); }
 
 private:
+    void resetTemperatureReading(uint64_t nowUs);
     Result latest_, shown_, held_;
     uint8_t raw_[18]{}, rawBytes_ = 0; // Packet::Bytes.
     OverloadSettle settle_;
@@ -146,6 +153,7 @@ private:
     Statistics stats_;
     History history_;
     RelativeReading relative_;
+    TemperatureSettings temperatureSettings_;
     // The context of the accumulated period: the last reading taken outside HOLD.
     unsigned function_ = ~0U;        // Its decoded Function (~0: none yet).
     bool functionCurrent_ = false, contextPeerRelative_ = false, contextKnown_ = false;
@@ -154,6 +162,7 @@ private:
     Quantity trendQuantity_ = Quantity::Unknown; // The trend restarts on a quantity of its own.
     uint32_t sequence_ = 0;
     bool userHold_ = false, frozen_ = false, awaiting_ = false;
+    bool typeK_ = false;
 };
 // The controller's two-byte commands. AUTO/RANGE is the factory's KEY5 stroke (RangeStroke): NextRange
 // 20 20 (press), RangeRelease 21 21 (short release), AutoRange 22 22 (hold).

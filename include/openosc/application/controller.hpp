@@ -195,6 +195,7 @@ private:
     void followNextTimebase(); // A held record is shown at the next capture's time/div (issue #7).
     void moveTrace(uint32_t keys, uint32_t now, bool fine);
     void resetPan(uint32_t now); // In HOLD the explored view only, as moveTrace: RUN restores, nothing saved.
+    bool centerTrigger(uint32_t now);
     void moveCursor(uint32_t keys, uint32_t now, bool fine);
     bool triggerMidpoint(uint32_t now);
     scope::TriggerLevel::Bounds triggerBounds(const ScopeRequest &request);
@@ -226,6 +227,7 @@ private:
     // The one path for new hold settings (the panel, SCPI): valid ones saved and applied (a running
     // cycle ends, none starts); the same ones change nothing.
     bool meterHoldSettings(const dmm::HoldSettings &settings, uint32_t now);
+    bool meterTemperatureSettings(dmm::TemperatureSettings settings, uint32_t now);
     // The HOLD key in the DMM by the mode (docs/DMM_AUTO_HOLD.md): a manual or the DMM's own HOLD
     // released first; Manual: HOLD now; the others: the cycle armed, or (armed) cancelled.
     void meterHoldKey(uint32_t now);

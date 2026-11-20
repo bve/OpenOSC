@@ -42,13 +42,18 @@ void AnalogDial::palette(const MeterLook &look) {
     look_ = look;
     if (object_) lv_obj_invalidate(object_);
 }
-void AnalogDial::reading(const dmm::BarReading &value, bool held) {
+void AnalogDial::reading(const dmm::BarReading &value, bool held, bool reposition) {
     const auto state = value.status == DataStatus::Ok ? State::Live
                        : value.status == DataStatus::Overload ? State::Overload
                        : value.status == DataStatus::Stale ? State::Stale : State::NoData;
     // Stale readings carry no counts: the frozen needle keeps its polarity.
     const bool negative = state == State::Stale ? negative_ : state != State::NoData && value.counts < 0;
-    if (state == State::Live || state == State::Overload)
+    // The coordinates of the old needle have a different meaning on the new temperature band.
+    if (state == State::Live && reposition) {
+        motion_.reset(value.fraction());
+        drawn_ = motion_.position();
+        if (shown()) lv_obj_invalidate(object_);
+    } else if (state == State::Live || state == State::Overload)
         motion_.target(state == State::Overload ? NeedleMotion::High : value.fraction());
     else if (state == State::NoData) motion_.target(0); // Stale keeps the last position.
     const char *caption = MeterText::caption(value.status);
@@ -58,30 +63,32 @@ void AnalogDial::reading(const dmm::BarReading &value, bool held) {
         if (shown()) lv_obj_invalidate(object_); // Colours and captions change.
     }
 }
-void AnalogDial::scale(unsigned decimals, const char *unit, dmm::CountScale counts) {
+bool AnalogDial::scale(unsigned decimals, const char *unit, dmm::CountScale counts) {
     char legend[sizeof legend_];
     const bool known = decimals <= 6;
     std::snprintf(legend, sizeof legend, "%s", known ? unit : "x1000 counts");
-    if (decimals == decimals_ && counts == counts_ && !std::strcmp(legend, legend_)) return;
+    if (decimals == decimals_ && counts == counts_ && !std::strcmp(legend, legend_)) return false;
     decimals_ = decimals;
     counts_ = counts;
     std::memcpy(legend_, legend, sizeof legend_);
-    // Tick i is i * Major thousand counts: counts / 10^decimals in the display's unit. Integer
-    // arithmetic only; the firmware's printf has no floating point.
+    // Convert labelled ticks from counts to display units with integer arithmetic.
     unsigned long divisor = 1;
     for (unsigned d = 0; known && d < decimals; ++d) divisor *= 10;
     const int major = counts_.major;
     for (int i = 0; i < counts_.labels(); ++i) {
-        const unsigned long counts = (unsigned long)(i * major) * (known ? 1000 : 1);
-        unsigned long whole = counts / divisor, fraction = counts % divisor;
+        const int value = known ? counts_.tickValue(i * major) : i * major;
+        const char *sign = value < 0 ? "-" : "";
+        const auto magnitude = static_cast<unsigned long>(std::abs(value));
+        unsigned long whole = magnitude / divisor, fraction = magnitude % divisor;
         int digits = known ? int(decimals) : 0;
         while (digits && fraction % 10 == 0) { fraction /= 10; --digits; } // 0.50 -> 0.5, 1.000 -> 1
         const char *suffix = "";
         if (!digits && whole >= 10000 && whole % 1000 == 0) { whole /= 1000; suffix = "k"; }
-        if (digits) std::snprintf(labels_[i], sizeof labels_[i], "%lu.%0*lu%s", whole, digits, fraction, suffix);
-        else std::snprintf(labels_[i], sizeof labels_[i], "%lu%s", whole, suffix);
+        if (digits) std::snprintf(labels_[i], sizeof labels_[i], "%s%lu.%0*lu%s", sign, whole, digits, fraction, suffix);
+        else std::snprintf(labels_[i], sizeof labels_[i], "%s%lu%s", sign, whole, suffix);
     }
     if (shown()) lv_obj_invalidate(object_);
+    return true;
 }
 void AnalogDial::marking(const char *text) {
     if (!std::strcmp(text, marking_)) return;
@@ -95,12 +102,15 @@ lv_area_t AnalogDial::markingArea() const {
     lv_text_get_size(&size, marking_, look_.text(MeterRole::Details, MarkingFont), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     return {area.x2 - size.x + 1, area.y1 + MarkingY, area.x2, area.y1 + MarkingY + MarkingHeight - 1};
 }
-lv_area_t AnalogDial::numberArea(int major) const {
+lv_area_t AnalogDial::numberArea(int major, const lv_area_t &face) const {
+    constexpr int32_t halfLabel = 20;
     const auto g = geometry();
     const float a = angle(float(major * counts_.major) / counts_.ticks()) * Degree;
     const float r = g.radius + LabelOffset;
-    const int x = int(std::lround(g.px + std::sin(a) * r)), y = int(std::lround(g.py - std::cos(a) * r));
-    return {x - 20, y - 7, x + 20, y + 7};
+    const int32_t x = int32_t(std::lround(g.px + std::sin(a) * r));
+    const int32_t y = int32_t(std::lround(g.py - std::cos(a) * r));
+    const int32_t left = std::clamp(x - halfLabel, face.x1, std::max(face.x1, face.x2 - 2 * halfLabel));
+    return {left, y - 7, std::min(face.x2, left + 2 * halfLabel), y + 7};
 }
 AnalogDial::Geometry AnalogDial::geometry() const {
     lv_area_t area;
@@ -182,7 +192,7 @@ void AnalogDial::paint(lv_layer_t *layer) const {
         tick.p2 = {lv_value_precise_t(g.px + s * inner), lv_value_precise_t(g.py - c * inner)};
         if (hits(tick.p1.x, tick.p1.y, tick.p2.x, tick.p2.y, tick.width + 1)) lv_draw_line(layer, &tick);
         if (!major) continue;
-        const lv_area_t box = numberArea(i / step);
+        const lv_area_t box = numberArea(i / step, area);
         if (!hits(box.x1, box.y1, box.x2, box.y2, 0)) continue;
         number.text = labels_[i / step]; number.text_local = 1;
         lv_draw_label(layer, &number, &box);

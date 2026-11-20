@@ -48,9 +48,12 @@ struct MeterText {
         if (!std::strcmp(unit, "MOhm")) return "MΩ";
         if (!std::strcmp(unit, "uA")) return "µA";
         if (!std::strcmp(unit, "uF")) return "µF";
+        if (!std::strcmp(unit, "degC") || !std::strcmp(unit, "x")) return "°C";
+        if (!std::strcmp(unit, "degF")) return "°F";
         return std::strlen(unit) <= 4 ? unit : "?";
     }
     static const char *function(const dmm::Result &result) {
+        if (result.primary.quantity == Quantity::Temperature) return "Temperature";
         const bool current = result.primary.quantity == Quantity::Current;
         switch (result.kind) {
         case dmm::Kind::Dc: return current ? "DC current" : "DC voltage";

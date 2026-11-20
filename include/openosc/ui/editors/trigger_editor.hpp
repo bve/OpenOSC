@@ -6,7 +6,7 @@
 namespace openosc::ui {
 class TriggerEditor final : public PropertyList {
 public:
-    enum Row : unsigned { Source, Slope, Level, Mode, Pretrigger, Reject, Midpoint, Fields };
+    enum Row : unsigned { Source, Slope, Level, Mode, Pretrigger, Center, Reject, Midpoint, Fields };
     void begin(const scope::TriggerSettings &settings) { settings_ = settings; }
     void sources(bool ch1, bool ch2) {
         enabled_[0] = ch1; enabled_[1] = ch2;

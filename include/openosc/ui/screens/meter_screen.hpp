@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/measurement/dmm/function.hpp"
+#include "openosc/measurement/dmm/temperature_axis.hpp"
 #include "openosc/ui/screens/instrument_screen.hpp"
 #include "openosc/ui/screens/meter_context.hpp"
 #include "openosc/ui/components/meter_style.hpp"
@@ -48,6 +49,7 @@ private:
     bool statistics_ = true; // The measurements block has its statistics' rows (or the trend).
     bool recording_ = false;
     bool bar_ = true;
+    dmm::TemperatureAxis temperatureAxis_;
     int digits_ = ScreenLayout::Digits; // Digital: the size the reading block holds (ScreenLayout::digitsFor).
     DigitalArrangement digital_;
     AnalogArrangement analogOrder_;

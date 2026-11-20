@@ -4,8 +4,7 @@
 #include <cstdio>
 
 namespace openosc::ui {
-// DISPLAY: the section list, then a section's rows, drafts until committed. fine: a press steps
-// one, a held key the coarse step.
+// DISPLAY: the section list, then a section's rows, drafts until committed. fine is true for a fresh press.
 class DisplayProperties final : public PropertyList {
 public:
     explicit DisplayProperties(plot::Controls &controls, bool fine = true) : controls_(controls), fine_(fine) {}
@@ -25,6 +24,7 @@ public:
     void adjust(unsigned index, int direction) override { if (!controls_.listing && index < count()) controls_.adjust(row(index), direction, fine_); }
     int32_t number(unsigned index) const override { return !controls_.listing && index < count() ? controls_.number(row(index)) : 0; }
     void setNumber(unsigned index, int32_t value) override { if (!controls_.listing && index < count()) controls_.setNumber(row(index), value); }
+    int coarseStep(unsigned index) const override { return pan(index) ? 25 : 1; }
     // Pan's number is rounded permille: the edit keeps and compares its exact ppb.
     void beginEdit(unsigned) override { controls_.savedPanPpb = controls_.options.panPpb; }
     void cancelEdit(unsigned index, int32_t saved) override {

@@ -233,6 +233,15 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         !choice(meter, "palette", output.meter.palette, palettes)) return false;
     if (meter["appearance"].is<JsonObjectConst>()) appearance(meter["appearance"].as<JsonObjectConst>(), output.meter.appearance);
     if (meter["hold"].is<JsonObjectConst>()) hold(meter["hold"].as<JsonObjectConst>(), output.meter.hold);
+    if (const auto temperature = meter["temperature"].as<JsonObjectConst>(); !temperature.isNull()) {
+        dmm::TemperatureSettings settings;
+        uint32_t fahrenheit = 0;
+        if (number(temperature, "junction_deci_c", settings.junctionDeciC) &&
+            boolean(temperature, "fahrenheit", fahrenheit) && settings.valid()) {
+            settings.fahrenheit = fahrenheit != 0;
+            output.meter.temperature = settings;
+        }
+    }
     arrangement(meter, "arrangement_digital", output.meter.digitalArrangement);
     arrangement(meter, "arrangement_analog", output.meter.analogArrangement);
     arrangement(scope, "arrangement", s.arrangement);
@@ -326,5 +335,11 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     if (values.meter.rangeFunction < MeterFunctionCount) meter["range_function"] = MeterFunctions[values.meter.rangeFunction].key;
     appearance(meter, values.meter.appearance);
     hold(meter, values.meter.hold);
+    const auto &temperature = values.meter.temperature;
+    if (temperature.junctionDeciC != dmm::TemperatureSettings::DefaultJunction || temperature.fahrenheit) {
+        auto object = meter.createNestedObject("temperature");
+        object["junction_deci_c"] = temperature.junctionDeciC;
+        object["fahrenheit"] = temperature.fahrenheit;
+    }
 }
 } // namespace openosc

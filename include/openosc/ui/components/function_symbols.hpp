@@ -11,7 +11,7 @@ namespace openosc::ui {
 class FunctionSymbols {
 public:
     enum class Symbol : uint8_t { VoltsDc, VoltsAc, MillivoltsDc, MillivoltsAc, AmpsDc, AmpsAc, MilliampsDc, MilliampsAc,
-                                  Ohm, Continuity, Diode, DiodeBeeper, Capacitor, Unknown };
+                                  Ohm, Continuity, Diode, DiodeBeeper, Capacitor, Temperature, Unknown };
     static Symbol of(dmm::Function function, bool beeper);
     // bare: beside the unit (the function row), only what the unit doesn't say: "DC"/"AC", a resistor for Ω.
     static int width(Symbol symbol, int height, bool bare = false);

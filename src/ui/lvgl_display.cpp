@@ -40,12 +40,35 @@ extern "C" void openosc_dma2d_reset(void) {
     resetRenderer();
     shareBus();
 }
+bool LvglDisplay::showBootSplash(bool inherited, boot_splash::Style style) {
+    if (!inherited) {
+        if (!Display{}.initialize(true)) return false;
+    } else {
+        // The second stage still owns buffer 0. Draw the complete screen in buffer 1 first.
+        boot_splash::draw(boot_splash::valid(style) ? style : boot_splash::choose(), framebuffers[1]);
+        ltdc.show(framebuffers[1], false);
+        const auto since = Board::milliseconds();
+        while (ltdc.reloading()) {
+            if (Board::milliseconds() - since >= FrameFlip::TimeoutMs) {
+                if (!ltdc.restart(framebuffers[1])) return false;
+                break;
+            }
+            Board::service();
+        }
+    }
+    bootShownAt_ = Board::milliseconds();
+    bootShowing_ = true;
+    return true;
+}
 bool LvglDisplay::initialize() {
     resetRenderer();
-    std::memset(framebuffers[1], 0, sizeof framebuffers[1]);
     Display panel;
-    if (!Display::scanningBootBuffer() && !panel.initialize(true)) return false;
-    flip_.attach(ltdc, framebuffers[0]);
+    const bool secondIsFront = Display::scanningBootBuffer(uint32_t(reinterpret_cast<uintptr_t>(framebuffers[1])));
+    if (!secondIsFront && !Display::scanningBootBuffer() && !panel.initialize(true)) return false;
+    auto *front = framebuffers[secondIsFront ? 1 : 0];
+    auto *back = framebuffers[secondIsFront ? 0 : 1];
+    std::memset(back, 0, sizeof framebuffers[0]);
+    flip_.attach(ltdc, front);
     lv_init();
     // Completion is the START bit, read in the main context; the IRQ clears flags, notes errors
     // and requests a dispatch. Below acquisition (5) and USB (4).
@@ -56,11 +79,11 @@ bool LvglDisplay::initialize() {
     if (!display_) return false;
     lv_display_set_user_data(display_, this);
     lv_display_set_color_format(display_, LV_COLOR_FORMAT_RGB565);
-    // Keep buffer 0 on the panel until LVGL presents its first complete screen.
-    lv_display_set_buffers(display_, framebuffers[1], framebuffers[0], sizeof framebuffers[0], LV_DISPLAY_RENDER_MODE_DIRECT);
+    // Keep the splash on the panel until LVGL presents its first complete screen.
+    lv_display_set_buffers(display_, back, front, sizeof framebuffers[0], LV_DISPLAY_RENDER_MODE_DIRECT);
     lv_display_set_flush_cb(display_, flush);
     lv_display_set_flush_wait_cb(display_, wait);
-    front_ = framebuffers[0];
+    front_ = front;
     return true;
 }
 // The flip is done: the frame is on screen and LVGL may draw into the other buffer.
@@ -78,6 +101,11 @@ void LvglDisplay::adopt(const void *shown) {
     lv_display_flush_ready(display_);
 }
 void LvglDisplay::render() {
+    // Keep the credits visible while the application starts its normal services.
+    if (bootShowing_) {
+        if (Board::milliseconds() - bootShownAt_ < 950) return;
+        bootShowing_ = false;
+    }
     if (waking_) resume();
     if (complete(Board::milliseconds())) lv_timer_handler(); // Not while the panel still shows the back buffer.
 }

@@ -17,7 +17,6 @@ bool ApplicationController::changePlotMode(plot::Options &options, plot::Mode be
 }
 void ApplicationController::plotKeys(uint32_t keys, uint32_t now, bool fine) {
     for (unsigned c=0; c<2; ++c) plotControls_.enabled[c]=channelShown(c);
-    plotControls_.model = &view_.waveform().model(); // Pan: a pixel or a division of the view on show.
     ui::DisplayProperties list(plotControls_, fine);
     if (list.listing()) { // The section list: Open shows a section, Back goes up.
         using Outcome = ui::PropertyNavigator::Outcome;
@@ -37,9 +36,14 @@ void ApplicationController::plotKeys(uint32_t keys, uint32_t now, bool fine) {
     else if (key == FieldKey::Action) applyDisplay(row, now);
     if (key == FieldKey::Committed || key == FieldKey::Action) view_.properties(ui::DisplayProperties(plotControls_, fine), navigator_);
 }
-// A committed field (row Count), or the Reference/Clear row (`row`): every draft goes to the view.
+// A committed field (row Count) or an action row.
 // Refused, the drafts return to the view in force (the panel never shows an unapplied value).
 bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
+    if (row == plot::Controls::CenterTrigger) {
+        const bool centered = centerTrigger(now);
+        plotControls_.options = view_.waveform().options();
+        return centered;
+    }
     const auto refuse = [&](const char *why) {
         view_.notify(why, now);
         plotControls_.options = view_.waveform().options();

@@ -3,6 +3,7 @@
 #include "openosc/ui/editors/property_list.hpp"
 #include "openosc/measurement/dmm/hold.hpp"
 #include "openosc/measurement/dmm/result.hpp"
+#include "openosc/measurement/dmm/temperature.hpp"
 #include "openosc/ui/format/meter.hpp"
 #include "openosc/settings/theme.hpp"
 
@@ -10,7 +11,8 @@ namespace openosc::ui {
 class MeterProperties final : public PropertyList {
 public:
     // Hold: its own list (MeterHoldProperties), the mode as its value.
-    enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, BarGraph, Relative, Hold, ResetStatistics, Logging, SerialOutput, Count };
+    enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, BarGraph, Relative, Hold, ResetStatistics,
+               Logging, ColdJunction, TemperatureUnit, SerialOutput, Count };
     static constexpr unsigned VisibleRows = board::Current::Features.dmmSerialOutput ? Count : SerialOutput;
     explicit MeterProperties(const dmm::Result &result, unsigned display = 0, bool statistics = true,
                              bool relative = false, bool logging = false, bool serial=false, bool jackBusy=false,
@@ -28,6 +30,8 @@ public:
     bool automatic() const { return result_.range == dmm::RangeMode::Auto; }
     bool logging() const { return logging_; }
     bool serial() const { return serial_; }
+    dmm::TemperatureSettings temperature() const { return temperature_; }
+    MeterProperties &temperature(dmm::TemperatureSettings settings) { temperature_ = settings; return *this; }
     const char *notice() const override { return MeterText::function(result_); }
     const char *title() const override { return "MEASUREMENT"; }
     unsigned count() const override { return VisibleRows; }
@@ -38,6 +42,11 @@ public:
     unsigned option(unsigned row) const override;
     void optionName(unsigned row, unsigned index, char *output, size_t capacity) const override;
     bool choose(unsigned row, unsigned index) override;
+    void adjust(unsigned row, int step) override;
+    int coarseStep(unsigned) const override { return 10; }
+    int32_t number(unsigned row) const override;
+    void setNumber(unsigned row, int32_t value) override;
+    void beginEdit(unsigned row) override;
     // Base colors: each palette's body as its sample (as Appearance > Base colors); needs the theme
     // in force (a stable one: the owner's), without it no sample.
     bool optionSwatch(unsigned row, unsigned index, uint32_t &rgb) const override;
@@ -49,5 +58,6 @@ private:
     bool statistics_, relative_, logging_,serial_,jackBusy_, bar_ = true;
     const Theme *theme_;
     dmm::HoldMode hold_;
+    dmm::TemperatureSettings temperature_;
 };
 } // namespace openosc::ui

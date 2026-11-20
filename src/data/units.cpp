@@ -41,10 +41,12 @@ bool UnitParser::parse(const char *text, const char *unit, NumericValue &output)
         {"F", Quantity::Capacitance, 1},     {"mF", Quantity::Capacitance, 1e-3},
         {"uF", Quantity::Capacitance, 1e-6}, {"nF", Quantity::Capacitance, 1e-9},
         {"Hz", Quantity::Frequency, 1},      {"KHz", Quantity::Frequency, 1e3},
-        {"kHz", Quantity::Frequency, 1e3}};
+        {"kHz", Quantity::Frequency, 1e3},  {"x", Quantity::Temperature, 1},
+        {"degC", Quantity::Temperature, 1}, {"degF", Quantity::Temperature, 5. / 9}};
     for (auto entry : units)
         if (!std::strcmp(unit, entry.unit)) {
             value = value / divisor * entry.scale * (negative ? -1 : 1);
+            if (!std::strcmp(unit, "degF")) value -= 32 * entry.scale;
             if (!std::isfinite(value))
                 return false;
             output = {value, entry.quantity, DataStatus::Ok};

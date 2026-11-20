@@ -57,6 +57,33 @@ void ApplicationController::resetPan(uint32_t now) {
     view_.waveform().configure(options);
     if (!held) queuePlotSave(now);
 }
+bool ApplicationController::centerTrigger(uint32_t now) {
+    auto options = view_.waveform().options();
+    if (options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay) {
+        view_.notify("Center trigger needs Y-T", now);
+        return false;
+    }
+    auto request = data_.scopeRequest();
+    const bool held = data_.scopeHeld();
+    request.trigger.position = 500;
+    if (!request.same(data_.scopeRequest()) && !applyScope(request, now, ScopeApply::StageIfHeld)) {
+        view_.notify("Finish data transfer first", now);
+        return false;
+    }
+    bool plotChanged = options.panPpb || !options.lockTrigger;
+    if (held) {
+        beginHeldView();
+        plotChanged |= heldView_.panPpb != 0;
+        heldView_.panPpb = 0; // Use the centered start for the next RUN as well.
+    }
+    options.panPpb = 0;
+    options.lockTrigger = true;
+    options.centerHeldTrigger = held;
+    view_.waveform().configure(options);
+    if (plotChanged) queuePlotSave(now);
+    dataRefresh_ = true;
+    return true;
+}
 void ApplicationController::beginHeldView() {
     if (heldViewActive_) return;
     heldView_ = view_.waveform().options();

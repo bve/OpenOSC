@@ -4,7 +4,7 @@
 
 namespace openosc::dmm {
 enum class Function : unsigned { VoltageDc, VoltageAc, Resistance, Continuity, Diode, Capacitance,
-    CurrentDc, CurrentAc, MillivoltsDc, MillivoltsAc, MilliampsDc, MilliampsAc, Unknown };
+    CurrentDc, CurrentAc, MillivoltsDc, MillivoltsAc, MilliampsDc, MilliampsAc, Temperature, Unknown };
 class Functions {
 public:
     static Function identify(const Result &result);
@@ -16,10 +16,10 @@ public:
     // factory selects, ranges and decodes it as V AC and only marks it.
     static bool vfc(const Result &result) { return result.vfc && identify(result) == Function::VoltageAc; }
     // The function has ranges the AUTO/RANGE key steps through (a Ranges table on both models): V, mV,
-    // A, mA (DC and AC), resistance, capacitance. Diode, continuity, Unknown and any value past it
+    // A, mA (DC and AC), resistance, capacitance. Diode, continuity, temperature and Unknown
     // have none.
     static constexpr bool ranged(Function f) {
-        return f < Function::Unknown && f != Function::Continuity && f != Function::Diode;
+        return f < Function::Temperature && f != Function::Continuity && f != Function::Diode;
     }
     // The quantity a ranged function's reading is in (its unit's type, any prefix): Unknown for the others.
     static constexpr Quantity quantity(Function f) {

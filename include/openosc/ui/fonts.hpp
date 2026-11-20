@@ -6,6 +6,8 @@ LV_FONT_DECLARE(openosc_ui_11c); // IBM Plex Sans 11, condensed (wdth 85): the S
 LV_FONT_DECLARE(openosc_ui_12);
 LV_FONT_DECLARE(openosc_ui_14);
 LV_FONT_DECLARE(openosc_ui_24);
+LV_FONT_DECLARE(openosc_icons_12);
+LV_FONT_DECLARE(openosc_icons_24);
 LV_FONT_DECLARE(openosc_mono_12);
 LV_FONT_DECLARE(openosc_mono_14);
 LV_FONT_DECLARE(openosc_mono_24);

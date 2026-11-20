@@ -23,13 +23,15 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     // bounds place it as an unshifted record, its missing part outside the record (RecordGaps). Any
     // other view (unlocked, X-Y, FFT) keeps the real record's origin and the trigger's own fraction.
     const bool anchored = o.lockTrigger && m.triggered && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay);
+    const bool centered = anchored && o.centerHeldTrigger;
     const int64_t origin = anchored ? int64_t(m.triggerShift) * 65536 : 0;
     const int64_t full = int64_t(record), pan = o.panPpb; // record < 2^37: both products fit int64.
     startQ16 = origin + full / Options::PanFull * pan + full % Options::PanFull * pan / Options::PanFull;
     if (m.rolling) startQ16+=int64_t(m.samples-1)*65536-int64_t(spanQ16);
     phaseQ16 = 0;
     if (o.lockTrigger && m.triggered) {
-        startQ16 += int64_t(m.triggerIndex) * 65536 - origin - int64_t(pretrigger(m, anchored));
+        const uint64_t triggerPosition = centered ? spanQ16 / 2 : pretrigger(m, anchored);
+        startQ16 += int64_t(m.triggerIndex) * 65536 - origin - int64_t(triggerPosition);
         // The crossing, not the first sample past it, at the trigger's place (GitHub #34).
         if (phase < 65536 && phased(m, o)) { phaseQ16 = phase; startQ16 -= phase; }
     }
@@ -38,7 +40,8 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     else if (!m.rolling && !m.triggered && o.lockTrigger &&
              (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay))
         startQ16 += (int64_t(record) - int64_t(spanQ16)) / 2;
-    if (o.zoomOut > 1) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
+    // An explicitly centered held trigger can leave part of the viewport outside the record.
+    if (o.zoomOut > 1 && !centered) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
     return true;
 }
 bool Viewport::phased(const scope::FrameMetadata &m, const Options &o) const {

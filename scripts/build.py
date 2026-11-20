@@ -6,6 +6,7 @@ Import("env")
 root = Path(env.subst("$PROJECT_DIR"))
 sys.path.insert(0, str(root / "scripts"))
 import board_config  # noqa: E402
+import boot_splash  # noqa: E402
 import generate_board_config  # noqa: E402
 import vector_table  # noqa: E402
 
@@ -15,6 +16,12 @@ if stale:
              + ", ".join(path.name for path in stale))
 board = board_config.load(env.subst("$BOARD"))
 image_kind = env.GetProjectOption("custom_openosc_image")
+generated = Path(env.subst("$BUILD_DIR")) / "generated"
+try:
+    boot_splash.generate(root, generated / "boot_splash_images.hpp", image_kind == "application")
+except (OSError, ValueError) as error:
+    sys.exit(f"Boot splash: {error}")
+env.Append(CPPPATH=[str(generated)])
 env.Append(CPPDEFINES=[("OPENOSC_BOARD", board.model)])
 include_dirs = [
     "include", "vendor/cmsis", "vendor/hal/Inc", "vendor/fatfs",

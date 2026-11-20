@@ -30,11 +30,12 @@ private:
 int main() {
     using namespace openosc;
     StackGuard::arm(); // The lowest stack words, far below main's frame now; checked by the main loop.
-    const bool bootFrame = Display::takeBootFrame();
+    boot_splash::Style bootStyle;
+    const bool bootFrame = Display::takeBootFrame(&bootStyle);
     if (!Board::initialize(bootFrame)) Watchdog::fatal(boot_diagnostics.error);
     BootTiming::mark(BootTiming::Start);
-    // With an older second stage, draw the same logo before storage or preferences can wait.
-    const bool bootDisplayReady = bootFrame || Display{}.initialize(true);
+    LvglDisplay display;
+    const bool bootDisplayReady = display.showBootSplash(bootFrame, bootStyle);
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     BootTiming::mark(BootTiming::Crc);
     NorFlash nor;
@@ -52,6 +53,7 @@ int main() {
     Watchdog::progress(); // Boot stages are the boot's progress (one pass, WatchdogPolicy::OperationMs).
     PreferencesFile preferences(fs);
     preferences.load();
+    Board::configurePe10(preferences.values().mode == unsigned(MeasurementMode::Generator));
     BootTiming::mark(BootTiming::Settings);
     Watchdog::progress();
     // The 360 MHz profile only through its guard (BootGuard), before USB starts (STORE-02).
@@ -72,7 +74,6 @@ int main() {
     usbtrace::start();
 #endif
     ThemeStore themes(fs);
-    LvglDisplay display;
     ScreenshotWriter screenshots(fs);
     // The service lives for the complete firmware lifetime. It holds no DMA memory (the NOR, UART
     // and capture buffers are separate), so it lives in DTCM and AXI keeps room for the arena.

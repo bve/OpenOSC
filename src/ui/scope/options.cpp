@@ -22,6 +22,7 @@ bool Options::valid() const {
 }
 void Options::restoreHeldView(const Options &saved) {
     zoom = saved.zoom; zoomOut = saved.zoomOut; panPpb = saved.panPpb; heldTimebaseNs = saved.heldTimebaseNs;
+    centerHeldTrigger = saved.centerHeldTrigger;
     for (unsigned c = 0; c < 2; ++c) {
         channels[c].gainPercent = saved.channels[c].gainPercent;
         channels[c].positionPermille = saved.channels[c].positionPermille;
@@ -29,7 +30,7 @@ void Options::restoreHeldView(const Options &saved) {
 }
 bool Options::sameTransform(const Options &b) const {
     if (mode != b.mode || zoom != b.zoom || zoomOut != b.zoomOut || panPpb != b.panPpb || heldTimebaseNs != b.heldTimebaseNs ||
-        lockTrigger != b.lockTrigger ||
+        lockTrigger != b.lockTrigger || centerHeldTrigger != b.centerHeldTrigger ||
         averaging != b.averaging || math != b.math ||
         reduction != b.reduction || interpolation != b.interpolation || !spectrum.same(b.spectrum))
         return false;

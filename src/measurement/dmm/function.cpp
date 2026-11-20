@@ -3,6 +3,7 @@
 
 namespace openosc::dmm {
 Function Functions::identify(const Result &r) {
+    if (r.primary.quantity == Quantity::Temperature) return Function::Temperature;
     switch (r.kind) {
     case Kind::Resistance: return Function::Resistance;
     case Kind::Capacitance: return Function::Capacitance;
@@ -29,11 +30,11 @@ CommandGroup Functions::group(Function f) {
     if (f == Function::VoltageDc || f == Function::VoltageAc) return CommandGroup::Voltage;
     if (f >= Function::Resistance && f <= Function::Capacitance) return CommandGroup::ResistanceGroup;
     if (f == Function::CurrentDc || f == Function::CurrentAc) return CommandGroup::Current;
-    if (f == Function::MillivoltsDc || f == Function::MillivoltsAc) return CommandGroup::Millivolts;
+    if (f == Function::MillivoltsDc || f == Function::MillivoltsAc || f == Function::Temperature) return CommandGroup::Millivolts;
     return CommandGroup::Milliamps;
 }
 bool FunctionSelector::request(Function function, const Result &latest, uint32_t now, uint64_t minimumTimestampUs) {
-    if (function >= Function::Unknown || (busy() && function != requested_)) return false;
+    if (function >= Function::Temperature || (busy() && function != requested_)) return false;
     if (busy()) return true;
     requested_ = function; attempts_ = 0; sequence_ = latest.sequence; nextAt_ = now; deadline_ = now + DeadlineMs;
     minimumTimestampUs_ = minimumTimestampUs;

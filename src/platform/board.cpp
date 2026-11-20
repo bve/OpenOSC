@@ -71,6 +71,21 @@ bool Board::initialize(bool keepBootDisplay) {
     return true;
 }
 
+#ifdef OPENOSC_APPLICATION
+void Board::configurePe10(bool generatorMode) {
+    // Factory main drives PE10 high without a pull. Only the ZT706S GEN image
+    // (240680FC) drives it low with a pull-up. The external circuit is unknown.
+    const bool low = board::Current::Pe10LowInGenerator && generatorMode;
+    GPIOE->BSRR = low ? uint32_t(GPIO_PIN_10) << 16 : GPIO_PIN_10;
+    GPIO_InitTypeDef gpio{};
+    gpio.Pin = GPIO_PIN_10;
+    gpio.Mode = GPIO_MODE_OUTPUT_PP;
+    gpio.Pull = low ? GPIO_PULLUP : GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOE, &gpio);
+}
+#endif
+
 // Servicing while waiting: not a proof of progress (Watchdog::heartbeat/progress are).
 void Board::service() {
     Watchdog::service(HAL_GetTick(), reinterpret_cast<uintptr_t>(__builtin_return_address(0)));

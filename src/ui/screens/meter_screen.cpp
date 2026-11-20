@@ -15,6 +15,7 @@ namespace {
 constexpr unsigned Mode = unsigned(MeasurementMode::Multimeter);
 }
 void MeterScreen::activate(const ApplicationState &) {
+    temperatureAxis_.reset();
     cards(dmm::Function::Unknown, false, false, ParameterBar::Count, "");
     host_.status("NO DATA", StatusTone::Warning);
     styled_ = false; // The theme was applied again: so are the DMM colours.
@@ -168,14 +169,14 @@ void MeterScreen::reading(const char *text) {
 }
 void MeterScreen::feed(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative) {
     if (analog_) {
-        // The scale in the reading's unit: its decimals (as the bar counts them) and its function's
-        // counts (dmm::scaleFor) fix full scale.
-        const auto bar = dmm::BarReading::from(result, status, relative);
-        if (result.decimals != 255 || result.primary.valid())
-            host_.dial().scale(result.primary.valid() ? dmm::Resolution::decimals(result) : result.decimals, MeterText::unit(result.unit), bar.scale);
-        host_.dial().reading(bar, held_);
+        const auto bar = dmm::BarReading::from(result, status, relative, &temperatureAxis_);
+        auto &dial = host_.dial();
+        const auto decimals = bar.temperature ? dmm::TemperatureAxis::Decimals
+                             : result.primary.valid() ? dmm::Resolution::decimals(result) : result.decimals;
+        const bool scaleChanged = decimals != 255 && dial.scale(decimals, MeterText::unit(result.unit), bar.scale);
+        dial.reading(bar, held_, bar.temperature && scaleChanged);
     }
-    else if (bar_) host_.meterSummary().bar(result, status, look_.color(MeterRole::Bar), relative);
+    else if (bar_) host_.meterSummary().bar(result, status, look_.color(MeterRole::Bar), relative, &temperatureAxis_);
 }
 void MeterScreen::fastBar(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative, uint32_t now) {
     if (host_.overlayActive()) return; // Under a menu: neither the bar nor the needle (hidden) is fed.
@@ -241,7 +242,9 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
         const double factor = UnitParser::parse("1", result.unit, unit) ? unit.si : 1;
         std::snprintf(text, sizeof text, "--");
         const unsigned decimals = dmm::Resolution::decimals(result);
-        const double value = ((mean ? statistics->average() : result.primary.si) - reference) / factor;
+        const double measured = (mean ? statistics->average() : result.primary.si) - reference;
+        const double value = result.primary.quantity == Quantity::Temperature
+            ? dmm::TypeK::display(measured, result.unit, relative || result.peerRelative) : measured / factor;
         if (!Decimal::fixed(value, decimals, text, sizeof text)) Decimal::number(value, text, sizeof text, 6);
     }
     const auto function = context.selecting != dmm::Function::Unknown ? context.selecting : dmm::Functions::identify(result);
@@ -274,7 +277,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     elements.text(ElementId::Measurements, "");
     host_.meterSummary().visible(true);
     host_.meterTrend().visible(context.display == 2);
-    if (context.display == 2) host_.meterTrend().update(context.history, result.primary.quantity, reference, relative, result.peerRelative);
+    if (context.display == 2) host_.meterTrend().update(context.history, result.primary.quantity, reference, relative, result.peerRelative, result.unit);
     host_.meterSummary().update(result, context.display != 2 && (context.showStatistics || context.display == 1) ? statistics : nullptr,
                                 look_.color(MeterRole::Mode), reference, relative, result.peerRelative);
 }

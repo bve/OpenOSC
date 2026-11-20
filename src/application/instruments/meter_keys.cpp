@@ -27,11 +27,23 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
         return;
     }
     if (keys & Keypad::HoldSave) meterHoldKey(now);
+    const auto &meter = data_.meter();
+    if ((keys & Keypad::F4) && meter.latest().sequence && !meter.latest().currentInput) {
+        using F = dmm::Function;
+        const auto current = meter.typeK() ? F::Temperature : dmm::Functions::identify(meter.latest());
+        const bool needsJunction = current == F::MillivoltsAc && !prefs_.meter.temperature.configured();
+        auto next = F::MillivoltsDc;
+        if (current == F::MillivoltsDc) next = F::MillivoltsAc;
+        if (current == F::MillivoltsAc && !needsJunction) next = F::Temperature;
+        if (!meterCommand(data_.selectDmmFunction(next))) view_.notify("Measurement command busy", now);
+        else if (needsJunction) view_.notify("Type K: set Cold junction in MENU", now);
+        return;
+    }
     dmm::CommandGroup group = dmm::CommandGroup::Voltage;
     if (keys & Keypad::F2) group = dmm::CommandGroup::ResistanceGroup;
     if (keys & Keypad::F3) group = dmm::CommandGroup::Current;
     if (keys & Keypad::F4)
-        group = data_.meter().latest().currentInput ? dmm::CommandGroup::Milliamps : dmm::CommandGroup::Millivolts;
+        group = meter.latest().currentInput ? dmm::CommandGroup::Milliamps : dmm::CommandGroup::Millivolts;
     if ((keys & (Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4)) && !meterCommand(data_.sendDmmGroup(group)))
         view_.notify("Measurement command busy", now);
 }
@@ -72,7 +84,8 @@ ui::MeterProperties ApplicationController::meterProperties() const {
     return ui::MeterProperties(meter.displayed(),prefs_.meter.display,prefs_.meter.statistics,
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
-        prefs_.meter.face, prefs_.meter.palette, &themes_.theme(), prefs_.meter.hold.mode).barGraph(prefs_.meter.bar);
+        prefs_.meter.face, prefs_.meter.palette, &themes_.theme(), prefs_.meter.hold.mode)
+        .barGraph(prefs_.meter.bar).temperature(prefs_.meter.temperature);
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
 void ApplicationController::refreshMeterPanel() {
@@ -168,6 +181,10 @@ void ApplicationController::meterChanged(unsigned row, uint32_t now) {
     case Row::BarGraph: prefs_.meter.bar=meterEditor_.barGraph(); break;
     case Row::Digits: prefs_.meter.face=meterEditor_.face(); break;
     case Row::Colors: prefs_.meter.palette=meterEditor_.palette(); break;
+    case Row::ColdJunction: case Row::TemperatureUnit:
+        meterTemperatureSettings(meterEditor_.temperature(), now);
+        meterEditor_ = meterProperties();
+        return;
     default: return;
     }
     changed(now); dataRefresh_=true;

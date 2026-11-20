@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "openosc/display/boot_splash.hpp"
 namespace openosc {
 class Display {
 public:
@@ -8,10 +9,10 @@ public:
     static constexpr uint16_t Background = 0x0841, White = 0xffff,
         Cyan = 0x07ff, Green = 0x07e0, Red = 0xf800, Selected = 0x21cd;
     bool initialize(bool bootLogo = false);
-    static bool scanningBootBuffer();
+    static bool scanningBootBuffer(uint32_t frame = FrameAddress);
     // One-use handoff from the second stage to the application.
-    static void offerBootFrame();
-    static bool takeBootFrame();
+    void offerBootFrame() const;
+    static bool takeBootFrame(boot_splash::Style *style = nullptr);
     void clear(uint16_t color = Background);
     void rectangle(unsigned x, unsigned y, unsigned w, unsigned h, uint16_t color);
     void text(unsigned x, unsigned y, const char* text, uint16_t color = White);
@@ -23,7 +24,7 @@ public:
     static bool restart(const void *frame);
 private:
     static bool configure(uint32_t frame);
-    void drawBootLogo();
+    boot_splash::Style bootStyle_ = boot_splash::Style::Count;
 };
 }
 

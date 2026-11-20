@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/measurement/meter_function.hpp"
 #include "openosc/measurement/dmm/hold.hpp"
+#include "openosc/measurement/dmm/temperature.hpp"
 #include <cstdint>
 #include "openosc/acquisition/readouts.hpp"
 #include "openosc/acquisition/record_depths.hpp"
@@ -55,10 +56,12 @@ struct MeterPreferences {
     // How HOLD takes its reading (Measurement > Hold): Manual by default and in files before it. Only
     // the mode and its parameters are kept: a cycle or a snapshot never outlives a restart.
     dmm::HoldSettings hold;
+    dmm::TemperatureSettings temperature;
     bool analog() const { return display == AnalogDisplay; } // Which of the two orders shows.
     bool valid() const {
         return display < Displays && statistics <= 1 && bar <= 1 && automatic <= 1 && range < 8 && face < Faces && palette < Palettes &&
-               rangeFunction <= MeterFunctionCount && appearance.valid() && digitalArrangement.valid() && analogArrangement.valid() && hold.valid();
+               rangeFunction <= MeterFunctionCount && appearance.valid() && digitalArrangement.valid() && analogArrangement.valid() &&
+               hold.valid() && temperature.valid();
     }
 };
 } // namespace openosc

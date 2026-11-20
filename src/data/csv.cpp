@@ -36,6 +36,8 @@ const char *quantity(Quantity value) {
         return "capacitance";
     case Quantity::Frequency:
         return "frequency";
+    case Quantity::Temperature:
+        return "temperature";
     default:
         return "unknown";
     }

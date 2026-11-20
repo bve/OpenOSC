@@ -21,13 +21,13 @@ bool TriggerEditor::midpoint(const scope::FrameView &frame, scope::Channel chann
 PropertyKind TriggerEditor::kind(unsigned row) const {
     switch (row) {
     case Level: case Pretrigger: return PropertyKind::Number;
-    case Midpoint: return PropertyKind::Action;
+    case Center: case Midpoint: return PropertyKind::Action;
     case Reject: return PropertyKind::Toggle;
     default: return PropertyKind::Choice;
     }
 }
 void TriggerEditor::name(unsigned row, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Source", "Edge", "Level", "Mode", "Pretrigger", "Noise reject", "Set level to 50%"};
+    static constexpr const char *names[] = {"Source", "Edge", "Level", "Mode", "Pretrigger", "Center trigger", "Noise reject", "Set level to 50%"};
     if (row == Level && !calibration_[unsigned(settings_.channel)].calibrated) std::snprintf(output, capacity, "Level (raw)");
     else std::snprintf(output, capacity, "%s", row < Fields ? names[row] : "");
 }

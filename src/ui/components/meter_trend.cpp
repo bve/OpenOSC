@@ -1,5 +1,7 @@
 #include "openosc/ui/components/meter_trend.hpp"
 #include "openosc/ui/scope/format.hpp"
+#include "openosc/ui/format/meter.hpp"
+#include "openosc/data/decimal.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -46,7 +48,8 @@ void MeterTrend::palette(const MeterLook &look) {
     if (!lv_color_eq(lv_chart_get_series_color(chart_, series_), line)) lv_chart_set_series_color(chart_, series_, line);
     Elements::textColor(reference_, palette.muted);
 }
-void MeterTrend::update(const dmm::History *history, Quantity quantity, double reference, bool relative, bool peerRelative) {
+void MeterTrend::update(const dmm::History *history, Quantity quantity, double reference, bool relative,
+                        bool peerRelative, const char *temperatureUnit) {
     int32_t values[dmm::History::Capacity];
     std::fill(std::begin(values), std::end(values), LV_CHART_POINT_NONE);
     const auto commit = [&] {
@@ -74,11 +77,20 @@ void MeterTrend::update(const dmm::History *history, Quantity quantity, double r
     static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
     const char *unit = unsigned(quantity) < 6 ? units[unsigned(quantity)] : "";
     char low[32], high[32], text[112];
-    plot::Format::quantity(minimum - (relative ? reference : 0), unit, low, sizeof low, 6);
-    plot::Format::quantity(maximum - (relative ? reference : 0), unit, high, sizeof high, 6);
+    const auto format = [&](double value, bool delta, char (&output)[32]) {
+        if (quantity != Quantity::Temperature) {
+            plot::Format::quantity(value, unit, output, sizeof output, 6);
+            return;
+        }
+        char digits[24]{};
+        Decimal::fixed(dmm::TypeK::display(value, temperatureUnit, delta), 1, digits, sizeof digits);
+        std::snprintf(output, sizeof output, "%s%s", digits, MeterText::unit(temperatureUnit));
+    };
+    format(minimum - (relative ? reference : 0), relative || peerRelative, low);
+    format(maximum - (relative ? reference : 0), relative || peerRelative, high);
     std::snprintf(text, sizeof text, "%s .. %s / AUTO SCALE", low, high); Elements::setText(range_, text);
     if (relative) {
-        plot::Format::quantity(reference, unit, low, sizeof low, 6);
+        format(reference, false, low);
         std::snprintf(text, sizeof text, "REL reference %s", low);
     } else if (peerRelative) std::snprintf(text, sizeof text, "REL reference: controller");
     else std::snprintf(text, sizeof text, "%u samples / session history", count);

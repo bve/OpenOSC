@@ -12,6 +12,7 @@ bool ThemeStore::savePlot(const plot::Options &options) {
     }
     auto candidate = theme_;
     candidate.plot = options;
+    candidate.plot.centerHeldTrigger = false;
     if (!write(candidate)) {
         error_ = "CANNOT SAVE DISPLAY JSON";
         return false;

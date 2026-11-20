@@ -2,6 +2,7 @@
 #include "openosc/data/decimal.hpp"
 #include "openosc/measurement/dmm/key_command.hpp"
 #include "openosc/measurement/dmm/range_stroke.hpp"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -21,7 +22,8 @@ constexpr FunctionName functions[] = {
     {dmm::Function::Resistance,"RES","CONFigure:RESistance"}, {dmm::Function::Continuity,"CONT","CONFigure:CONTinuity"},
     {dmm::Function::Diode,"DIOD","CONFigure:DIODe"}, {dmm::Function::Capacitance,"CAP","CONFigure:CAPacitance"},
     {dmm::Function::MillivoltsDc,"MVOLT","CONFigure:MVOLtage:DC"}, {dmm::Function::MillivoltsAc,"MVOLT AC","CONFigure:MVOLtage:AC"},
-    {dmm::Function::MilliampsDc,"MCURR","CONFigure:MCURrent:DC"}, {dmm::Function::MilliampsAc,"MCURR AC","CONFigure:MCURrent:AC"}
+    {dmm::Function::MilliampsDc,"MCURR","CONFigure:MCURrent:DC"}, {dmm::Function::MilliampsAc,"MCURR AC","CONFigure:MCURrent:AC"},
+    {dmm::Function::Temperature,"TEMP","CONFigure:TEMPerature"}
 };
 }
 void Engine::meterReading(bool secondary) {
@@ -86,6 +88,37 @@ bool Engine::meterHoldCommand(const Command &c) {
 bool Engine::meterCommand(const Command &c) {
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
     if (meterHoldCommand(c)) return true;
+    if (match("SYSTem:DMM:TEMPerature:CJUNction")) {
+        auto settings = backend_.meterTemperature();
+        if (c.query) {
+            if (settings.configured()) number(settings.junctionCelsius());
+            else error(-230, true);
+        } else if (Header::word(c.argument, "NONE")) {
+            settings.junctionDeciC = dmm::TemperatureSettings::Unset;
+            if (!backend_.meterTemperature(settings)) error(-221);
+        } else {
+            double value;
+            if (argument(c, value)) {
+                const double deciC = std::round(value * 10);
+                if (!std::isfinite(deciC) || deciC < dmm::TemperatureSettings::Minimum || deciC > dmm::TemperatureSettings::Maximum ||
+                    std::fabs(value * 10 - deciC) > 1e-8) error(-222);
+                else {
+                    settings.junctionDeciC = int32_t(deciC);
+                    if (!backend_.meterTemperature(settings)) error(-221);
+                }
+            }
+        }
+        return true;
+    }
+    if (match("SYSTem:DMM:TEMPerature:UNIT")) {
+        auto settings = backend_.meterTemperature();
+        if (c.query) reply("%s", settings.fahrenheit ? "F" : "C");
+        else if (Header::word(c.argument, "C") || Header::word(c.argument, "F")) {
+            settings.fahrenheit = Header::word(c.argument, "F");
+            if (!backend_.meterTemperature(settings)) error(-221);
+        } else error(-224);
+        return true;
+    }
     if (match("SYSTem:DMM:PACKet")) { // The newest raw packet in hex, for decoding annunciators.
         const uint8_t *data = nullptr;
         const size_t bytes = backend_.meterPacket(data);

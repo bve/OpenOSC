@@ -15,9 +15,13 @@ namespace openosc::dmm {
 // the board's scale, where 9999 reached only 0.40 (703) or 0.15 (706) of the dial.
 struct CountScale {
     int fullScale, major;
-    constexpr int ticks() const { return fullScale / 1000; }
+    int minimum = 0, tickStep = 1000;
+    constexpr int ticks() const { return fullScale / tickStep; }
     constexpr int labels() const { return ticks() / major + 1; }
-    constexpr bool operator==(const CountScale &other) const { return fullScale == other.fullScale && major == other.major; }
+    constexpr int tickValue(int tick) const { return minimum + tick * tickStep; }
+    constexpr bool operator==(const CountScale &other) const {
+        return fullScale == other.fullScale && major == other.major && minimum == other.minimum && tickStep == other.tickStep;
+    }
     constexpr bool operator!=(const CountScale &other) const { return !(*this == other); }
     static constexpr CountScale of(board::DmmCounts counts) {
         return counts == board::DmmCounts::Counts66000 ? CountScale{66000, 11} : CountScale{25000, 5};

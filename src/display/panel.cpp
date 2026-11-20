@@ -9,6 +9,7 @@ LTDC_HandleTypeDef lcd;
 // Above both images' stacks and below ResetRecord. The app consumes it before Board::initialize.
 constexpr uint32_t BootFrameAddress = 0x2001ff40;
 constexpr uint32_t BootFrameMagic = 0x4f534331;
+constexpr uint32_t BootStyleMagic = 0x4f535400;
 volatile uint32_t* bootFrame() { return reinterpret_cast<volatile uint32_t*>(BootFrameAddress); }
 void pins(GPIO_TypeDef* port, uint32_t mask, uint32_t af) {
     GPIO_InitTypeDef gpio{};
@@ -40,24 +41,31 @@ bool Display::initialize(bool bootLogo) {
     Board::delay(10);
     if (!configure(FrameAddress)) return false;
     LTDC_Layer2->CR = 0;
-    if (bootLogo) drawBootLogo();
-    else clear();
+    if (bootLogo) {
+        bootStyle_ = boot_splash::choose();
+        boot_splash::draw(bootStyle_, reinterpret_cast<uint16_t*>(FrameAddress));
+    } else clear();
     present(); PowerControl::backlight(true);
     return true;
 }
-bool Display::scanningBootBuffer() {
+bool Display::scanningBootBuffer(uint32_t frame) {
     return __HAL_RCC_LTDC_IS_CLK_ENABLED() && (LTDC->GCR & LTDC_GCR_LTDCEN) &&
-           (LTDC_Layer1->CR & LTDC_LxCR_LEN) && LTDC_Layer1->CFBAR == FrameAddress;
+           (LTDC_Layer1->CR & LTDC_LxCR_LEN) && LTDC_Layer1->CFBAR == frame;
 }
-void Display::offerBootFrame() {
+void Display::offerBootFrame() const {
     bootFrame()[0] = BootFrameMagic;
     bootFrame()[1] = ~BootFrameMagic;
+    bootFrame()[2] = BootStyleMagic | unsigned(bootStyle_);
     __DSB();
 }
-bool Display::takeBootFrame() {
+bool Display::takeBootFrame(boot_splash::Style *style) {
     const bool offered = bootFrame()[0] == BootFrameMagic && bootFrame()[1] == ~BootFrameMagic;
-    bootFrame()[0] = bootFrame()[1] = 0;
-    return offered && (RCC->CR & RCC_CR_PLL3RDY) && scanningBootBuffer();
+    const auto tag = bootFrame()[2];
+    bootFrame()[0] = bootFrame()[1] = bootFrame()[2] = 0;
+    const bool live = offered && (RCC->CR & RCC_CR_PLL3RDY) && scanningBootBuffer();
+    if (style) *style = live && (tag & 0xffffff00U) == BootStyleMagic
+                            ? boot_splash::Style(tag & 0xffU) : boot_splash::Style::Count;
+    return live;
 }
 // The controller's timings and layer, scanning `frame`.
 bool Display::configure(uint32_t frame) {

@@ -58,8 +58,9 @@ void ApplicationController::triggerKeys(uint32_t keys, uint32_t now, bool fine) 
     const int vertical = (keys & Keypad::Up ? 1 : 0) - (keys & Keypad::Down ? 1 : 0);
     triggerEditor_.levelEdit(bounds, editing && vertical ? std::abs(triggerStep(vertical, fine)) : 1);
     const auto key = fieldKeys(keys, triggerEditor_, now);
-    if (key == FieldKey::Action) { // Set level to 50%, from the record on show, applied at once.
-        triggerMidpoint(now);
+    if (key == FieldKey::Action) {
+        if (navigator_.row() == ui::TriggerEditor::Center) centerTrigger(now);
+        else triggerMidpoint(now);
         triggerEditor_.begin(data_.scopeRequest().trigger);
         view_.properties(triggerEditor_, navigator_);
     } else if (key == FieldKey::Committed) commitTrigger(now, navigator_.row() == ui::TriggerEditor::Level);

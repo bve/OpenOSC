@@ -57,6 +57,8 @@ public:
     virtual const dmm::Result &meter() const = 0;
     virtual DataStatus meterStatus() const = 0;
     virtual bool selectFunction(dmm::Function) = 0;
+    virtual dmm::TemperatureSettings meterTemperature() const { return {}; }
+    virtual bool meterTemperature(dmm::TemperatureSettings) { return false; }
     virtual bool setAuto(bool) = 0;
     virtual bool setRange(unsigned) = 0;
     // The panel's HOLD and REL, and the statistics of the DMM screen (Session: one owner, the same

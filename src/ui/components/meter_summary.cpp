@@ -106,10 +106,11 @@ void spaced(double value, Quantity quantity, char *output, size_t capacity) {
 }
 } // namespace
 // In the reading's display units (MeterText::unit: kΩ, µF), as the reading's own unit label.
-void MeterSummary::statisticText(double value, Quantity quantity, char *output, size_t capacity) const {
+void MeterSummary::statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative) const {
     static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
     if (resolution_.valid() && resolution_.quantity() == quantity &&
-        resolution_.format(value, MeterText::unit(resolution_.unit()), output, capacity)) return;
+        resolution_.format(value, MeterText::unit(resolution_.unit()), output, capacity, relative)) return;
+    if (quantity == Quantity::Temperature) { std::snprintf(output, capacity, "----"); return; }
     char text[24];
     const char *unit = units[unsigned(quantity)];
     if (!plot::Format::quantity(value, unit, text, sizeof text, dmm::Resolution::MaxDigits)) { std::snprintf(output, capacity, "----"); return; }
@@ -164,21 +165,24 @@ void MeterSummary::visible(bool value) { lv_obj_set_hidden(root_, !value); }
 void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
                           double reference, bool relative, bool peerRelative) {
     const double offset = relative ? reference : 0;
+    if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) resolution_ = resolution;
+    const bool temperature = result.primary.quantity == Quantity::Temperature;
     bool changed = Elements::setText(secondary_, result.secondary.valid() ? result.secondaryText : "");
     if (relative) {
         char value[32], text[48];
-        spaced(reference, result.primary.quantity, value, sizeof value);
+        if (temperature) statisticText(reference, result.primary.quantity, value, sizeof value);
+        else spaced(reference, result.primary.quantity, value, sizeof value);
         std::snprintf(text, sizeof text, "REL ref %s", value); changed |= Elements::setText(reference_, text);
     } else if (peerRelative) changed |= Elements::setText(reference_, "REL ref: controller");
+    else if (temperature) changed |= Elements::setText(reference_, "Temperature");
     else if (const auto *range = dmm::Ranges::current(result)) {
         char value[32], text[48];
         spaced(range->maximumSi, result.primary.quantity, value, sizeof value);
         std::snprintf(text, sizeof text, "Range %s", value); changed |= Elements::setText(reference_, text);
     } else changed |= Elements::setText(reference_, "Range unavailable");
-    changed |= Elements::setText(range_, result.range == dmm::RangeMode::Auto ? "AUTO"
+    changed |= Elements::setText(range_, temperature ? "" : result.range == dmm::RangeMode::Auto ? "AUTO"
                                          : result.range == dmm::RangeMode::Manual ? "MANUAL" : "UNKNOWN");
     if (changed) flowMeta();
-    if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) resolution_ = resolution;
     Elements::textColor(range_, accent);
     // Statistics shown (On, not Trend): the names stay, and an empty period (after a reset, an
     // overload or no reading, or of another quantity) shows "--" as the factory's placeholders.
@@ -189,7 +193,7 @@ void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *stat
         for (auto &text : texts) std::snprintf(text, sizeof text, "--");
     if (view.valid) {
         const double numbers[Columns] = {view.minimum, view.maximum, view.average};
-        for (unsigned c = 0; c < Columns; ++c) statisticText(numbers[c], view.quantity, texts[c], sizeof texts[c]);
+        for (unsigned c = 0; c < Columns; ++c) statisticText(numbers[c], view.quantity, texts[c], sizeof texts[c], relative || peerRelative);
     }
     // One size for the three, each in its own typeface: the largest (ValueFont, then 12; compact:
     // 12 beside the names) in which all three fit their columns, so they share a baseline.

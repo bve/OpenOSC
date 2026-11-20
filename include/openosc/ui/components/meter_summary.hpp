@@ -42,7 +42,9 @@ public:
     void update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
                 double reference = 0, bool relative = false, bool peerRelative = false);
     void bar(const dmm::Result &result, DataStatus status, uint32_t accent,
-             const dmm::RelativeReading *relative = nullptr) { bar_.update(result,status,accent,relative); }
+             const dmm::RelativeReading *relative = nullptr, dmm::TemperatureAxis *axis = nullptr) {
+        bar_.update(result, status, accent, relative, axis);
+    }
     // MIN, MAX, AVG (tests).
     lv_obj_t *statistic(unsigned column) const { return values_[column]; }
     lv_obj_t *statisticName(unsigned column) const { return names_[column]; }
@@ -55,7 +57,7 @@ private:
     void centre(unsigned column);
     void flowMeta(); // The meta row's three texts at their widths (digital and compact).
     // A statistic at the last valid reading's resolution, else at the display's digits.
-    void statisticText(double value, Quantity quantity, char *output, size_t capacity) const;
+    void statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative = false) const;
     static int textWidth(lv_obj_t *label); // Its text in its own font (the role's typeface).
     MeterLook look_{};
     bool compact_ = false, statisticsRows_ = true;
