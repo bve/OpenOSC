@@ -41,10 +41,20 @@ void floatJack() {
     HAL_GPIO_Init(GPIOA, &pin);
 }
 }
+// The APB1 timer clock read at a boundary (a setting, ON, retime, the reference's start), never each
+// pass: it is an RCC (SRD) read path the capture DMA shares (GitHub #33). True when it moved since the
+// last read; a plan made at the clock before is then stale.
+bool Output::readClock() {
+    const uint32_t hz = TimerClock::apb1();
+    const bool moved = hz != timerHz_;
+    timerHz_ = hz;
+    return moved;
+}
 bool Output::configure(const Settings &settings) {
+    if (readClock()) configured_ = false; // Planned at another clock: not the same any more.
     if (configured_ && settings.valid() && settings_.same(settings)) return true;
     OutputPlan plan;
-    if (!OutputPlan::calculate(settings, TimerClock::apb1(), plan))
+    if (!OutputPlan::calculate(settings, timerHz_, plan))
         return false;
     const unsigned next = activeBank_ ^ 1;
     if (!plan.pwm && !WaveTable::build(settings, tables[next], plan.count))
@@ -134,7 +144,6 @@ bool Output::apply() {
     status_ = DataStatus::Ok;
     return true;
 }
-uint32_t Output::timerHz() { return TimerClock::apb1(); }
 void Output::stopped(OutputFault fault) {
     fault_ = fault;
     ++faults_;
@@ -143,13 +152,15 @@ bool Output::enable() {
     if (enabled_)
         return true;
     stopReference(); // The user's output takes the jack and TIM13.
+    // A clock change no retime() followed (a refused restart's safe clock) leaves a stale plan.
+    if (readClock()) configured_ = false;
     // A refused ON (Unsupported, Busy, a failed start) keeps the jack quiet until an explicit OFF.
     referenceHeld_ = true;
     if (!configured_ && !configure(settings_)) {
         // Only a setting kept from another clock (a run-mode change, the boot's restore) gets here:
         // configure() refuses a new one before it is kept.
         OutputPlan probe;
-        if (settings_.valid() && !OutputPlan::calculate(settings_, TimerClock::apb1(), probe)) {
+        if (settings_.valid() && !OutputPlan::calculate(settings_, timerHz_, probe)) {
             status_ = DataStatus::Unsupported;
             stopped(OutputFault::Limit);
         }
@@ -181,15 +192,17 @@ void Output::disable() {
 }
 // The reference: TIM13 PWM on PA6 (AF9), planned exactly at the APB1 timer clock that runs (the
 // factory's PSC from the core MHz is exact only where the timer clock is the core's). Not while the
-// user's output or its unfinished halt holds the jack, nor when the jack is leased elsewhere.
+// user's output or its unfinished halt holds the jack, nor when the jack is leased elsewhere. The
+// clock is read once per start: every clock change stops the reference first (suspendForClock, the
+// shutdown's disable()), so a running reference never needs it again.
 bool Output::startReference() {
     if (referenceOn_ || enabled_ || lease_.valid()) return referenceOn_;
-    OutputPlan plan;
-    if (!OutputPlan::calculate(referenceSettings(), TimerClock::apb1(), plan) || !plan.pwm) return false;
     if (!resources_.acquire(PeripheralResources::OutputJack, referenceLease_)) return false;
+    if (readClock()) configured_ = false; // The user's plan too was made at the clock before.
+    OutputPlan plan;
+    if (!OutputPlan::calculate(referenceSettings(), timerHz_, plan) || !plan.pwm) { referenceLease_.release(); return false; }
     startPwm(plan, referenceSettings().dutyPermille);
     referenceOn_ = true;
-    referenceHz_ = TimerClock::apb1();
     return true;
 }
 void Output::stopReference() {
@@ -201,8 +214,7 @@ void Output::stopReference() {
 }
 void Output::reference(bool allowed) {
     if (!allowed || enabled_ || referenceHeld_) { stopReference(); return; }
-    if (referenceOn_ && referenceHz_ != TimerClock::apb1()) stopReference(); // Planned at another clock.
-    if (!referenceOn_) startReference();
+    if (!referenceOn_) startReference(); // Running: no clock read (no RCC access each pass).
 }
 // A DAC underrun stops the DMA requests for good (the stream must be set up again), a BDMA transfer
 // error stops the channel: the output is halted, OFF, HardwareError, and the stop counted once

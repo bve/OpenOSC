@@ -33,7 +33,8 @@ public:
     // After a core clock change, with the output disabled: the timer plan is computed again from
     // the new APB1 timer clock for the same settings, and the output enabled again if `enable`.
     // A setting with no plan at the new clock (above its DAC limit) stays off with fault Limit.
-    bool retime(bool enable) { configured_ = false; return !enable || this->enable(); }
+    // The clock is read here (also for retime(false): the limits and timerHz follow the new clock).
+    bool retime(bool enable) { readClock(); configured_ = false; return !enable || this->enable(); }
     // A run-mode change: TIM6/TIM13 run from PLL1, so the output stops and retime() plans it again.
     bool suspendForClock() { const bool held = referenceHeld_; disable(); referenceHeld_ = held; return !enabled_; }
     bool clockBusy() const { return false; }
@@ -49,11 +50,13 @@ public:
     DataStatus status() const { return status_; }
     const Settings &settings() const { return settings_; }
     const OutputPlan &plan() const { return plan_; }
-    // `timerHz`: the APB1 timer clock TIM6 runs at now, which the DAC limits follow (DacCapabilities).
-    Snapshot snapshot() const { return {settings_, plan_, status_, enabled_, timerHz(), faults_, fault_}; }
-    static uint32_t timerHz();
+    // `timerHz`: the APB1 timer clock TIM6 runs at, which the DAC limits follow (DacCapabilities). Read
+    // at the boundaries (configure, enable, retime, the reference's start), not by each snapshot.
+    Snapshot snapshot() const { return {settings_, plan_, status_, enabled_, timerHz_, faults_, fault_}; }
+    uint32_t timerHz() const { return timerHz_; }
 
 private:
+    bool readClock();
     bool apply();
     bool halt();
     void releaseStopped();
@@ -70,7 +73,7 @@ private:
     PeripheralLease referenceLease_; // The jack alone, while the reference drives it.
     bool referenceOn_ = false;
     bool referenceHeld_ = false; // A fault or refusal since the last explicit OFF: no reference.
-    uint32_t referenceHz_ = 0; // The timer clock the reference was planned at.
+    uint32_t timerHz_ = 0; // The clock last read at a boundary (readClock).
     DataStatus status_ = DataStatus::NoData;
     uint32_t faults_ = 0;
     OutputFault fault_ = OutputFault::None;

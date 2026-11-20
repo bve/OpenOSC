@@ -87,6 +87,9 @@ bool CaptureDma::quiesce(bool stopAdc) {
     // (the stopped timer then keeps the request enable of each stream not proven stopped): its retry
     // stops them in the same order. A requested ADC stop waits for that retry.
     if (stopped) {
+        // Every stream is stopped: the trigger's EXTI line may be cleared now without stalling a
+        // lane's GPIOD read on the shared SRD bus (GitHub #33, TriggerGate::releaseLines).
+        gate_.releaseLines();
         if (stopAdc || adcStopPending_) clock_.stop();
         adcStopPending_ = false;
     } else if (stopAdc) {
