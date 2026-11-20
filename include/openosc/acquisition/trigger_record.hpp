@@ -12,6 +12,8 @@ public:
     // crossing it sees, which need not be such an edge (Noise reject, comparator and ADC thresholds
     // apart): the nearest edge it does not fit is taken only when none fits, the record then cut at the
     // ring's end and its FrameMetadata::triggerShift saying how far its edge is from the pretrigger.
+    // Auto only uses this fallback for a crossing close to a real comparator event. A timeout
+    // still accepts a crossing that fits the record at the requested pretrigger.
     // At a comparator event in a paired capture, prefer a nearby edge with two samples on each side.
     // Without an edge: Auto takes the newest `count` points, a forced capture the record placed at
     // `target` as an edge would be (it is not marked triggered), Normal/Single nothing.

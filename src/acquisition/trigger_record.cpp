@@ -4,6 +4,15 @@
 
 namespace openosc::scope {
 namespace {
+// When no crossing fits the requested window, associate an Auto event with only the
+// samples close to it. Use the 18 us trigger/freeze timing budget and at least one DMA group.
+uint32_t autoEventRadius(const FrameMetadata &m, uint32_t reach) {
+    constexpr uint32_t MatchNs = 18000;
+    const auto &rate = m.samplesPerSecond;
+    const uint64_t denominator = uint64_t(rate.denominator) * 1000000000;
+    const uint32_t samples = uint32_t((uint64_t(rate.numerator) * MatchNs + denominator - 1) / denominator);
+    return std::max<uint32_t>(RecordDepth::Granule * pointsPerWord(m.layout), std::min(samples, reach));
+}
 // The nearest edge to target at indices from..to (none when from > to); ties to the lower index.
 bool nearestIn(const FrameView &ring,const TriggerSettings &settings,uint32_t target,uint32_t from,uint32_t to,
                bool &found,uint32_t &index) {
@@ -22,10 +31,13 @@ FrameView TriggerRecord::select(const FrameView &ring, const TriggerSettings &se
     count=std::min(count,samples);
     target=std::min(target,samples-1);
     const uint32_t pre=uint64_t(count-1)*settings.position/1000;
+    const bool automatic = settings.mode == TriggerMode::Auto && !forced;
     // The edges the record fits around at its pretrigger point (pre .. samples-count+pre), from no
     // earlier than the gate's slack before the event: not an older burst out of a long wait.
     const uint32_t reach=count/SlackDivisor;
-    const uint32_t lowest=std::max<uint32_t>({pre,1U,target>reach ? target-reach : 0U}), highest=samples-count+pre;
+    const uint32_t lowest=std::max<uint32_t>({pre,1U,target>reach ? target-reach : 0U});
+    const uint32_t fitEnd = samples - count + pre;
+    const uint32_t highest = automatic && comparatorEvent ? std::min(fitEnd, target + reach) : fitEnd;
     uint32_t index=0;
     // The two ADCs can resolve ringing around one event into short recrossings. Prefer a
     // crossing supported by both ADCs on each side, close to the comparator's DMA cursor.
@@ -40,14 +52,19 @@ FrameView TriggerRecord::select(const FrameView &ring, const TriggerSettings &se
     bool found=false;
     if (nearestIn(ring,settings,target,lowest,highest,found,index))
         return ring.slice(index-pre,count).withTrigger(true,pre,settings.tag());
-    // None fits: the nearest one of the rest (with the range above, a single pass over the ring).
-    if (lowest>highest) nearestIn(ring,settings,target,1,samples-1,found,index);
+    // Normal, Single and a manual force can still use an edge in the rest of the record.
+    if (automatic) {
+        const uint32_t radius = autoEventRadius(ring.metadata(), reach);
+        if (!comparatorEvent ||
+            !TriggerSearch::nearest(ring, settings, target, target > radius ? target - radius : 1, target + radius, index))
+            return ring.slice(samples-count,count).withTrigger(false,0);
+        found = true;
+    } else if (lowest>highest) nearestIn(ring,settings,target,1,samples-1,found,index);
     else {
         nearestIn(ring,settings,target,1,lowest-1,found,index);
         nearestIn(ring,settings,target,highest+1,samples-1,found,index);
     }
-    if (settings.mode!=TriggerMode::Auto && !found && !forced) return {};
-    if (!found && !forced) return ring.slice(samples-count,count).withTrigger(false,0);
+    if (!found && !forced) return {};
     const uint32_t at=found ? index : target;
     const uint32_t first=std::min(at>pre ? at-pre : 0,samples-count);
     if (!found) return ring.slice(first,count).withTrigger(false,0);

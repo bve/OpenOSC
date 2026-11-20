@@ -100,13 +100,13 @@ void CaptureDma::publishTriggered() {
     const uint32_t spare=(frame.metadata().origin+metadata.ring-metadata.origin)%metadata.ring;
     usbtrace::mark(usbtrace::Tag::CaptureStop, uint32_t(std::min<uint64_t>(late,0xffff)) | std::min<uint32_t>(spare,0x7fffU) << 16 |
                    (end<due ? 1U << 31 : 0U));
-    if (frame.metadata().triggered && !frame.metadata().forced) { // Where the comparator event fell.
+    if (comparatorEvent_ && frame.metadata().triggered && !frame.metadata().forced) { // Where the comparator event fell.
         const uint32_t size=ring.metadata().ring ? ring.metadata().ring : 1;
         const uint32_t start=uint32_t((uint64_t(frame.metadata().origin)+size-ring.metadata().origin%size)%size);
         frame=frame.withEvent(int32_t(int64_t(target)-start-frame.metadata().triggerIndex));
     }
     metadata_=frame.metadata();
-    // An Auto or forced record without a trigger: TriggerSearch::nearest proved no edge in the whole ring.
+    // An Auto or forced record without an accepted edge: retain the capture's decision for readers.
     edgeless_=!frame.metadata().triggered;
     edgelessSequence_=frame.metadata().sequence; edgelessTimestamp_=frame.metadata().timestampUs;
     __DMB();
