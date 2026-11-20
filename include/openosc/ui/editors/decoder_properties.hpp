@@ -12,7 +12,9 @@ namespace openosc::ui {
 // its width in mV, a row of its own), the minimum pulse and Save CSV (the result it saves
 // named as its value; an action the controller runs). Protocol Off leaves the
 // decoder; Live (no accepted snapshot) is listed and refused with its reason.
-// Numbers: rates step through the standard ones with Up/Down and by 1 % with Left/Right; thresholds
+// Numbers: rates step through the standard ones with Up/Down and by 1 % with Left/Right (the UART
+// baud: to the neighbour of three significant digits or a standard rate, reversible on that scale,
+// an off-scale rate snaps to it); thresholds
 // by 100 mV / 1 mV; the SPI pause through 1-2-5 / 1 %. The CAN data rate is never below the nominal:
 // raising the nominal raises it with it.
 class DecoderProperties final : public PropertyList {

@@ -31,6 +31,28 @@ unsigned dacPoints(const Settings &settings,uint32_t clock) {
     }
     return selected;
 }
+// TIM6's update rate for `count` samples a period: frequency x count, exact when it fits 32 bits. A
+// fractional frequency's exact rate often does not (6727.487 Hz = 6727487/1000 Hz x 1024 samples; GitHub
+// #38: about 6 % of fractional settings were refused although the DAC plays them): it is then the nearest
+// rate whose numerator fits, within about one part in 10^9 of it, far below the timer's own PSC/ARR
+// quantization (the applied frequency is reported from the plan). False only for a rate no 32-bit
+// rational holds (none the DAC reaches: at most 10 MS/s).
+bool updateRate(const Rational &frequency, unsigned count, Rational &rate) {
+    uint64_t numerator = uint64_t(frequency.numerator) * count, denominator = frequency.denominator;
+    const uint64_t common = std::gcd(numerator, denominator);
+    numerator /= common; denominator /= common;
+    if (numerator > UINT32_MAX) {
+        const uint64_t whole = numerator / denominator;
+        if (!whole || whole > UINT32_MAX) return false;
+        const uint64_t scaled = UINT32_MAX / (whole + 1); // The new denominator: numerator stays below 2^32.
+        const uint64_t next = whole * scaled + ((numerator % denominator) * scaled + denominator / 2) / denominator;
+        const uint64_t reduced = std::gcd(next, scaled);
+        numerator = next / reduced; denominator = scaled / reduced;
+    }
+    if (numerator > UINT32_MAX || denominator > UINT32_MAX) return false;
+    rate = {uint32_t(numerator), uint32_t(denominator)};
+    return true;
+}
 }
 bool Settings::valid() const {
     return static_cast<unsigned>(shape) <= static_cast<unsigned>(Shape::Sawtooth) && frequencyHz.valid() &&
@@ -111,17 +133,12 @@ bool OutputPlan::calculate(const Settings &settings, uint32_t clock, OutputPlan 
         const unsigned high=(unsigned(candidate.count)*settings.dutyPermille+500)/1000;
         if (settings.shape==Shape::Square && settings.dutyPermille && settings.dutyPermille<1000 &&
             (!high || high==candidate.count)) return false;
-        uint64_t numerator = uint64_t(settings.frequencyHz.numerator) * candidate.count;
-        uint64_t denominator = settings.frequencyHz.denominator;
-        const uint64_t common = std::gcd(numerator, denominator);
-        numerator /= common;
-        denominator /= common;
-        if (numerator > UINT32_MAX || denominator > UINT32_MAX ||
-            !TimerPlan::calculate(clock, {uint32_t(numerator), uint32_t(denominator)}, candidate.timer,
-                Dac::minimumDivider(clock)))
+        Rational rate;
+        if (!updateRate(settings.frequencyHz, candidate.count, rate) ||
+            !TimerPlan::calculate(clock, rate, candidate.timer, Dac::minimumDivider(clock)))
             return false;
-        numerator = candidate.timer.actualHz.numerator;
-        denominator = uint64_t(candidate.timer.actualHz.denominator) * candidate.count;
+        uint64_t numerator = candidate.timer.actualHz.numerator;
+        uint64_t denominator = uint64_t(candidate.timer.actualHz.denominator) * candidate.count;
         const uint64_t reduced = std::gcd(numerator, denominator);
         candidate.actualHz = {numerator / reduced, denominator / reduced};
     }

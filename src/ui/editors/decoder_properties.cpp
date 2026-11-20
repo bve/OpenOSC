@@ -2,6 +2,7 @@
 #include "openosc/decode/table_text.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 
 namespace openosc::ui {
 using decoding::CanSource;
@@ -24,6 +25,26 @@ template <size_t N> uint32_t stepRate(uint32_t v, int steps, const uint32_t (&se
     if (steps <= -Coarse) { for (size_t i = N; i-- > 0;) if (series[i] < v) return series[i]; return v; }
     const int64_t next = int64_t(v) + int64_t(steps) * std::max<int64_t>(1, v / 100);
     return uint32_t(std::clamp<int64_t>(next, low, high));
+}
+// The UART baud: Up/Down to the next standard rate beyond it; Left/Right to the neighbour on one fixed
+// scale, the rates of three significant digits with the standard rates in it (9600 -> 9610, 115000 ->
+// 115200 -> 116000): from a rate on the scale, Right then Left gives it back. A rate off the scale
+// (from the saved settings or Detect baud) is kept until a key moves it, then snaps to its nearest
+// scale neighbour on that side, and is not given back.
+uint32_t stepBaud(uint32_t v, int steps) {
+    if (steps >= Coarse || steps <= -Coarse) return stepRate(v, steps, UartRates, Protocols::MinimumBaud, Protocols::MaximumBaud);
+    const auto unit = [](uint32_t x) { uint32_t u = 1; while (x / u >= 1000) u *= 10; return u; }; // Third digit's weight.
+    for (; steps > 0 && v < Protocols::MaximumBaud; --steps) {
+        uint32_t next = (v / unit(v) + 1) * unit(v);
+        for (uint32_t r : UartRates) if (r > v) { next = std::min(next, r); break; }
+        v = std::min(next, Protocols::MaximumBaud);
+    }
+    for (; steps < 0 && v > Protocols::MinimumBaud; ++steps) {
+        uint32_t below = ((v - 1) / unit(v - 1)) * unit(v - 1);
+        for (size_t i = std::size(UartRates); i-- > 0;) if (UartRates[i] < v) { below = std::max(below, UartRates[i]); break; }
+        v = std::max(below, Protocols::MinimumBaud);
+    }
+    return v;
 }
 // The SPI pause: Up/Down through 1-2-5 (ns), Left/Right by 1 %.
 uint32_t stepPause(uint32_t v, int steps) {
@@ -93,6 +114,7 @@ const char *DecoderProperties::notice() const {
     if (!settings_.enabled) return "Decoder off: the Scope as it is";
     if (settings_.protocol == Protocol::Spi) return "SPI without CS: words from pauses or a manual start";
     if (settings_.protocol == Protocol::Can) return "Classical and ISO CAN FD by FDF; data rate after BRS";
+    if (settings_.protocol == Protocol::Uart) return "Baud: Up/Down standard rates, Left/Right fine";
     return "Decodes the record on show, whole";
 }
 PropertyKind DecoderProperties::kind(unsigned i) const {
@@ -292,7 +314,7 @@ int DecoderProperties::coarseStep(unsigned i) const {
 void DecoderProperties::adjust(unsigned i, int steps) {
     auto &s = settings_;
     switch (row(i)) {
-    case R::UartBaud: s.uart.baud = stepRate(s.uart.baud, steps, UartRates, Protocols::MinimumBaud, Protocols::MaximumBaud); return;
+    case R::UartBaud: s.uart.baud = stepBaud(s.uart.baud, steps); return;
     case R::LinBaud: s.lin.baud = stepRate(s.lin.baud, steps, LinRates, Protocols::MinimumBaud, Protocols::MaximumBaud); return;
     case R::CanBitrate:
         s.can.bitrate = stepRate(s.can.bitrate, steps, CanRates, Protocols::MinimumBitrate, Protocols::MaximumBitrate);

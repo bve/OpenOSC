@@ -1,6 +1,7 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/generator/capabilities.hpp"
 #include "openosc/generator/frequency.hpp"
+#include "openosc/generator/frequency_steps.hpp"
 #include "openosc/platform/input.hpp"
 #include <algorithm>
 
@@ -16,11 +17,12 @@ void ApplicationController::generatorKeys(uint32_t keys, uint32_t now) {
     }
     auto settings = output.settings();
     uint64_t frequency = prefs_.generatorMillihertz;
-    const uint64_t step = std::max<uint64_t>(1, frequency / 10);
     const uint32_t timerHz = output.snapshot().timerHz; // The DAC limits at the clock that runs.
     const uint64_t maximum = Caps::maximumMillihertz(settings.shape, settings.level, timerHz);
-    if (keys & Keypad::Right) frequency = std::min(maximum, frequency + step);
-    if (keys & Keypad::Left) frequency = std::max(Caps::MinimumMillihertz, frequency > step ? frequency - step : 1);
+    // The decade grid (GitHub #38): reversible steps, 1 kHz -> 2 kHz -> 1 kHz; exact values in FREQUENCY.
+    using Steps = generator::FrequencySteps;
+    if (keys & Keypad::Right) frequency = Steps::up(frequency, Caps::MinimumMillihertz, maximum);
+    if (keys & Keypad::Left) frequency = Steps::down(frequency, Caps::MinimumMillihertz, maximum);
     settings.frequencyHz = generator::Frequency::rational(frequency);
     if (Caps::duty(settings.shape)) {
         const int duty = int(settings.dutyPermille) + ((keys & Keypad::Up) ? 50 : (keys & Keypad::Down) ? -50 : 0);
