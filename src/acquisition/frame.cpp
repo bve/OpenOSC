@@ -1,5 +1,6 @@
 #include "openosc/acquisition/frame.hpp"
 #include "openosc/acquisition/adc_bus_glitch.hpp"
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
 #if defined(__ARM_FEATURE_DSP)
@@ -50,6 +51,10 @@ FrameView::FrameView(const FrameMetadata &metadata, const uint16_t *const *banks
     if (split) split_ = *split;
     valid_ = validate();
     evenShift_ = valid_ ? InterleaveCorrection::shift(metadata_.interleaveOffset) : 0;
+    if (valid_) {
+        const float offsetQ8 = metadata_.interleaveOffset * 256;
+        evenShiftQ8_ = int16_t(offsetQ8 + (offsetQ8 < 0 ? -0.5f : 0.5f));
+    }
 }
 bool FrameView::validate() const {
     if (!metadata_.valid())
@@ -109,6 +114,35 @@ bool FrameView::signedCode(Channel channel, size_t index, int16_t &output) const
         return false;
     output = raw < 128 ? raw : int16_t(raw) - 256;
     return true;
+}
+bool FrameView::interleavedQ8(uint32_t index, int32_t &output) const {
+    if (!valid_ || metadata_.layout != Layout::InterleavedCh1 || index >= metadata_.samples) return false;
+    const uint32_t position = uint32_t(metadata_.origin + index) % metadata_.ring;
+    const uint8_t raw = byteAtPosition(0, position);
+    if (__builtin_expect(AdcBusGlitch::suspect(raw), 0)) {
+        const uint8_t resolved = resolveGlitch(0, index, raw);
+        if (resolved != corrected(raw, position)) {
+            output = int32_t(int8_t(resolved)) * 256;
+            return true;
+        }
+    }
+    const int32_t q8 = int32_t(int8_t(raw)) * 256 + ((position & 1) ? 0 : evenShiftQ8_);
+    output = q8 < (-128 * 256) ? -128 * 256 : q8 > 127 * 256 ? 127 * 256 : q8;
+    return true;
+}
+uint32_t FrameView::interleaveRails(uint32_t first, uint32_t count, uint32_t limit) const {
+    if (!valid_ || metadata_.layout != Layout::InterleavedCh1 || first >= metadata_.samples)
+        return 0;
+    const uint32_t end = first + std::min(count, metadata_.samples - first);
+    uint32_t rails = 0;
+    for (uint32_t index = first; index < end; ++index) {
+        const uint32_t position = uint32_t(metadata_.origin + index) % metadata_.ring;
+        const uint8_t raw = byteAtPosition(0, position);
+        if (raw == 0x80 || (raw == 0x7f && resolveGlitch(0, index, raw) == corrected(raw, position))) {
+            if (++rails >= limit) break;
+        }
+    }
+    return rails;
 }
 bool FrameView::volts(Channel channel, size_t index, double &output) const {
     int16_t raw;

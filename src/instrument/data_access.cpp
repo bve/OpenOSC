@@ -131,7 +131,7 @@ bool DataAccess::generatorLoadsBus() const {
 bool DataAccess::findTrigger(const scope::FrameView &frame,uint32_t &index) {
     if (frame.metadata().rolling) return false;
     if (frame.metadata().triggered) { index=frame.metadata().triggerIndex; return true; }
-    return triggerCache_.find(frame,request_.trigger,index);
+    return triggerCache_.find(frame,triggerForFrame(frame.metadata()),index);
 }
 bool DataAccess::acquireScope(scope::FrameLease &lease, bool consume) {
     if (zeroBusy() || zeroBlocked_) return false;
@@ -147,7 +147,8 @@ bool DataAccess::acquireScope(scope::FrameLease &lease, bool consume) {
     bool found = false;
     // The settings an index is found for now; a held record keeps those it was first shown with. A
     // capture's own edge (a gated record) is kept by the annotation itself.
-    scope::TriggerEdge edge = request_.trigger.tag();
+    const auto &metadata = lease.view().metadata();
+    scope::TriggerEdge edge = metadata.triggerEdge.known ? metadata.triggerEdge : triggerForFrame(metadata).tag();
     if (!scopeHeld_ || !heldTrigger_.recall(sequence, found, trigger, &edge)) {
         found = findTrigger(lease.view(), trigger);
         if (scopeHeld_) heldTrigger_.remember(sequence, found, trigger, edge);

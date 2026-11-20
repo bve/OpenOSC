@@ -119,7 +119,7 @@ private:
     void interleaveOffsetAction(uint32_t now); // MENU on its row: confirm, or cancel a running one.
     void beginInterleaveOffset(uint32_t now);
     // Interleave CH1 (ZT703S) from the menu or SCPI: applied at once and saved; false when refused.
-    bool selectInterleave(bool on, uint32_t now);
+    bool selectInterleave(scope::InterleaveMode mode, uint32_t now);
     void serviceInterleaveOffsetUi(uint32_t now);
     // The loop pass's overlay pause of full-rate capture (DataAccess::pauseCapture).
     void pauseHiddenCapture(uint32_t now, bool enumerating);

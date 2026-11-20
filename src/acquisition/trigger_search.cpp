@@ -25,6 +25,7 @@ bool armedBefore(const FrameView &frame, Channel channel, const Sides &sides, ui
 // Edges in [first, last] (index i means samples i-1 -> i), the one nearest target, ties to the
 // lower index: exactly what a single forward pass over the same indices keeps, the arming of a run
 // begun before the window included. `earliest`: the first edge, returned at once (find()).
+template<bool StablePair = false>
 bool scan(const FrameView &frame, const TriggerSettings &s, uint32_t first, uint32_t last, uint32_t target,
           uint32_t &index, uint32_t &distance, bool earliest = false) {
     const Sides sides(s);
@@ -41,7 +42,13 @@ bool scan(const FrameView &frame, const TriggerSettings &s, uint32_t first, uint
             if (!armed && !known) armed = armedBefore(frame, s.channel, sides, first - 1);
             if (armed && earliest) { index = i; return true; }
             const uint32_t delta = i > target ? i - target : target - i;
-            if (armed && delta < distance) { index = i; distance = delta; found = true; }
+            if (armed && delta < distance) {
+                int16_t before, after;
+                if (!StablePair || (frame.signedCode(s.channel, i - 2, before) && sides.starting(before) &&
+                                    frame.signedCode(s.channel, i + 1, after) && !sides.starting(after))) {
+                    index = i; distance = delta; found = true;
+                }
+            }
         }
         if (!sides.starting(value)) { armed = false; known = true; }
         else armed = armed || sides.arming(value);
@@ -50,6 +57,15 @@ bool scan(const FrameView &frame, const TriggerSettings &s, uint32_t first, uint
     return found;
 }
 } // namespace
+bool TriggerSearch::nearestStablePair(const FrameView &frame, const TriggerSettings &settings, uint32_t target,
+                                      uint32_t first, uint32_t last, uint32_t &index) {
+    const uint32_t samples = frame.metadata().samples;
+    if (!settings.valid() || !frame.valid() || samples < 4) return false;
+    first = std::max<uint32_t>(first, 2);
+    last = std::min(last, samples - 2);
+    uint32_t distance = UINT32_MAX;
+    return first <= last && scan<true>(frame, settings, first, last, target, index, distance);
+}
 bool TriggerSearch::find(const FrameView &frame, const TriggerSettings &settings, uint32_t &index) {
     if (!settings.valid() || !frame.valid() || frame.metadata().samples < 2) return false;
     uint32_t distance = UINT32_MAX;

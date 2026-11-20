@@ -8,6 +8,7 @@
 #include "openosc/settings/scope_appearance.hpp"
 #include "openosc/settings/screen_arrangement.hpp"
 #include "openosc/decode/settings.hpp"
+#include "openosc/board/current.hpp"
 
 namespace openosc {
 struct ScopePreferences {
@@ -21,10 +22,8 @@ struct ScopePreferences {
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
     uint32_t rollAuto=1;
-    // ZT703S: Interleave CH1 (Settings > Device > Performance): 1 lets CH1 alone at 10/25 ns run through
-    // both ADCs (InterleaveRule). Off by default and in files before it; ignored on the ZT706S, whose
-    // factory interleave needs no choice. A run-mode change never alters it.
-    uint32_t interleave=0;
+    // InterleaveMode: Off/On, with legacy Auto as the ZT706S default.
+    uint32_t interleave = board::Current::Features.adcInterleave ? 2 : 0;
     // A service choice (FactoryRecordPolicy: 0 auto, 1 long, 2 compact) for reading the factory record
     // at the NEXT start (DataAccess::initialize); Reload settings never re-reads the record. Only on
     // outside evidence about an ambiguous record (docs/ZERO_CALIBRATION.md); files without it: auto.

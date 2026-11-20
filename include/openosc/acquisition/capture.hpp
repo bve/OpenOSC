@@ -100,6 +100,7 @@ private:
     bool rolling_=false,gated_=false;
     volatile bool frozen_=false;
     bool forced_=false; // This capture's gate event was forced (force()).
+    bool comparatorEvent_=false;
     volatile bool stopFailed_=false; // A stream was still enabled after quiesce().
     bool adcStopPending_=false; // stop(true) failed: the retry that proves the streams stopped stops the ADC clock.
     // A failed stop is tried again at this spacing, not every poll: each try spins in DmaStream::disable

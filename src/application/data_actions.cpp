@@ -16,9 +16,7 @@ PreferencesResult ApplicationController::applyDataPreferences() {
     result.mode = data_.select(state_.mode);
     if (!result.mode) state_.mode = data_.measurementMode();
     if (previousMeasurement != data_.measurementMode() && usb_) usb_->profileChanged(HAL_GetTick());
-    // The ZT703S interleave choice before the request, so the first capture already follows it; any
-    // other board takes only off (a file's on is kept, not applied).
-    data_.selectInterleave(prefs_.scope.interleave && board::Current::Features.selectableInterleave);
+    data_.selectInterleave(scope::InterleaveMode(prefs_.scope.interleave));
     auto request = InstrumentState::scope(prefs_);
     if (!request.frontend.enabled[unsigned(request.trigger.channel)])
         request.trigger.channel = scope::Channel(unsigned(request.trigger.channel)^1);
@@ -39,12 +37,13 @@ PreferencesResult ApplicationController::applyDataPreferences() {
     return result;
 }
 // The one path of the choice (menu, SCPI): the capture replanned at once, the setting saved, a notice.
-bool ApplicationController::selectInterleave(bool on, uint32_t now) {
-    if (!data_.selectInterleave(on)) { view_.notify("Finish calibration or AutoSetup first", now); return false; }
-    if (prefs_.scope.interleave != unsigned(on)) {
-        prefs_.scope.interleave = on;
+bool ApplicationController::selectInterleave(scope::InterleaveMode mode, uint32_t now) {
+    if (!data_.selectInterleave(mode)) { view_.notify("Cannot change interleave now", now); return false; }
+    if (prefs_.scope.interleave != unsigned(mode)) {
+        prefs_.scope.interleave = unsigned(mode);
         changed(now);
-        view_.notify(on ? "Interleave on: CH1 alone, 10/25 ns" : "Interleave off", now);
+        view_.notify(mode == scope::InterleaveMode::On ? "Interleave on: CH1 alone"
+                     : mode == scope::InterleaveMode::Auto ? "Interleave auto" : "Interleave off", now);
     }
     return true;
 }

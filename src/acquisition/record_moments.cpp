@@ -12,24 +12,35 @@ public:
     // Positions [a, b) of the ring, a <= b <= ring.
     void positions(uint32_t a, uint32_t b) {
         if (m_.layout == Layout::Linear) { words(frame_.bank(0) + a, b - a, a, 1); return; }
+        if (m_.layout == Layout::InterleavedCh1) {
+            group_ = 2;
+            for (parity_ = 0; parity_ < 2; ++parity_) {
+                lane_ = 1 - parity_; // Each word's first point is the high byte.
+                shift_ = parity_ == 0 ? InterleaveCorrection::shift(m_.interleaveOffset) : 0;
+                banks((a + 1 - parity_) / 2, (b + 1 - parity_) / 2);
+            }
+        } else banks(a, b);
+    }
+
+private:
+    // Bounds in transfers. The output statistics are independent of the order we visit the lanes.
+    void banks(uint32_t a, uint32_t b) {
         for (unsigned bank = 0; bank < 4; ++bank) {
             const uint32_t o0 = a > bank ? (a - bank + 3) / 4 : 0, o1 = b > bank ? (b - bank + 3) / 4 : 0;
             if (o0 >= o1) continue;
             if (m_.layout == Layout::FourByteBanks)
                 bytes(reinterpret_cast<const uint8_t *>(frame_.bank(bank)) + o0, o1 - o0, 4 * o0 + bank);
             else if (!frame_.split().active())
-                words(frame_.bank(bank) + o0, o1 - o0, 4 * o0 + bank, 4);
+                words(frame_.bank(bank) + o0, o1 - o0, group_ * (4 * o0 + bank) + parity_, 4 * group_);
             else
                 splitLane(bank, o0, o1);
         }
     }
-
-private:
     // A split lane (SplitHistory::word): lane offsets in runs that are contiguous in the capture ring
     // or in the history; age falls by one per offset.
     void splitLane(unsigned lane, uint32_t o, uint32_t end) {
         const auto &s = frame_.split();
-        const uint32_t laneRing = m_.ring / 4;
+        const uint32_t laneRing = m_.ring / (4 * group_);
         while (o < end) {
             uint32_t age = s.end[lane] + laneRing - 1 - o;
             if (age >= laneRing) age -= laneRing;
@@ -44,17 +55,29 @@ private:
                 run = s.older[lane] + index; length = std::min(age - s.ahbWords + 1, s.historyWords - index);
             }
             length = std::min(length, end - o);
-            words(run, length, 4 * o + lane, 4);
+            words(run, length, group_ * (4 * o + lane) + parity_, 4 * group_);
             o += length;
         }
     }
     void words(const uint16_t *p, uint32_t n, uint32_t position, uint32_t step) {
         for (uint32_t done = 0; done < n;) {
             const uint32_t k = std::min(n - done, RecordMoments::Block);
-            if (!dsp::accumulateWords(p + done, k, channel_, out_))
-                for (uint32_t j = 0; j < k; ++j) code(uint8_t(p[done + j] >> (8 * channel_)), position + (done + j) * step);
+            if (!accumulate(p + done, k))
+                for (uint32_t j = 0; j < k; ++j) code(uint8_t(p[done + j] >> (8 * lane_)), position + (done + j) * step);
             done += k;
         }
+    }
+    bool accumulate(const uint16_t *p, uint32_t n) {
+        if (!shift_) return dsp::accumulateWords(p, n, lane_, out_);
+        dsp::Moments block;
+        if (!dsp::accumulateWords(p, n, lane_, block) || block.minimum + shift_ < -128 || block.maximum + shift_ > 127)
+            return false;
+        // An affine offset changes the moments exactly as long as no sample saturates.
+        block.squares = uint64_t(int64_t(block.squares) + 2 * shift_ * block.sum + int64_t(n) * shift_ * shift_);
+        block.sum += int64_t(n) * shift_;
+        block.minimum += shift_; block.maximum += shift_;
+        out_.merge(block);
+        return true;
     }
     void bytes(const uint8_t *p, uint32_t n, uint32_t position) {
         for (uint32_t done = 0; done < n;) {
@@ -66,7 +89,7 @@ private:
     }
     // A refused block, code by code; a suspect code takes the frame's correction at its record index.
     void code(uint8_t raw, uint32_t position) {
-        int16_t value = int8_t(raw);
+        int16_t value = int8_t(InterleaveCorrection::apply(raw, shift_));
         if (AdcBusGlitch::suspect(raw)) {
             const uint32_t index = first_ + (position + m_.ring - start_) % m_.ring;
             frame_.signedCode(Channel(channel_), index, value);
@@ -78,6 +101,8 @@ private:
     unsigned channel_;
     uint32_t first_, start_;
     dsp::Moments &out_;
+    unsigned lane_ = channel_, group_ = 1, parity_ = 0;
+    int shift_ = 0;
 };
 } // namespace
 
@@ -90,7 +115,7 @@ bool RecordMoments::measure(const FrameView &frame, Channel channel, uint32_t fi
         return false;
     if (!count) return true;
     // Past a uint32 wrap of origin + index several indices share a place (as the factory reads them).
-    if (m.layout == Layout::InterleavedCh1 || uint64_t(m.origin) + first + count > 0x100000000ULL) {
+    if (uint64_t(m.origin) + first + count > 0x100000000ULL) {
         auto reader = frame.cursor(channel, first);
         int16_t code;
         for (uint32_t i = 0; i < count && reader.next(code); ++i) out.add(code);

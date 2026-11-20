@@ -16,10 +16,10 @@ public:
         const uint64_t missing=CircularProgress::prefix(lanes);
         return missing ? missing-1 : 0; // Leave the newest DMA write time to become globally visible.
     }
-    static Slice next(uint64_t available,uint64_t &consumed) {
+    static Slice next(uint64_t available,uint64_t &consumed,uint32_t ring = Ring) {
         if (available<=consumed) return {};
         Slice result;
-        if (available-consumed>Ring-Guard) { consumed=available-(Ring-Guard); result.overflow=true; }
+        if (available-consumed>ring-Guard) { consumed=available-(ring-Guard); result.overflow=true; }
         result.first=consumed;
         result.count=uint32_t(std::min<uint64_t>(available-consumed,Chunk));
         consumed+=result.count;

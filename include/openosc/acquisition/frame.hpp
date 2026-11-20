@@ -103,6 +103,10 @@ public:
     bool valid() const { return valid_; }
     bool code(Channel channel, size_t index, uint8_t &output) const;
     bool signedCode(Channel channel, size_t index, int16_t &output) const;
+    // Display interpolation on paired ADCs retains the fractional part of their offset.
+    bool interleavedQ8(uint32_t index, int32_t &output) const;
+    // Count genuine rails before the offset moves a captured code away from the limit.
+    uint32_t interleaveRails(uint32_t first, uint32_t count, uint32_t limit) const;
     bool volts(Channel channel, size_t index, double &output) const;
     const FrameMetadata &metadata() const { return metadata_; }
     // The trigger at `index` (none without `found`): a record annotated again with its own trigger
@@ -131,6 +135,7 @@ private:
     const uint16_t *banks_[4]{};
     SplitHistory split_{};
     size_t wordsPerBank_ = 0;
+    int16_t evenShiftQ8_ = 0;
     int8_t evenShift_ = 0; // InterleaveCorrection::shift of the metadata's offset.
     bool valid_ = false;
     bool validate() const;

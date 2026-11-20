@@ -12,9 +12,11 @@ public:
     // crossing it sees, which need not be such an edge (Noise reject, comparator and ADC thresholds
     // apart): the nearest edge it does not fit is taken only when none fits, the record then cut at the
     // ring's end and its FrameMetadata::triggerShift saying how far its edge is from the pretrigger.
+    // At a comparator event in a paired capture, prefer a nearby edge with two samples on each side.
     // Without an edge: Auto takes the newest `count` points, a forced capture the record placed at
     // `target` as an edge would be (it is not marked triggered), Normal/Single nothing.
-    static FrameView select(const FrameView &ring,const TriggerSettings &settings,uint32_t count,uint32_t target,bool forced=false);
+    static FrameView select(const FrameView &ring, const TriggerSettings &settings, uint32_t count, uint32_t target,
+                            bool forced = false, bool comparatorEvent = false);
     // Points the gate adds before arming and after the post-trigger part of a `count` record in a
     // ring of `capacity` whose `reserved` points are the late freeze's (SamplePlan::headroom): the
     // history select() needs to find an edge that fits on either side of the event. At most

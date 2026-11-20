@@ -19,5 +19,6 @@ struct Capabilities {
     // ZT703S: the same two-ADC interleave of CH1, chosen by the user (Settings > Device > Performance >
     // Interleave CH1, off by default) on every run mode; its own offset calibration, no ZT706S curves.
     bool selectableInterleave;
+    constexpr bool interleaveControl() const { return adcInterleave || selectableInterleave; }
 };
 } // namespace openosc::board

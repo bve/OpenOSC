@@ -111,7 +111,7 @@ public:
     // Two channels at half the rate are planned in the standard geometry.
     static bool fullRate(const CaptureBuffer &buffer);
     static bool trial(bool ch1, bool ch2, CaptureBuffer &out);
-    static bool roll(CaptureBuffer &out);
+    static bool roll(CaptureBuffer &out, bool interleaved = false);
     static uint16_t *rollHistory();  // RollWindow words.
     static uint16_t *rollSnapshot(); // RollWindow words.
     // A free slot for a budget, or false while the frame on show, HOLD or Roll hold the memory.

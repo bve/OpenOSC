@@ -24,7 +24,7 @@ uint64_t CaptureDma::rollingAvailable() const {
     uint64_t lanes[4];
     CriticalSection guard;
     laneCounts(lanes);
-    return RollingProgress::available(lanes);
+    return RollingProgress::available(lanes) * buffer_.pointsPerTransfer();
 }
 void CaptureDma::laneCounts(uint64_t (&lanes)[4],uint32_t *remaining) const {
     for (unsigned lane=0;lane<4;++lane) {

@@ -99,7 +99,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
         if (usb_) usb_->enable(prefs_.usbController != 0, now);
         view_.notify(prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
     }
-    if (chosen.scope.interleave != prefs_.scope.interleave) selectInterleave(chosen.scope.interleave != 0, now);
+    if (chosen.scope.interleave != prefs_.scope.interleave) selectInterleave(scope::InterleaveMode(chosen.scope.interleave), now);
     if (chosen.showFps != prefs_.showFps) counterStale_ = true; // Redrawn on the next display pass.
     const bool idle = chosen.idle.backlightSeconds != prefs_.idle.backlightSeconds || chosen.idle.dimPercent != prefs_.idle.dimPercent ||
                       chosen.idle.powerOffMinutes != prefs_.idle.powerOffMinutes;

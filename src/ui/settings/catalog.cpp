@@ -49,7 +49,7 @@ constexpr SettingsEntry performance[] = {
     {"Restart device", Action::Restart},
     {"Back", Action::Back},
 };
-// The ZT703S's: its selectable interleave of CH1 next to the run mode it doubles.
+// The interleave choice sits next to the run mode it uses.
 constexpr SettingsEntry selectablePerformance[] = {
     {"Run mode", Action::RunProfile},
     {"Interleave CH1", Action::Interleave},
@@ -118,7 +118,7 @@ constexpr SettingsPageDefinition pages[] = {
     page("DEVICE", "Settings / Device", Page::Root, device),
     {"ABOUT", "Settings / Device / About", Page::Device, nullptr, 0},
     {"STORAGE", "Settings / Device / Storage", Page::Device, nullptr, 0},
-    board::Current::Features.selectableInterleave
+    board::Current::Features.interleaveControl()
         ? page("PERFORMANCE", "Settings / Device / Performance", Page::Device, selectablePerformance)
         : page("PERFORMANCE", "Settings / Device / Performance", Page::Device, performance),
     page("POWER", "Settings / Device / Power", Page::Device, power),

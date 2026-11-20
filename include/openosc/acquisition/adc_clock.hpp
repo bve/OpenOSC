@@ -27,7 +27,10 @@ public:
     static uint32_t outputs(uint32_t timerHz, uint16_t prescaler, uint16_t period, bool interleaved);
     // TIM1 compare (CCR1/CCR3): half of a fast ADC period, rounded down (period 2: 1, period 3: 1,
     // period 4: 2); the factory's 1 for the slow branch (period >= 20), where it sets where the reads fall.
-    static constexpr uint16_t compare(uint16_t period) { return period <= 4 ? uint16_t(period / 2) : 1; }
+    // Opposite-polarity outputs need equal halves at every rate: the frame stores uniform timestamps.
+    static constexpr uint16_t compare(uint16_t period, bool interleaved = false) {
+        return interleaved || period <= 4 ? uint16_t(period / 2) : 1;
+    }
     bool running() const { return running_; }
 private:
     bool running_ = false;

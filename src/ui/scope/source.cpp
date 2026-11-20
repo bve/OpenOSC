@@ -60,9 +60,7 @@ bool Source::sample(uint32_t index, int32_t (&v)[3]) {
     if (!read_[0] && !read_[1])
         return true;
     if (layout_ == scope::Layout::InterleavedCh1) { // CH1 alone: the frame's own pairs, correction and bus rule.
-        uint8_t code = 0;
-        if (!frame_.code(scope::Channel::Ch1, index, code)) return false;
-        v[0] = int32_t(code < 128 ? int(code) : int(code) - 256) * 256;
+        if (!frame_.interleavedQ8(index, v[0])) return false;
         ++statistics_.sourceReads;
         return true;
     }

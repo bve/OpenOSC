@@ -211,7 +211,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     const calibration::InterleaveProfile &savedInterleave() const { return interleaveFile_.values(); }
     // Interleave of CH1 (InterleaveRule): the ZT703S user's choice (Settings > Device > Performance >
     // Interleave CH1; off by default, any other board accepts only off), what keeps a request from it.
-    bool selectInterleave(bool on);
+    bool selectInterleave(bool on) { return selectInterleave(on ? scope::InterleaveMode::On : scope::InterleaveMode::Off); }
+    bool selectInterleave(scope::InterleaveMode mode);
     bool interleaveSelected() const;
     uint32_t interleaveBlockers(const ScopeRequest &request) const;
     uint32_t interleaveBlockers() const { return interleaveBlockers(request_); }
@@ -331,6 +332,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // interleaveOffset, public above).
     bool interleaving(const ScopeRequest &request) const;
     scope::FrontendSettings appliedFrontend(const ScopeRequest &request) const;
+    scope::TriggerSettings triggerForFrame(const scope::FrameMetadata &metadata) const;
     void observeInterleave(const scope::FrameView &frame);
     bool describeNext(scope::FrameMetadata &metadata);
     void serviceScopeFrames(uint32_t now);
@@ -422,11 +424,12 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     scope::FrameLease heldFrame_;
     scope::HeldTrigger heldTrigger_;
     scope::InterleaveTracker interleave_; // ZT706S: CH1's frequency, range correction and gain (InterleaveTracker).
+    bool interleaveHeadroom_ = false; // ZT703S: a higher physical range after sustained clipping.
     scope::InterleaveConditions::Inputs interleaveInputs(const ScopeRequest &request) const;
     float recordInterleaveOffset() const;
     // The ZT706S factory interleave and its curves (range correction, display gain); never the ZT703S's.
     static constexpr bool factoryInterleave() { return board::Current::Features.adcInterleave; }
-    bool interleaveSelected_ = false;
+    scope::InterleaveMode interleaveMode_ = factoryInterleave() ? scope::InterleaveMode::Auto : scope::InterleaveMode::Off;
     calibration::InterleaveOffsetMeasurement interleaveMeasure_;
     bool interleaveRestart_ = false;
     uint32_t interleaveGeneration_ = 0; // The front-end offsets' generation a running measurement began under.

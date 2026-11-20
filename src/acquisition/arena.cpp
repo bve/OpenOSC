@@ -138,8 +138,9 @@ bool AcquisitionArena::trial(bool ch1, bool ch2, CaptureBuffer &out) {
     out = result;
     return true;
 }
-bool AcquisitionArena::roll(CaptureBuffer &out) {
+bool AcquisitionArena::roll(CaptureBuffer &out, bool interleaved) {
     CaptureBuffer result;
+    if (interleaved) result.format = SampleFormat::InterleavedWords;
     ahbQuarters(result);
     result.region = RollCapture;
     out = result;

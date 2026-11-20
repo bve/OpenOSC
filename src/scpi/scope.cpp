@@ -79,10 +79,18 @@ bool Engine::scopeCommand(const Command &c) {
     } else if (match("ACQuire:INTerleave:STATe")) { // What runs: active (0/1), the blockers.
         if (!c.query || *c.argument) error(-108, c.query);
         else { const auto s = backend_.interleave(); reply("%u,%lu", unsigned(s.active), (unsigned long)s.blockers); }
-    } else if (match("ACQuire:INTerleave")) { // The choice (ZT703S); ON elsewhere: hardware missing.
-        if (c.query) { if (*c.argument) error(-108, true); else reply("%u", unsigned(backend_.interleave().requested)); }
+    } else if (match("ACQuire:INTerleave")) {
+        const auto state = backend_.interleave();
+        if (c.query) {
+            if (*c.argument) error(-108, true);
+            else if (state.automatic) reply("AUTO");
+            else reply("%u", unsigned(state.requested));
+        } else if (Header::word(c.argument, "AUTO")) {
+            if (!state.autoSupported) error(-241);
+            else if (!backend_.interleaveAuto()) error(-221);
+        }
         else { bool value; if (boolean(c, value)) {
-            if (value && !backend_.interleave().supported) error(-241);
+            if (value && !state.supported) error(-241);
             else if (!backend_.interleave(value)) error(-221); // A calibration, an AutoSetup or a recording runs.
         } }
     } else if (match("ACQuire:SRATe")) {

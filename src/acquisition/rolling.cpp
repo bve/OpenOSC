@@ -2,8 +2,7 @@
 
 namespace openosc::scope {
 bool RollingBuffer::append(const FrameView &frame) {
-    if (!storage_ || !capacity_ || capacity_ > 65536 || !frame.valid() ||
-        frame.metadata().layout == Layout::InterleavedCh1)
+    if (!storage_ || !capacity_ || capacity_ > 65536 || !frame.valid())
         return false;
     const auto &metadata = frame.metadata();
     if (continuous_) {
@@ -56,6 +55,7 @@ FrameView RollingBuffer::snapshot() const {
         return {};
     auto metadata = metadata_;
     metadata.layout = Layout::Linear;
+    metadata.interleaveOffset = 0; // The history already holds the corrected codes.
     metadata.samples = size_;
     metadata.ring = capacity_;
     metadata.origin = (cursor_ + capacity_ - size_) % capacity_;

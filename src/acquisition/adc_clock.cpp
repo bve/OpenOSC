@@ -35,7 +35,7 @@ void AdcClock::start(uint16_t prescaler, uint16_t period, uint32_t timerHz, bool
     __HAL_RCC_GPIOE_CLK_ENABLE();
     TIM1->CR1=0; TIM1->DIER=0; TIM1->SMCR=0;
     TIM1->CR2=TIM_CR2_MMS_1;
-    TIM1->PSC=prescaler; TIM1->ARR=period-1u; TIM1->CCR1=TIM1->CCR3=compare(period);
+    TIM1->PSC=prescaler; TIM1->ARR=period-1u; TIM1->CCR1=TIM1->CCR3=compare(period, interleaved);
     TIM1->CCMR1=(6U<<4)|TIM_CCMR1_OC1PE;
     TIM1->CCMR2=(6U<<4)|TIM_CCMR2_OC3PE;
     TIM1->CCER=outputs(timerHz, prescaler, period, interleaved);
@@ -49,7 +49,7 @@ void AdcClock::start(uint16_t prescaler, uint16_t period, uint32_t timerHz, bool
 }
 void AdcClock::configure(uint16_t prescaler, uint16_t period, uint32_t timerHz, bool interleaved) {
     const uint32_t ccer = outputs(timerHz, prescaler, period, interleaved);
-    const uint16_t edge = compare(period);
+    const uint16_t edge = compare(period, interleaved);
     if (!running_ || period < 2 ||
         (TIM1->PSC == prescaler && TIM1->ARR == uint32_t(period - 1) && TIM1->CCER == ccer &&
          TIM1->CCR1 == edge && TIM1->CCR3 == edge))

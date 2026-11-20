@@ -175,9 +175,15 @@ bool InstrumentBackend::output(bool value) { return application_.requestGenerato
 scpi::Backend::InterleaveStatus InstrumentBackend::interleave() const {
     const auto &a = application_;
     const uint32_t blockers = a.data_.interleaveBlockers();
-    return {board::Current::Features.selectableInterleave, a.prefs_.scope.interleave != 0, !blockers, blockers};
+    const auto &features = board::Current::Features;
+    const auto mode = scope::InterleaveMode(a.prefs_.scope.interleave);
+    return {features.interleaveControl(), mode == scope::InterleaveMode::On, !blockers, blockers,
+            features.adcInterleave, mode == scope::InterleaveMode::Auto};
 }
-bool InstrumentBackend::interleave(bool on) { return application_.selectInterleave(on, Board::milliseconds()); }
+bool InstrumentBackend::interleave(bool on) {
+    return application_.selectInterleave(on ? scope::InterleaveMode::On : scope::InterleaveMode::Off, Board::milliseconds());
+}
+bool InstrumentBackend::interleaveAuto() { return application_.selectInterleave(scope::InterleaveMode::Auto, Board::milliseconds()); }
 bool InstrumentBackend::generatorStartup() const { return application_.prefs_.generatorStartup; }
 bool InstrumentBackend::generatorStartup(bool restore) {
     auto &a = application_;

@@ -56,7 +56,8 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::BacklightTimeout: return BacklightCount;
     case Action::BacklightIdleLevel: return DimCount;
     case Action::PowerOffTimeout: return OffCount;
-    case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave: return 2;
+    case Action::GeneratorStartup: case Action::UsbController: return 2;
+    case Action::Interleave: return board::Current::Features.adcInterleave ? 3 : 2;
     default: return 0;
     }
 }
@@ -105,7 +106,7 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
     case Action::PowerOffTimeout: seconds(IdleSettings::OffChoices[index % OffCount], "min", output, capacity); break;
     case Action::GeneratorStartup: std::snprintf(output, capacity, "%s", index ? "Restore last" : "Off"); break;
     case Action::Interleave: // On says when it runs.
-        std::snprintf(output, capacity, "%s", index ? "On: CH1 alone, 10/25 ns" : "Off");
+        std::snprintf(output, capacity, "%s", index == 2 ? "Auto: factory rules" : index ? "On: CH1 alone" : "Off");
         break;
     case Action::UsbController: // Enabled says where it runs.
         if (index) std::snprintf(output, capacity, "Enabled (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
@@ -137,12 +138,11 @@ void SettingsProperties::value(unsigned row, char *output, size_t capacity) cons
     case Action::Interleave: { // Off, or On and what it does now: its rate, or the first thing it waits for.
         using C = scope::InterleaveConditions;
         const uint32_t b = interleave_.blockers;
+        const char *mode = prefs_.scope.interleave == 2 ? "Auto" : "On";
         if (!prefs_.scope.interleave) std::snprintf(output, capacity, "Off");
-        else if (!b && activeRunMode_ < RunModeCount) // Uncalibrated: no offset measured at this clock.
-            std::snprintf(output, capacity, "On, %lu MS/s%s",
-                          (unsigned long)(scope::SelectableInterleave::rate(RunModes[activeRunMode_].coreHz) / 1000000UL),
-                          interleave_.calibrated ? "" : " uncal.");
-        else std::snprintf(output, capacity, "On, waits: %s",
+        else if (!b)
+            std::snprintf(output, capacity, "%s, active%s", mode, interleave_.calibrated ? "" : " uncal.");
+        else std::snprintf(output, capacity, "%s, waits: %s", mode,
                            b & C::Channels ? "CH2 on" : b & C::Timebase ? "10/25 ns" : b & C::Rolling ? "Roll" :
                            b & C::BusLoaded ? "GEN DAC" : b & C::Internal ? "trial" : "run mode");
         break;

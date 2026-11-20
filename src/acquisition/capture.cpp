@@ -113,7 +113,7 @@ bool CaptureDma::start(FrameMetadata metadata, const FrontendSettings &settings,
         metadata.origin ||
         metadata.samples > buffer.capacityPoints() || (!gated && metadata.samples != buffer.ringPoints()) ||
         (buffer.split() && !gated) || // A split ring is a triggered ring: only its freeze settles the copies.
-        (!gated && buffer.segments() != 1) || (rolling && (buffer.format != SampleFormat::Words || !metadata.rolling)) ||
+        (!gated && buffer.segments() != 1) || (rolling && (!buffer.words() || !metadata.rolling)) ||
         (trigger && !trigger->valid()) ||
         // Only an interleaved buffer is captured with the front end (and so the ADC clocks) interleaved.
         (buffer.format == SampleFormat::InterleavedWords) != settings.interleave) {

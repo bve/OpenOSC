@@ -11,10 +11,11 @@
 #include <cmath>
 
 namespace openosc::scope {
-void CaptureDma::triggerEvent(bool) {
+void CaptureDma::triggerEvent(bool external) {
     CriticalSection guard;
     uint64_t lanes[4]; laneCounts(lanes);
     eventCursor_=CircularProgress::prefix(lanes);
+    comparatorEvent_=external;
 }
 void CaptureDma::freezeRecord() {
     CriticalSection guard;
@@ -87,7 +88,7 @@ void CaptureDma::publishTriggered() {
     const uint16_t *banks[4]={buffer_.lanes[0],buffer_.lanes[1],buffer_.lanes[2],buffer_.lanes[3]};
     const FrameView ring(metadata,banks,buffer_.wordsPerLane(),buffer_.split() ? &split_ : nullptr);
     const uint32_t target=event<=first ? 0 : uint32_t(std::min<uint64_t>(metadata.samples-1,event-first));
-    auto frame=TriggerRecord::select(ring,trigger_,requestedSamples_,target,forced_); // trigger_ stays as set.
+    auto frame=TriggerRecord::select(ring,trigger_,requestedSamples_,target,forced_,comparatorEvent_);
     if (!frame.valid()) {
         mailbox_.cancel(); status_=DataStatus::NoData; return; // A comparator event must agree with the raw edge.
     }

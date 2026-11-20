@@ -11,8 +11,12 @@ bool CaptureTiming::points(uint32_t clock, Rational pointRate, uint32_t pointsPe
                            Rational &actual) {
     Rational transfers, points;
     CaptureTiming candidate;
-    if ((pointsPerTransfer != 1 && pointsPerTransfer != 2) || !pointRate.scaled(1, pointsPerTransfer, transfers) ||
-        !calculate(clock, transfers, candidate) || !candidate.sampleRate.scaled(pointsPerTransfer, 1, points))
+    const auto divider = adcDividerAt(clock);
+    const auto period = pointsPerTransfer == 2 ? (divider + 1U) & ~1U : divider;
+    if ((pointsPerTransfer != 1 && pointsPerTransfer != 2) || !pointRate.scaled(1, pointsPerTransfer, transfers))
+        return false;
+    if (period != divider && transfers.value() > double(clock) / period) transfers = {clock, period};
+    if (!calculate(clock, period, transfers, candidate) || !candidate.sampleRate.scaled(pointsPerTransfer, 1, points))
         return false;
     output = candidate; actual = points;
     return true;

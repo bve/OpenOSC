@@ -4,6 +4,7 @@
 #include <cstdint>
 
 namespace openosc::scope {
+enum class InterleaveMode : uint8_t { Off, On, Auto };
 // Interleave: CH1 alone through both ADCs clocked in opposite phase (control bits 8/11, TIM1 CC3P,
 // InterleavedWords, Layout::InterleavedCh1 at two points a word, twice the ADC rate). The capture follows
 // from InterleaveRule in DataAccess, AnalogFrontend, AdcClock and CaptureDma. Two boards, two rules:
@@ -23,11 +24,15 @@ struct InterleaveConditions {
     };
     // Timebase index < 2 of the factory table: 10 and 25 ns/div.
     static constexpr bool timebase(uint64_t timebaseNs) { return timebaseNs == 10 || timebaseNs == 25; }
-    // internal: an AutoSetup or zero trial. busLoaded: the ZT703S DAC stream halves the rate.
+    // One pair uses both converters. Internal captures use their own fixed buffers and layout.
+    static constexpr uint32_t shared(const Inputs &in) {
+        return (in.ch1 && !in.ch2 ? 0U : uint32_t(Channels)) | (in.internal ? uint32_t(Internal) : 0U);
+    }
+    // Restrictions on the legacy automatic policy, as distinct from an explicit selection.
     // CH2 on (and so X-Y) keeps the two ordinary channels: an interleave never turns CH2 off itself.
     static constexpr uint32_t capture(const Inputs &in) {
-        return (timebase(in.timebaseNs) ? 0U : uint32_t(Timebase)) | (in.ch1 && !in.ch2 ? 0U : uint32_t(Channels)) |
-               (in.rolling ? uint32_t(Rolling) : 0U) | (in.internal ? uint32_t(Internal) : 0U) |
+        return shared(in) | (timebase(in.timebaseNs) ? 0U : uint32_t(Timebase)) |
+               (in.rolling ? uint32_t(Rolling) : 0U) |
                (in.busLoaded ? uint32_t(BusLoaded) : 0U);
     }
 };
@@ -54,17 +59,20 @@ struct SelectableInterleave {
     static constexpr uint32_t rate(uint32_t timerHz) { return 2 * (timerHz / adcDividerAt(timerHz)); }
     static constexpr uint32_t blockers(bool selected, const InterleaveConditions::Inputs &in) {
         return (selected ? 0U : uint32_t(InterleaveConditions::Off)) | (profile(in.timerHz) ? 0U : uint32_t(InterleaveConditions::Clock)) |
-               InterleaveConditions::capture(in);
+               InterleaveConditions::shared(in);
     }
 };
 // The build's rule: what keeps a request from interleaving on this board (0: it interleaves).
 // `selected`: the user's choice (ZT703S); the ZT706S factory interleave needs none.
 struct InterleaveRule {
     static constexpr uint32_t blockers(const board::Capabilities &board, bool selected, const InterleaveConditions::Inputs &in) {
-        if (board.adcInterleave)
-            return (in.timerHz == InterleavePolicy::TimerHz ? 0U : uint32_t(InterleaveConditions::Clock)) | InterleaveConditions::capture(in);
-        if (board.selectableInterleave) return SelectableInterleave::blockers(selected, in);
+        if (board.interleaveControl()) return SelectableInterleave::blockers(selected, in);
         return InterleaveConditions::Board;
+    }
+    static constexpr uint32_t blockers(const board::Capabilities &board, InterleaveMode mode, const InterleaveConditions::Inputs &in) {
+        if (board.adcInterleave && mode == InterleaveMode::Auto)
+            return (in.timerHz == InterleavePolicy::TimerHz ? 0U : uint32_t(InterleaveConditions::Clock)) | InterleaveConditions::capture(in);
+        return blockers(board, mode == InterleaveMode::On, in);
     }
 };
 struct InterleaveResponse {

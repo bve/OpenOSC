@@ -15,7 +15,8 @@ bool nearestIn(const FrameView &ring,const TriggerSettings &settings,uint32_t ta
     return true;
 }
 } // namespace
-FrameView TriggerRecord::select(const FrameView &ring,const TriggerSettings &settings,uint32_t count,uint32_t target,bool forced) {
+FrameView TriggerRecord::select(const FrameView &ring, const TriggerSettings &settings, uint32_t count, uint32_t target,
+                               bool forced, bool comparatorEvent) {
     if (!ring.valid() || ring.metadata().rolling || !settings.valid() || count<RecordDepth::Minimum || count>RecordDepth::Maximum || ring.metadata().samples<4) return {};
     const uint32_t samples=ring.metadata().samples;
     count=std::min(count,samples);
@@ -26,6 +27,16 @@ FrameView TriggerRecord::select(const FrameView &ring,const TriggerSettings &set
     const uint32_t reach=count/SlackDivisor;
     const uint32_t lowest=std::max<uint32_t>({pre,1U,target>reach ? target-reach : 0U}), highest=samples-count+pre;
     uint32_t index=0;
+    // The two ADCs can resolve ringing around one event into short recrossings. Prefer a
+    // crossing supported by both ADCs on each side, close to the comparator's DMA cursor.
+    // The ordinary search still accepts isolated/narrow pulses when that stronger edge is absent.
+    if (ring.metadata().layout == Layout::InterleavedCh1 && comparatorEvent) {
+        constexpr uint32_t Nearby = 8;
+        const uint32_t first = std::max(lowest, target > Nearby ? target - Nearby : 0);
+        const uint32_t last = std::min(highest, target + Nearby);
+        if (TriggerSearch::nearestStablePair(ring, settings, target, first, last, index))
+            return ring.slice(index - pre, count).withTrigger(true, pre, settings.tag());
+    }
     bool found=false;
     if (nearestIn(ring,settings,target,lowest,highest,found,index))
         return ring.slice(index-pre,count).withTrigger(true,pre,settings.tag());

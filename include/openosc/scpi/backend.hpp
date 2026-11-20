@@ -90,9 +90,14 @@ public:
     // Interleave CH1 (ZT703S, ACQ:INTerleave): whether the board has the choice, the choice (saved like
     // the menu's), whether the request in force interleaves now and what keeps it from it
     // (InterleaveConditions bits). Without a backend for it: unsupported, off accepted.
-    struct InterleaveStatus { bool supported = false, requested = false, active = false; uint32_t blockers = 0; };
+    struct InterleaveStatus {
+        bool supported = false, requested = false, active = false;
+        uint32_t blockers = 0;
+        bool autoSupported = false, automatic = false;
+    };
     virtual InterleaveStatus interleave() const { return {}; }
     virtual bool interleave(bool on) { return !on; }
+    virtual bool interleaveAuto() { return false; }
     // The GUI heap, read now (a pool walk); false while there is none to read.
     virtual bool memory(MemorySnapshot &) const { return false; }
     // SYST:STALl?: long main-loop passes and Auto frame gaps (StallLog::text).

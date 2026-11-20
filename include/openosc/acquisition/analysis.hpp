@@ -34,6 +34,9 @@ public:
     // The same among the edges at indices first..last only (clamped to the record): ties to the lower index.
     static bool nearest(const FrameView &frame,const TriggerSettings &settings,uint32_t target,uint32_t first,uint32_t last,
                         uint32_t &index);
+    // Within a small window around a comparator event: two samples on each side of the edge.
+    static bool nearestStablePair(const FrameView &frame, const TriggerSettings &settings, uint32_t target,
+                                  uint32_t first, uint32_t last, uint32_t &index);
 };
 class TriggerCache {
 public:
