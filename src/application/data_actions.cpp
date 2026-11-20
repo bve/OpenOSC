@@ -3,6 +3,7 @@
 #include "openosc/board/current.hpp"
 #include "openosc/settings/instrument_state.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
+#include "openosc/ui/screens/screen_layout.hpp"
 #include "openosc/usb/instrument_usb.hpp"
 #include <cstring>
 
@@ -93,17 +94,20 @@ scope::TriggerFollow::Place ApplicationController::triggerPlace(const ScopeReque
 // its input voltage (TriggerFollow, GitHub #26). Applies to whoever changes them, the keys, the editors
 // or a remote host; an explicit new level (TRIG:LEV, the trigger keys, 50 %) is applied as given, the
 // other channel changes nothing, and a refused request leaves no trace (the anchor before it stays).
-bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode, LevelIntent intent) {
+bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode, LevelIntent intent,
+                                           scope::TriggerLevel::Bounds bounds) {
     const auto &current=data_.scopeRequest();
     const unsigned c=unsigned(request.trigger.channel);
+    const auto place = triggerPlace(current);
+    const bool alreadyLimited = triggerFollow_.limited(place);
     scope::TriggerFollow::Proposal proposal;
     bool following=false;
     if (intent==LevelIntent::Follow && c<2 && request.trigger.channel==current.trigger.channel && request.trigger.level==current.trigger.level) {
         const auto before=data_.scopeChannelFor(current,c), after=data_.scopeChannelFor(request,c);
         if ((following=before.calibrated && after.calibrated && before.voltsPerCode>0 && after.voltsPerCode>0 &&
                        (before.voltsPerCode!=after.voltsPerCode || before.zeroCode!=after.zeroCode))) {
-            proposal=triggerFollow_.propose(triggerPlace(current),request.frontend.position[c],request.frontend.range[c],
-                                            {before.zeroCode,before.voltsPerCode},{after.zeroCode,after.voltsPerCode});
+            proposal=triggerFollow_.propose(place,request.frontend.position[c],request.frontend.range[c],
+                                            {before.zeroCode,before.voltsPerCode},{after.zeroCode,after.voltsPerCode},bounds);
             request.trigger.level=proposal.level;
         }
     }
@@ -111,7 +115,7 @@ bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, S
     if (intent==LevelIntent::Set) triggerFollow_.forget();
     if (following) {
         triggerFollow_.commit(proposal);
-        if (proposal.limited && uiReady_) view_.notify("Trigger level at its limit", now); // The voltage is out of reach.
+        if (proposal.limited && !alreadyLimited && uiReady_) view_.notify("Trigger level at its limit", now);
     }
     return true;
 }
@@ -140,16 +144,45 @@ bool ApplicationController::followShownChannel() {
     dataRefresh_ = true;
     return true;
 }
+scope::TriggerLevel::Bounds ApplicationController::triggerBounds(const ScopeRequest &request) {
+    const auto &waveform = view_.waveform();
+    const auto &options = waveform.options();
+    const unsigned source = unsigned(request.trigger.channel);
+    if (source >= 2 || request.rolling() || (options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay))
+        return {};
+    const auto &model = waveform.model();
+    const auto &m = model.metadata();
+    const auto target = data_.scopeChannelFor(request, source);
+    const auto &shown = data_.scopeHeld() && model.hasFrame() && m.channels[source].enabled ? m.channels[source] : target;
+    const int height = model.hasFrame() ? model.viewport().height : ui::ScreenLayout::PlotHeight;
+    plot::Axis axis;
+    if (height < 2 || !axis.configure(shown, options.channels[source], unsigned(height))) return {};
+    const auto toRequested = [&](int y) { return scope::TriggerLevel::inFrame(axis.code(y), shown, target); };
+    return scope::TriggerLevel::Bounds::between(toRequested(0), toRequested(height - 1));
+}
+void ApplicationController::notifyTriggerLimit(int direction, uint32_t now) {
+    if (uiReady_) view_.notify(direction > 0 ? "Trigger upper limit" : "Trigger lower limit", now);
+}
 bool ApplicationController::triggerMidpoint(uint32_t now) {
-    triggerEditor_.begin(data_.scopeRequest().trigger);
+    auto request = data_.scopeRequest();
     scope::FrameLease frame;
-    if (!data_.acquireScopeWait(frame) || !triggerEditor_.midpoint(frame.view())) {
+    double midpoint;
+    if (!data_.acquireScopeWait(frame) || !ui::TriggerEditor::midpoint(frame.view(), request.trigger.channel, midpoint)) {
         view_.notify("50% needs a completed channel capture",now);
         return false;
     }
+    const unsigned source = unsigned(request.trigger.channel);
+    const auto &record = frame.view().metadata().channels[source];
+    const auto target = data_.scopeChannelFor(request, source);
+    const double exact = scope::TriggerLevel::inFrame(midpoint, record, target);
     frame.release(); // Applying restarts capture, which needs every frame lease back.
-    auto request=data_.scopeRequest(); request.trigger=triggerEditor_.settings();
+    request.trigger.level = triggerBounds(request).nearest(exact);
     if (!applyEdited(request,now,LevelIntent::Set)) { view_.notify("Finish data transfer first",now); return false; }
+    const auto place = triggerPlace(data_.scopeRequest());
+    const double remainder = exact - place.level;
+    const bool limited = std::abs(remainder) > .5;
+    triggerFollow_.anchor(place, remainder, limited);
+    if (limited) notifyTriggerLimit(remainder > 0 ? 1 : -1, now);
     return true;
 }
 bool ApplicationController::restoreStartupOutput(const PreferencesResult &applied) {
@@ -180,7 +213,7 @@ bool ApplicationController::applyGenerator(const generator::Settings &settings, 
 void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     switch (panel_) {
     case Panel::Display: plotKeys(keys, now, fine); break;
-    case Panel::Trigger: triggerKeys(keys, now); break;
+    case Panel::Trigger: triggerKeys(keys, now, fine); break;
     case Panel::Frequency: frequencyKeys(keys, now); break;
     case Panel::Meter: meterPanelKeys(keys, now); break;
     case Panel::MeterAppearance: meterAppearanceKeys(keys, now); break;

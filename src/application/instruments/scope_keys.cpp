@@ -63,6 +63,12 @@ void ApplicationController::beginHeldView() {
     heldViewActive_ = true;
     heldViewRelease_ = data_.scopeHoldReleases();
 }
+int ApplicationController::triggerStep(int direction, bool fine) {
+    constexpr unsigned DoubleEvery = 8, MaxRepeats = 3 * DoubleEvery;
+    triggerRepeats_ = fine || direction != triggerSign_ ? 0 : std::min<unsigned>(MaxRepeats, triggerRepeats_ + 1);
+    triggerSign_ = int8_t(direction);
+    return direction * (1 << (triggerRepeats_ / DoubleEvery));
+}
 // Issue #7, as on the factory firmware: the time/div is shared by HOLD and RUN. A held record is
 // shown at the next capture's time/div, whoever chose it (Left/Right, the Timebase menu, a host),
 // and RUN keeps it; the record's metadata, lease and capture are untouched. FFT keeps its own axis.
@@ -168,10 +174,19 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     const uint32_t arrows = keys & (Keypad::Up | Keypad::Down | Keypad::Left | Keypad::Right);
     if (!arrows) return;
     if (focus_ == plot::Focus::Cursor) { moveCursor(arrows, now, fine); return; }
-    if (focus_ == plot::Focus::Trigger && (keys & (Keypad::Up | Keypad::Down))) { // Up raises the level, as on the factory firmware.
+    if (focus_ == plot::Focus::Trigger && (arrows & (Keypad::Up | Keypad::Down))) {
+        const int direction = axis(arrows, Keypad::Down, Keypad::Up);
+        if (!direction) return;
         auto request = data_.scopeRequest();
-        request.trigger.level = std::clamp<int>(request.trigger.level + ((keys & Keypad::Up) ? 1 : -1), -128, 127);
-        if (!applyEdited(request, now, LevelIntent::Set)) view_.notify("Finish data transfer first", now);
+        const auto bounds = triggerBounds(request);
+        const auto before = request.trigger.level;
+        const int step = triggerStep(direction, fine);
+        const bool invert = view_.waveform().options().channels[unsigned(request.trigger.channel)].invert;
+        const int delta = invert ? -step : step;
+        request.trigger.level = bounds.clamp(bounds.clamp(before) + delta);
+        if (!fine && request.trigger.level == before) return; // One warning per visit to the limit.
+        if (!applyEdited(request, now, LevelIntent::Set)) { view_.notify("Finish data transfer first", now); return; }
+        if (request.trigger.level == (delta > 0 ? bounds.high : bounds.low)) notifyTriggerLimit(direction, now);
         return;
     }
     if (focus_ == plot::Focus::Position || focus_ == plot::Focus::Trigger) { // Left/Right move the record in both, as on the factory firmware.
@@ -205,7 +220,10 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     if ((keys & Keypad::Down) && range) --range;
     stepTimebase(request, keys);
     plot::XyMode::constrain(view_.waveform().options(), request);
-    // The trigger on this channel keeps its voltage across the new V/div (GitHub #26).
-    if (!applyFollowing(request, now, ScopeApply::Configure)) view_.notify("Finish data transfer first", now);
+    const unsigned source = unsigned(request.trigger.channel);
+    const auto limits = request.frontend.range[source] == data_.scopeRequest().frontend.range[source]
+        ? scope::TriggerLevel::Bounds{} : triggerBounds(request);
+    if (!applyFollowing(request, now, ScopeApply::Configure, LevelIntent::Follow, limits))
+        view_.notify("Finish data transfer first", now);
 }
 } // namespace openosc

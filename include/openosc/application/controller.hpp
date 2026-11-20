@@ -77,6 +77,8 @@ private:
     static constexpr unsigned PanDoubling = 8;
     unsigned panRepeats_ = 0;
     int panSign_ = 0; // The direction panRepeats_ counts for.
+    uint8_t triggerRepeats_ = 0;
+    int8_t triggerSign_ = 0;
     PerformanceCounter performance_;
     void onKeys(const KeyEvents &events, uint32_t now);
     void settingsKeys(uint32_t keys, uint32_t now);
@@ -174,7 +176,8 @@ private:
     // Follow: a request whose trigger level stands (a scale, a zero, anything else) keeps the trigger's
     // voltage; Set: its level is set on purpose and becomes the anchor, even as the same whole code.
     enum class LevelIntent : uint8_t { Follow, Set };
-    bool applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode, LevelIntent intent = LevelIntent::Follow);
+    bool applyFollowing(ScopeRequest request, uint32_t now, ScopeApply mode, LevelIntent intent = LevelIntent::Follow,
+                        scope::TriggerLevel::Bounds bounds = {});
     static scope::TriggerFollow::Place triggerPlace(const ScopeRequest &request); // TriggerFollow's key.
     bool applyEdited(ScopeRequest request, uint32_t now, LevelIntent intent = LevelIntent::Follow);
     bool applyFound(const ScopeRequest &request, uint32_t now); // AUTO's result: its level is set (LevelIntent::Set).
@@ -194,6 +197,9 @@ private:
     void resetPan(uint32_t now); // In HOLD the explored view only, as moveTrace: RUN restores, nothing saved.
     void moveCursor(uint32_t keys, uint32_t now, bool fine);
     bool triggerMidpoint(uint32_t now);
+    scope::TriggerLevel::Bounds triggerBounds(const ScopeRequest &request);
+    int triggerStep(int direction, bool fine);
+    void notifyTriggerLimit(int direction, uint32_t now);
     bool centerChannels(uint32_t now); // Analyze -> Center channels, F2 hold.
     bool applyGenerator(const generator::Settings &settings, uint32_t now);
     void dataKeys(uint32_t keys, uint32_t now, bool fine);
@@ -208,7 +214,7 @@ private:
     void applyBrightness();
     void shutdownNotice(const char *text, uint32_t now);
     void generatorKeys(uint32_t keys, uint32_t now);
-    void triggerKeys(uint32_t keys, uint32_t now);
+    void triggerKeys(uint32_t keys, uint32_t now, bool fine);
     void frequencyKeys(uint32_t keys, uint32_t now);
     void meterPanelKeys(uint32_t keys, uint32_t now);
     void meterChanged(unsigned row, uint32_t now); // The DMM panel's changed row, taken at once (that row only).

@@ -26,6 +26,21 @@ private:
 };
 class TriggerLevel {
 public:
+    struct Bounds {
+        int16_t low, high;
+        constexpr Bounds(int16_t minimum = -128, int16_t maximum = 127) : low(minimum), high(maximum) {}
+        int16_t clamp(int code) const { return int16_t(std::clamp(code, int(low), int(high))); }
+        int16_t nearest(double code) const { return int16_t(std::lround(std::clamp(code, double(low), double(high)))); }
+        static Bounds between(double a, double b) {
+            if (!std::isfinite(a) || !std::isfinite(b)) return {};
+            const double lo = std::clamp(std::min(a, b), -128.0, 127.0);
+            const double hi = std::clamp(std::max(a, b), -128.0, 127.0);
+            const auto first = int16_t(std::ceil(lo)), last = int16_t(std::floor(hi));
+            if (first <= last) return {first, last};
+            const auto closest = int16_t(std::lround((lo + hi) * .5));
+            return {closest, closest};
+        }
+    };
     // The level, set in the codes of the next capture, as a code of a record captured under other settings.
     static double inFrame(double level, const ChannelMetadata &settings, const ChannelMetadata &frame) {
         if (!settings.calibrated || !frame.calibrated || settings.voltsPerCode <= 0 || frame.voltsPerCode <= 0)
@@ -54,19 +69,23 @@ public:
         int16_t level = 0;
         Place place;
         double remainder = 0;
-        bool limited = false; // The voltage lies beyond the comparator's codes: the level waits at the limit.
+        bool limited = false; // The voltage lies beyond the allowed codes: the level waits at the limit.
     };
     // `current`: the trigger now; `position`/`range`: its channel's next zero and range.
-    Proposal propose(const Place &current, int position, unsigned range, const Scale &before, const Scale &after) const {
+    Proposal propose(const Place &current, int position, unsigned range, const Scale &before, const Scale &after,
+                     TriggerLevel::Bounds bounds = {}) const {
         const double carried = owned_ && place_ == current ? remainder_ : 0;
         const double exact = (current.level + carried - before.zeroCode) * before.voltsPerCode / after.voltsPerCode + after.zeroCode;
         // The voltage's nearest code, or the comparator's limit when that code is out of its reach
         // (rounded within one code past each end: far beyond it is the limit all the same).
-        const long nearest = std::lround(std::clamp(exact, -129.0, 128.0));
-        const auto next = int16_t(std::clamp<long>(nearest, -128, 127));
-        return {next, {next, int16_t(position), current.channel, uint8_t(range)}, exact - next, nearest != next};
+        const auto next = bounds.nearest(exact);
+        return {next, {next, int16_t(position), current.channel, uint8_t(range)}, exact - next, std::abs(exact - next) > .5};
     }
-    void commit(const Proposal &proposal) { place_ = proposal.place; remainder_ = proposal.remainder; owned_ = true; }
+    void commit(const Proposal &proposal) { anchor(proposal.place, proposal.remainder, proposal.limited); }
+    void anchor(const Place &place, double remainder, bool limited) {
+        place_ = place; remainder_ = remainder; owned_ = true; limited_ = limited;
+    }
+    bool limited(const Place &place) const { return owned_ && place_ == place && limited_; }
     void observe(const Place &now) { if (owned_ && !(place_ == now)) owned_ = false; }
     // A level set on purpose (TRIG:LEV, the level keys, 50 %, AUTO) is the new anchor, also when it is
     // the same whole code: nothing of an earlier remainder is carried.
@@ -75,6 +94,6 @@ public:
 private:
     double remainder_ = 0;
     Place place_;
-    bool owned_ = false;
+    bool owned_ = false, limited_ = false;
 };
 } // namespace openosc::scope

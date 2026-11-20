@@ -4,11 +4,18 @@
 #include <cstdio>
 
 namespace openosc::ui {
-bool TriggerEditor::midpoint(const scope::FrameView &frame) {
+bool TriggerEditor::midpoint(const scope::FrameView &frame, scope::Channel channel, double &code) {
+    const unsigned source = unsigned(channel);
+    if (source >= 2) return false;
     scope::SignalBand bands[2];
-    const auto &band=bands[unsigned(settings_.channel)];
+    const auto &band=bands[source];
     if (!scope::SignalBands::measure(frame,bands) || !band.valid) return false;
-    settings_.level=int16_t((int(band.low)+band.high)/2);
+    code = (int(band.low) + band.high) * .5;
+    const auto &m = frame.metadata().channels[source];
+    // The quantized extrema each resolve to a code. Within half a code, a
+    // band straddling the calibrated zero is consistent with a centered signal.
+    if (m.calibrated && band.low <= m.zeroCode && m.zeroCode <= band.high && std::abs(code - m.zeroCode) <= .5)
+        code = m.zeroCode;
     return true;
 }
 PropertyKind TriggerEditor::kind(unsigned row) const {
@@ -51,7 +58,7 @@ void TriggerEditor::adjust(unsigned row, int direction) {
         if (enabled_[unsigned(settings_.channel)^1]) settings_.channel = scope::Channel(unsigned(settings_.channel)^1);
         break;
     case Slope: settings_.edge = scope::Edge(unsigned(settings_.edge) ^ 1); break;
-    case Level: settings_.level = std::clamp<int>(settings_.level + (direction > 0 ? 1 : -1), -128, 127); break;
+    case Level: settings_.level = levelBounds_.clamp(levelBounds_.clamp(settings_.level) + direction); break;
     case Mode: settings_.mode = scope::TriggerMode((unsigned(settings_.mode) + 3 + (direction > 0 ? 1 : -1)) % 3); break;
     case Pretrigger: settings_.position=std::clamp<int>(int(settings_.position)+(direction>0 ? 25 : -25),0,1000); break;
     case Reject: settings_.reject = !settings_.reject; break;

@@ -50,18 +50,25 @@ void ApplicationController::commitTrigger(uint32_t now, bool level) {
     triggerEditor_.begin(data_.scopeRequest().trigger);
     view_.properties(triggerEditor_, navigator_);
 }
-void ApplicationController::triggerKeys(uint32_t keys, uint32_t now) {
+void ApplicationController::triggerKeys(uint32_t keys, uint32_t now, bool fine) {
+    auto request = data_.scopeRequest();
+    request.trigger = triggerEditor_.settings();
+    const auto bounds = triggerBounds(request);
+    const bool editing = navigator_.row() == ui::TriggerEditor::Level && navigator_.mode() == ui::PropertyNavigator::Mode::Number;
+    const int vertical = (keys & Keypad::Up ? 1 : 0) - (keys & Keypad::Down ? 1 : 0);
+    triggerEditor_.levelEdit(bounds, editing && vertical ? std::abs(triggerStep(vertical, fine)) : 1);
     const auto key = fieldKeys(keys, triggerEditor_, now);
     if (key == FieldKey::Action) { // Set level to 50%, from the record on show, applied at once.
-        scope::FrameLease frame;
-        if (!data_.acquireScopeWait(frame) || !triggerEditor_.midpoint(frame.view())) {
-            view_.notify("50% needs a completed channel capture", now);
-            view_.properties(triggerEditor_, navigator_);
-            return;
-        }
-        frame.release(); // Applying restarts capture, which needs every frame lease back.
-    } else if (key != FieldKey::Committed) return;
-    commitTrigger(now, key == FieldKey::Action || navigator_.row() == ui::TriggerEditor::Level);
+        triggerMidpoint(now);
+        triggerEditor_.begin(data_.scopeRequest().trigger);
+        view_.properties(triggerEditor_, navigator_);
+    } else if (key == FieldKey::Committed) commitTrigger(now, navigator_.row() == ui::TriggerEditor::Level);
+    else if (editing && !(keys & (Keypad::F4 | Keypad::Menu))) {
+        const int direction = keys & Keypad::Right ? 1 : keys & Keypad::Up ? 1 : keys & Keypad::Left ? -1 : vertical;
+        const auto level = triggerEditor_.settings().level;
+        if (direction && level == (direction > 0 ? bounds.high : bounds.low) && (fine || level != request.trigger.level))
+            notifyTriggerLimit(direction, now);
+    }
 }
 // Each short F3 (plan S01): the trigger focus and the next mode, Auto, Normal, Single, Auto; the source
 // is in the Trigger menu. In RUN, Single arms one record (as Analyze's Arm Single). Held (HOLD or a
