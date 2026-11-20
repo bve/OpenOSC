@@ -86,6 +86,9 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         else view_.notify("USB Remote: hold MENU to exit",now);
         break;
     case ui::SettingsAction::CalibrateInterleave: interleaveOffsetAction(now); break; // ZT703S.
+#if OPENOSC_BOARD == 703
+    case ui::SettingsAction::CalibrateInterleaveMatch: openInterleaveMatch(now); break;
+#endif
     case ui::SettingsAction::Close: closeSettings(); break;
     default: break;
     }

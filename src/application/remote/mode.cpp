@@ -9,7 +9,7 @@ namespace openosc {
 bool ApplicationController::setRemote(bool enabled, const char *left) {
     // Without a UI the keys are locked anyway; leaving Remote then means bringing the display up.
     if (enabled == remote_ && (enabled || uiReady_)) return true;
-    if (shots_.busy() || data_.scopeRecording() || data_.dmmBusy() || data_.zeroBusy()) return false;
+    if (shots_.busy() || data_.scopeRecording() || data_.dmmBusy() || data_.zeroBusy() || panel_ == Panel::InterleaveMatch) return false;
     const auto now = Board::milliseconds(); if (!cancelAuto(now)) return false;
     if (enabled) {
         if (images_.clearing()) return false;

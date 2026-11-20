@@ -8,6 +8,8 @@ class InterleaveMatchProfiles {
 public:
     bool load(uint16_t factoryCrc, const uint32_t uid[3]);
     bool parse(const char *text, size_t bytes, uint16_t factoryCrc, const uint32_t uid[3]);
+    static DataStatus save(uint32_t clockHz, const Rational &rate, const scope::ChannelMetadata &channel,
+                           const scope::InterleaveMatch &filter, const uint32_t uid[3]);
     const scope::InterleaveMatch *find(uint32_t clockHz, const Rational &rate,
                                        const scope::ChannelMetadata &channel) const {
         for (unsigned i = 0; i < count_; ++i) {

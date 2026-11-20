@@ -26,7 +26,11 @@ dmm::Function ApplicationController::meterSelecting() const {
 // offset measurement neither, nor held by the settle window its own confirmation left. Both still
 // wait while a host enumerates (bounded; a measurement past its deadline ends as Timeout).
 void ApplicationController::pauseHiddenCapture(uint32_t now, bool enumerating) {
-    const bool measuring = data_.interleaveMeasurement().active();
+    const bool measuring = data_.interleaveMeasurement().active()
+#if OPENOSC_BOARD == 703
+        || (panel_ == Panel::InterleaveMatch && interleaveMatch_.step() == calibration::InterleaveMatchWizard::Step::Measuring)
+#endif
+        ;
     if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !measuring && !autoBusy() &&
         data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto) hiddenAt_ = now;
     const bool settling = (!measuring && uint32_t(now - hiddenAt_) < OverlaySettleMs) || enumerating;
@@ -53,6 +57,7 @@ void ApplicationController::refreshSoftKeys() {
     else if (state_.settingsOpen) keys = Keys::list(editing && !settingsMenu_.information());
     else if (panel_ == Panel::Confirmation) keys = Keys::cancel("");
     else if (panel_ == Panel::Zero) keys = editing ? Keys::list(true) : Keys::cancel("Calibration");
+    else if (panel_ == Panel::InterleaveMatch) keys = Keys::cancel("");
     else if (panel_ == Panel::Images) keys = imageSoftKeys();
     else if (panel_ == Panel::Generator || panel_ == Panel::Frequency) {
         using Generator = ui::GeneratorKeys::Panel;
@@ -143,7 +148,7 @@ void ApplicationController::displayData(uint32_t now) {
     const unsigned interval = panel_ != Panel::None ? 40 : state_.mode == MeasurementMode::Oscilloscope ? 16
                               : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
-    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero) {
+    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero || panel_==Panel::InterleaveMatch) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
         dataAt_ = now;
         if (state_.mode == MeasurementMode::Oscilloscope) view_.captureStatus(data_.status(), data_.scopeHeld());

@@ -14,6 +14,7 @@ public:
     // Every style write redraws the object: an unchanged colour must not keep the display busy.
     static void textColor(lv_obj_t *object, uint32_t color);
     static bool setText(lv_obj_t *label, const char *text); // False when unchanged (nothing invalidated).
+    static void overlayPanel(lv_obj_t *object, const Theme &theme);
     static lv_obj_t *label(lv_obj_t *parent, const char *text, int x = 0, int y = 0);
 
 private:

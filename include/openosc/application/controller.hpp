@@ -1,4 +1,7 @@
 #pragma once
+#if OPENOSC_BOARD == 703
+#include "openosc/calibration/interleave_match_wizard.hpp"
+#endif
 #include "openosc/application/generator_startup.hpp"
 #include "openosc/application/meter_restore.hpp"
 #include "openosc/application/state.hpp"
@@ -121,6 +124,14 @@ private:
     // Interleave CH1 (ZT703S) from the menu or SCPI: applied at once and saved; false when refused.
     bool selectInterleave(scope::InterleaveMode mode, uint32_t now);
     void serviceInterleaveOffsetUi(uint32_t now);
+#if OPENOSC_BOARD == 703
+    void openInterleaveMatch(uint32_t now);
+    void interleaveMatchKeys(uint32_t keys, uint32_t now);
+    void serviceInterleaveMatchUi(uint32_t now);
+    void finishInterleaveMatch(uint32_t now, const char *notice, bool returnToSettings = true);
+    void showInterleaveMatch();
+    calibration::InterleaveMatchWizard interleaveMatch_;
+#endif
     // The loop pass's overlay pause of full-rate capture (DataAccess::pauseCapture).
     void pauseHiddenCapture(uint32_t now, bool enumerating);
     bool interleaveWatched_=false;
@@ -284,7 +295,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;

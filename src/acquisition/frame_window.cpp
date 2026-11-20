@@ -1,6 +1,13 @@
 #include "openosc/acquisition/frame.hpp"
 
 namespace openosc::scope {
+FrameView FrameView::withInterleaveMatch(const InterleaveMatch *match) const {
+    if (!valid_ || metadata_.layout != Layout::InterleavedCh1) return {};
+    auto metadata = metadata_;
+    metadata.interleaveMatch = match;
+    return FrameView(metadata, banks_, wordsPerBank_, &split_);
+}
+
 FrameView FrameView::slice(uint32_t first,uint32_t count) const {
     if (!valid_ || !count || first>=metadata_.samples || count>metadata_.samples-first) return {};
     auto view=*this; auto &metadata=view.metadata_;

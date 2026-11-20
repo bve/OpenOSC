@@ -281,6 +281,9 @@ void DataAccess::observeInterleave(const scope::FrameView &frame) {
         // calibrated hardware range for new records while keeping the selected V/div on screen.
         if (interleaveHeadroom_ || interleaveMeasure_.active() || !m.channels[0].calibrated || request_.frontend.range[0] >= 10)
             return;
+#if OPENOSC_BOARD == 703
+        if (matchCalibrating_) return; // Keep the physical range fixed across calibration tones.
+#endif
 #ifdef OPENOSC_INTERLEAVE_PROBE
         if (probe_.active()) return;
 #endif

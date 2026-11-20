@@ -42,6 +42,7 @@ struct Layout {
     static constexpr const char *InterleaveFile = "/openosc/CALIBRATION/scope_interleave.json"; // ZT706S service offset.
     static constexpr const char *InterleavePrevious = "/openosc/CALIBRATION/scope_interleave.previous.json";
     static constexpr const char *InterleaveMatchFile = "/openosc/CALIBRATION/scope_interleave_match.json";
+    static constexpr const char *InterleaveMatchPrevious = "/openosc/CALIBRATION/scope_interleave_match.previous.json";
     static constexpr const char *FactoryBackup = "/openosc/BACKUP/FACTORY_BOOT_08000000.bin";
     static constexpr const char *FactoryBackupTemporary = "/openosc/BACKUP/FACTORY_BOOT_08000000.tmp";
     static constexpr const char *FactoryBackupMetadata = "/openosc/BACKUP/FACTORY_BOOT_08000000.txt";

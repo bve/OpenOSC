@@ -7,11 +7,7 @@ void PowerHoldOverlay::create() {
     lv_obj_remove_style_all(root_);
     lv_obj_set_size(root_, 200, 56);
     lv_obj_align(root_, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(root_, lv_color_hex(theme.panel), 0);
-    lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(root_, lv_color_hex(theme.accent), 0);
-    lv_obj_set_style_border_width(root_, 1, 0);
-    lv_obj_set_style_radius(root_, 3, 0);
+    Elements::overlayPanel(root_, theme);
     lv_obj_set_scrollable(root_, false);
     title_ = Elements::label(root_, "", 0, 8);
     lv_obj_set_width(title_, 200);

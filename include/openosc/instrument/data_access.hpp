@@ -227,6 +227,12 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     const calibration::InterleaveOffsetMeasurement &interleaveMeasurement() const { return interleaveMeasure_; }
     bool interleaveCalibrated() const;
     const float *interleaveOffsetAtClock() const; // The ZT703S offset measured at the clock that runs, or null.
+#if OPENOSC_BOARD == 703
+    DataStatus interleaveMatchReady() const;
+    void interleaveMatchCalibrating(bool on) { matchCalibrating_ = on; }
+    DataStatus saveInterleaveMatch(uint32_t coreHz, const Rational &rate, const scope::ChannelMetadata &channel,
+                                   const scope::InterleaveMatch &filter);
+#endif
 #ifdef OPENOSC_INTERLEAVE_PROBE
     // Diagnostic probe (interleave_probe.hpp, env firmware_interleave_probe): the mode for new captures,
     // applied through an ordinary forced reconfigure (refused while held, during a calibration, an
@@ -387,6 +393,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     calibration::InterleaveFile interleaveFile_;
 #if OPENOSC_BOARD == 703
     calibration::InterleaveMatchProfiles interleaveMatchProfiles_;
+    bool matchCalibrating_ = false;
     const scope::InterleaveMatch *matchFor(const scope::FrameMetadata &metadata,
                                           const scope::FrontendSettings &frontend, const Rational &rate) const;
 #endif

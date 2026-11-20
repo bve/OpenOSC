@@ -70,6 +70,7 @@ constexpr SettingsEntry calibration[] = {
     {"Software zero",Action::CalibrateZero},
     {"Gain",Action::None,Page::Gain},
     {"Interleave offset",Action::CalibrateInterleave}, // The ZT703S's, per clock (the ZT706S page has its own).
+    {"Interleave gain & timing",Action::CalibrateInterleaveMatch},
     {"Reload calibration JSON",Action::ReloadZero},
     {"Use factory zero",Action::FactoryZero},
     {"Back",Action::Back},

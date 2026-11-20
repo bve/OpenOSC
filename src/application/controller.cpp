@@ -138,6 +138,9 @@ namespace openosc {
         serviceInstruments(now);
         serviceZeroUi(now);
         serviceInterleaveOffsetUi(now);
+#if OPENOSC_BOARD == 703
+        serviceInterleaveMatchUi(now);
+#endif
         pauseHiddenCapture(now, usb.enumerating(now));
         serviceImages(now);
         if (uiReady_ && !shots_.busy()) {
@@ -243,6 +246,9 @@ void ApplicationController::powerOff(uint32_t now) {
     if (powerFired_) return; // Once a hold: a refusal is not repeated every pass.
     powerFired_ = true;
     if (panel_==Panel::Zero) data_.cancelZero(now);
+#if OPENOSC_BOARD == 703
+    if (panel_ == Panel::InterleaveMatch) finishInterleaveMatch(now, nullptr, false);
+#endif
     if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
     confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
 }
@@ -283,6 +289,9 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     // instruments, and says why when it cannot.
     if (events.longPress & Keypad::Relative) { powerOff(now); return; }
     if (panel_==Panel::Zero) { zeroKeys(keys,now); return; }
+#if OPENOSC_BOARD == 703
+    if (panel_ == Panel::InterleaveMatch) { interleaveMatchKeys(keys, now); return; }
+#endif
     if (remote_ || !uiReady_) { // Locked: Remote, or no UI to operate (headless).
         if (events.longPress & Keypad::Menu) setRemote(false, "USB Remote off");
         return;

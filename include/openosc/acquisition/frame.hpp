@@ -119,6 +119,8 @@ public:
     // The trigger at `index`, `shift` points past the record's pretrigger point (FrameMetadata::triggerShift).
     FrameView withShiftedTrigger(uint32_t index, int32_t shift, TriggerEdge edge = {}) const;
     FrameView withEvent(int32_t offset) const { FrameView view = *this; view.metadata_.eventOffset = offset; view.metadata_.eventKnown = true; return view; }
+    // Calibration compares the same captured words with and without new coefficients.
+    FrameView withInterleaveMatch(const InterleaveMatch *match) const;
     FrameView slice(uint32_t first,uint32_t count) const;
     const uint16_t *bank(unsigned index) const { return index < 4 ? banks_[index] : nullptr; }
     const SplitHistory &split() const { return split_; }
@@ -221,7 +223,7 @@ public:
         if (n > remaining_) n = remaining_;
         const auto &m = frame_.metadata_;
         if (frame_.split_.historyWords || m.interleaveMatch) {
-            int16_t code;
+            int16_t code = 0;
             for (uint32_t k = 0; k < n; ++k) { next(code); f(code); }
             return n;
         }

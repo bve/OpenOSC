@@ -41,8 +41,7 @@ void ApplicationView::build(const Theme &theme) {
     lv_obj_set_hidden(menu_, true);
     toast_ = label(screen, "", 8, 178);
     lv_obj_set_size(toast_, 304, 40);
-    lv_obj_set_style_bg_color(toast_, lv_color_hex(theme.grid), 0);
-    lv_obj_set_style_bg_opa(toast_, LV_OPA_COVER, 0);
+    ui::Elements::overlayPanel(toast_, shown());
     lv_obj_set_style_pad_all(toast_, 4, 0);
     lv_obj_set_hidden(toast_, true);
     using Layout = ui::StatusBarLayout;
@@ -144,7 +143,7 @@ void ApplicationView::paintShell() {
     lv_obj_set_style_text_color(screen, lv_color_hex(t.foreground), 0);
     lv_obj_set_style_bg_color(menu_, lv_color_hex(t.background), 0);
     lv_obj_set_style_border_color(menu_, lv_color_hex(t.grid), 0);
-    lv_obj_set_style_bg_color(toast_, lv_color_hex(t.grid), 0);
+    ui::Elements::overlayPanel(toast_, t);
     lv_obj_set_style_image_recolor(usbIndicator_, lv_color_hex(t.accent), 0);
     lv_obj_set_style_image_recolor(generatorIndicator_, lv_color_hex(t.generator), 0);
     lv_obj_set_style_line_color(edge_, lv_color_hex(t.muted), 0);

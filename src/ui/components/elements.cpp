@@ -18,6 +18,14 @@ bool Elements::setText(lv_obj_t *label, const char *text) {
     lv_label_set_text(label, text);
     return true;
 }
+void Elements::overlayPanel(lv_obj_t *object, const Theme &theme) {
+    lv_obj_set_style_bg_color(object, lv_color_hex(theme.panel), 0);
+    lv_obj_set_style_bg_opa(object, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(object, lv_color_hex(theme.accent), 0);
+    lv_obj_set_style_border_opa(object, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(object, 1, 0);
+    lv_obj_set_style_radius(object, 3, 0);
+}
 const lv_font_t *Elements::font(unsigned size) {
     switch (size) {
     case 11: return &openosc_ui_11c; // Condensed: only where IBM Plex Sans 12 has no room (ScopeFooter).
