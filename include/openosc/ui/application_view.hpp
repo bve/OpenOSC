@@ -144,9 +144,11 @@ private:
     ui::MeterScreen meter_;
     ui::GeneratorScreen generator_;
     lv_obj_t *menu_ = nullptr, *toast_ = nullptr, *generatorIndicator_ = nullptr, *usbIndicator_ = nullptr, *fps_ = nullptr, *trigger_ = nullptr, *edge_ = nullptr, *channelTag_ = nullptr;
-    unsigned channelTagChannel_ = 255;
+    static constexpr unsigned NoTriggerChannel = 2;
+    unsigned channelTagChannel_ = NoTriggerChannel;
     uint32_t channelTagColor_ = 0, channelTagInk_ = 0;
     static void drawChannelTag(lv_event_t *event);
+    void refreshTriggerColors(unsigned channel);
     ui::RecordOverview overview_;
     ui::PowerHoldOverlay powerHold_;
     void refreshIndicators();
