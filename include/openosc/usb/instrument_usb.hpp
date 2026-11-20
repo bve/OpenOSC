@@ -51,27 +51,24 @@ public:
     // ReattachPlan::DetachMs after `now`.
     void reattach(uint32_t now) {
         if (!allowed()) return;
-        reattach_.request(now); busActivityAt_ = now;
-        attach_.request(now); // A new logical attach: quiet from the request, before the attach DetachMs later.
+        reattach_.request(now);
+        attach_.request(); // A new logical attach: its start waits for a quiet capture; its host gets a window.
     }
     void profileChanged(uint32_t now) { stop(); reattach(now); }
     bool attached() const { return active_ || reattach_.pending() || attach_.pending(); } // Or an attach pending.
     bool connected() const;
-    // True after attaching and while a host keeps resetting the bus without finishing enumeration.
-    bool enumerating(uint32_t now) const {
-        return active_ && !connected() && (uint32_t(now-attachedAt_) < EnumerationMs || uint32_t(now-busActivityAt_) < HostQuietMs);
-    }
-    // True while a host is enumerating or using the device: power-hungry bursts wait. Bus resets
-    // count only while a host is proven by its SOFs (poll).
+    // A host proven by its SOFs is enumerating (usb::EnumerationQuiet's window, as the last poll left
+    // it): the one policy the capture is held for, also by ApplicationController::pauseHiddenCapture.
+    // Never without a host (GitHub #35), never past the window's budget.
+    bool enumerating(uint32_t) const { return active_ && !connected() && attach_.quiet(); }
+    // True while a host is enumerating or using the device: power-hungry bursts (saves) wait. A host
+    // counts only as proven by its SOFs (HostPresence, whose grace spans a bus reset).
     bool hostActive(uint32_t now) const;
 private:
-    static constexpr uint32_t HostQuietMs = 5000;
-    static constexpr uint32_t EnumerationMs = 3000;
     // A host unproven this long is gone (pulled cable, suspended PC): the watchdog's episode ends with
     // it, and a later host starts a new one. Longer than HostPresence::GraceMs (a bus reset).
     static constexpr uint32_t HostLostMs = 1000;
-    uint32_t attachedAt_ = 0;
-    uint32_t busActivityAt_ = 0, busResets_ = 0;
+    uint32_t busResets_ = 0;
     struct Polling {
         explicit Polling(bool &flag):flag_(flag) { flag_=true; }
         ~Polling() { flag_=false; }

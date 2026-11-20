@@ -25,7 +25,7 @@ bool InstrumentUsb::start() {
         if (!initialized_) release(true); // A partial set-up may have enabled the OTG line (MspInit).
     }
     // A failed set-up or connect abandons this request: the capture is released at once.
-    return attach_.start(Board::milliseconds(),initialized_);
+    return attach_.start(Board::milliseconds(),initialized_,hostPresent_);
 }
 bool InstrumentUsb::connect(void *context,usb::QuietAttach::Kind kind) {
     auto &self=*static_cast<InstrumentUsb*>(context);
@@ -37,7 +37,7 @@ bool InstrumentUsb::connect(void *context,usb::QuietAttach::Kind kind) {
 #endif
         HAL_PCD_DevDisconnect(&usbPcd);
         Board::delay(10);
-        HAL_PCD_DevConnect(&usbPcd); self.attachedAt_=Board::milliseconds();
+        HAL_PCD_DevConnect(&usbPcd);
         return true;
     }
     if (self.active_ || !self.initialized_) return self.active_;
@@ -49,7 +49,7 @@ bool InstrumentUsb::connect(void *context,usb::QuietAttach::Kind kind) {
         Board::delay(usb::ReattachPlan::DetachMs);
     }
     if (USBD_Start(&usbDevice) != USBD_OK) { self.release(true); self.initialized_=false; return false; }
-    self.active_=true; self.initialized_=false; self.attachedAt_=Board::milliseconds(); self.reattach_.started();
+    self.active_=true; self.initialized_=false; self.reattach_.started();
     self.watchdog_=usb::AddressWatchdog{}; // A new session: no host, deadline or retry of the last one.
     self.host_=usb::HostPresence{}; self.hostPresent_=false; self.busResets_=usbResets;
     CooperativeService::install([](void *context,uint32_t now) {
@@ -83,7 +83,7 @@ bool InstrumentUsb::connected() const {
     return active_ && usb::instrument.configured && usbDevice.dev_state == USBD_STATE_CONFIGURED;
 }
 bool InstrumentUsb::hostActive(uint32_t now) const {
-    return connected() || hostPresent_ || int32_t(now-busActivityAt_) < int32_t(HostQuietMs);
+    return connected() || hostPresent_ || enumerating(now);
 }
 void InstrumentUsb::poll(uint32_t now) {
     const auto *registers = reinterpret_cast<const USB_OTG_DeviceTypeDef*>(
@@ -92,15 +92,15 @@ void InstrumentUsb::poll(uint32_t now) {
     const uint32_t at = Board::milliseconds();
     if (active_) host_.sample(at, (registers->DSTS & USB_OTG_DSTS_FNSOF) >> USB_OTG_DSTS_FNSOF_Pos);
     hostPresent_ = active_ && host_.present(at);
-    // A bus reset is a host's activity (quiet window, saves wait) only once its SOFs prove it there;
-    // until then it waits, so a host plugged in later still gets its window and resets without a
-    // proven host give none.
-    if (hostPresent_ && usbResets != busResets_) { busResets_ = usbResets; busActivityAt_ = now; attach_.window().reset(now); }
+    // A bus reset opens the quiet window only once its host's SOFs prove it there; until then it
+    // waits, so a host plugged in later still gets its window and resets without a proven host
+    // (a pulled cable's lines) give none.
+    if (hostPresent_ && usbResets != busResets_) { busResets_ = usbResets; attach_.window().reset(now); }
     if (polling_) return;
     Polling guard(polling_);
     if (connected()) attach_.configured(); // A healthy host: the capture runs again at once, no stale reconnect.
     if (reattach_.due(now)) start(); // start() services the attach itself (and abandons a failed one).
-    else attach_.service(now);       // The window is a deadline: this pass's earlier `now` never ends it.
+    else attach_.service(now, hostPresent_); // The window is a deadline: this pass's earlier `now` never ends it.
     if (!active_) return;
     // The watchdog's reconnects, and its hostSeen_, only for a host proven by its SOFs (a host that
     // lost the device's address keeps sending them). Without one - none plugged in, a pulled cable,
@@ -115,7 +115,7 @@ void InstrumentUsb::poll(uint32_t now) {
         if (watchdog_.update(now,usbResets,boot_diagnostics.usbReads,enumerated && (registers->DCFG & USB_OTG_DCFG_DAD))) {
             attach_.window().reset(now); // A retry of the same episode: no new budget.
             attach_.want(usb::QuietAttach::Kind::Reconnect);
-            attach_.service(Board::milliseconds()); // Now if the capture is quiet, else from a later poll.
+            attach_.service(Board::milliseconds(), hostPresent_); // Now if the capture is quiet, else from a later poll.
         }
     }
     synchronize();
