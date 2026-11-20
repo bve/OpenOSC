@@ -79,6 +79,9 @@ bool Engine::scopeCommand(const Command &c) {
     } else if (match("ACQuire:INTerleave:STATe")) { // What runs: active (0/1), the blockers.
         if (!c.query || *c.argument) error(-108, c.query);
         else { const auto s = backend_.interleave(); reply("%u,%lu", unsigned(s.active), (unsigned long)s.blockers); }
+    } else if (match("ACQuire:INTerleave:MATCh")) {
+        if (!c.query || *c.argument) error(-108, c.query);
+        else { const auto *m = backend_.configuration(); reply("%u", unsigned(m && m->interleaveMatch)); }
     } else if (match("ACQuire:INTerleave")) {
         const auto state = backend_.interleave();
         if (c.query) {

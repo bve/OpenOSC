@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/data/status.hpp"
 #include "openosc/acquisition/adc_bus_glitch.hpp"
+#include "openosc/acquisition/interleave_match.hpp"
 #include <cstddef>
 
 namespace openosc::scope {
@@ -66,6 +67,8 @@ struct FrameMetadata {
     TriggerEdge triggerEdge; // What triggerIndex was found for (known only while triggered).
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
+    // Immutable boot profile entry. Transferred file payloads already hold the corrected codes.
+    const InterleaveMatch *interleaveMatch = nullptr;
     ChannelMetadata channels[2];
     bool valid() const;
     // No trigger: not triggered, index and shift zero (the one reset of all three).
@@ -135,6 +138,7 @@ private:
     const uint16_t *banks_[4]{};
     SplitHistory split_{};
     size_t wordsPerBank_ = 0;
+    int32_t matchBiasQ23_ = 0;
     int16_t evenShiftQ8_ = 0;
     int8_t evenShift_ = 0; // InterleaveCorrection::shift of the metadata's offset.
     bool valid_ = false;
@@ -146,7 +150,7 @@ private:
         if (metadata_.layout == Layout::FourByteBanks)
             return reinterpret_cast<const uint8_t *>(banks_[position & 3])[position >> 2];
         if (metadata_.layout == Layout::InterleavedCh1) {
-            const uint16_t word = wordAt(position >> 1);
+            const uint16_t word = interleaveWordAt(position >> 1);
             return position & 1 ? uint8_t(word) : uint8_t(word >> 8);
         }
         return uint8_t(wordAt(position) >> (channel * 8));
@@ -163,9 +167,17 @@ private:
         const uint32_t offset = metadata_.layout == Layout::Linear ? position : position >> 2;
         return split_.historyWords ? split_.word(banks_, bank, offset, laneRing()) : banks_[bank][offset];
     }
+    __attribute__((always_inline)) uint16_t interleaveWordAt(uint32_t position) const {
+        const unsigned bank = position & 3;
+        const uint32_t offset = position >> 2;
+        return split_.historyWords ? split_.word(banks_, bank, offset, metadata_.ring >> 3) : banks_[bank][offset];
+    }
     // A suspect captured byte at a record index: resolved from its corrected neighbours, else the
     // byte itself, corrected.
     uint8_t resolveGlitch(unsigned channel, size_t index, uint8_t raw) const;
+    bool matchSuspect(uint8_t raw, uint32_t index, uint32_t position) const;
+    bool matchInterleaveQ8(uint32_t index, int32_t &output) const;
+    int16_t matchedCode(uint32_t index, uint32_t position) const;
 };
 // Sequential analysis validates its immutable frame/channel once and advances the ring without
 // a division or repeated channel checks per point. Random access and this cursor share the same
@@ -190,10 +202,14 @@ class FrameView::Cursor {
 public:
     __attribute__((always_inline)) bool next(int16_t &output) {
         if (!remaining_) return false;
-        const uint8_t raw = frame_.byteAtPosition(channel_, position_);
-        const uint8_t code = __builtin_expect(AdcBusGlitch::suspect(raw), 0) ? frame_.resolveGlitch(channel_, index_, raw)
-                                                                              : frame_.corrected(raw, position_);
-        output = code < 128 ? code : int16_t(code) - 256;
+        if (__builtin_expect(frame_.metadata_.interleaveMatch && !(position_ & 1), 0))
+            output = frame_.matchedCode(index_, position_);
+        else {
+            const uint8_t raw = frame_.byteAtPosition(channel_, position_);
+            const uint8_t code = __builtin_expect(AdcBusGlitch::suspect(raw), 0) ? frame_.resolveGlitch(channel_, index_, raw)
+                                                                                  : frame_.corrected(raw, position_);
+            output = code < 128 ? code : int16_t(code) - 256;
+        }
         --remaining_; ++index_;
         if (++logical_ == 0 || ++position_ == frame_.metadata_.ring) position_ = 0;
         return true;
@@ -204,7 +220,7 @@ public:
     template <class F> __attribute__((always_inline)) uint32_t run(uint32_t n, F &&f) {
         if (n > remaining_) n = remaining_;
         const auto &m = frame_.metadata_;
-        if (frame_.split_.historyWords) {
+        if (frame_.split_.historyWords || m.interleaveMatch) {
             int16_t code;
             for (uint32_t k = 0; k < n; ++k) { next(code); f(code); }
             return n;

@@ -34,6 +34,9 @@ bool DataAccess::initialize(MeasurementMode view, FactoryRecordPolicy factoryRec
         if (pwmFile_.load()) scopeCalibration_.setPwm(pwmFile_.values());
         if (gainFile_.load()) scopeCalibration_.setGain(gainFile_.values());
         if (interleaveFile_.load()) scopeCalibration_.setInterleave(interleaveFile_.values());
+#if OPENOSC_BOARD == 703
+        interleaveMatchProfiles_.load(calibration_.crc(), reinterpret_cast<const uint32_t *>(UID_BASE));
+#endif
     }
     previousTick_ = Board::milliseconds();
     timeUs_ = uint64_t(previousTick_) * 1000;

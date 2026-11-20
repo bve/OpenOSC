@@ -372,6 +372,16 @@ scope::ChannelMetadata DataAccess::scopeChannelFor(const ScopeRequest &request, 
 void DataAccess::describeChannels(scope::FrameMetadata &metadata) {
     for (unsigned c = 0; c < 2; ++c) metadata.channels[c] = scopeChannelFor(request_, c);
 }
+#if OPENOSC_BOARD == 703
+const scope::InterleaveMatch *DataAccess::matchFor(const scope::FrameMetadata &metadata,
+                                                  const scope::FrontendSettings &frontend,
+                                                  const Rational &rate) const {
+    if (!frontend.interleave || frontend.rangeBoost || metadata.rolling || zeroBusy() ||
+        interleaveMeasure_.active() || !interleaveCalibrated() || !metadata.channels[0].calibrated)
+        return nullptr;
+    return interleaveMatchProfiles_.find(TimerClock::apb1(), rate, metadata.channels[0]);
+}
+#endif
 scope::TriggerSettings DataAccess::triggerForFrame(const scope::FrameMetadata &metadata) const {
     auto trigger = request_.trigger;
     if (!factoryInterleave() && metadata.layout == scope::Layout::InterleavedCh1 && trigger.channel == scope::Channel::Ch1) {
@@ -397,6 +407,9 @@ bool DataAccess::describeNext(scope::FrameMetadata &metadata) {
     next.interleaveOffset=next.layout==scope::Layout::InterleavedCh1 ? recordInterleaveOffset() : 0;
     next.clearTrigger();
     describeChannels(next);
+#if OPENOSC_BOARD == 703
+    next.interleaveMatch = interleaveMatchProfiles_.empty() ? nullptr : matchFor(next, appliedFrontend(request_), rate);
+#endif
     if (!next.valid()) return false;
     metadata=next;
     return true;
@@ -532,6 +545,14 @@ bool DataAccess::startCapture() {
                                        request_, 0, frontend.physicalRange(0));
         trigger = triggerForFrame(metadata);
     }
+#if OPENOSC_BOARD == 703
+    if (!interleaveMatchProfiles_.empty() && frontend.interleave && !rolling) {
+        scope::CaptureTiming timing;
+        Rational actualRate;
+        if (scope::CaptureTiming::points(TimerClock::apb1(), plan.rate, buffer.pointsPerTransfer(), timing, actualRate))
+            metadata.interleaveMatch = matchFor(metadata, frontend, actualRate);
+    }
+#endif
     usbtrace::mark(usbtrace::Tag::CaptureBegin);
     const bool captureStarted = capture_.start(metadata, frontend, buffer, rolling, trigger.level, zeroTrial() ? nullptr : &trigger);
     usbtrace::mark(usbtrace::Tag::CaptureEnd);

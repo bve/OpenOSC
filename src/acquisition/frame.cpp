@@ -2,6 +2,7 @@
 #include "openosc/acquisition/adc_bus_glitch.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <initializer_list>
 #if defined(__ARM_FEATURE_DSP)
 #include "stm32h7xx.h" // CMSIS-Core: the Cortex-M7 SIMD intrinsics.
@@ -32,6 +33,8 @@ bool FrameMetadata::valid() const {
         return false;
     if (!InterleaveCorrection::valid(interleaveOffset) || (interleaveOffset != 0 && layout != Layout::InterleavedCh1))
         return false;
+    if (interleaveMatch && (layout != Layout::InterleavedCh1 || rolling || !interleaveMatch->valid()))
+        return false;
     if (layout == Layout::FourByteBanks && channels[0].enabled == channels[1].enabled)
         return false; // Byte lanes hold exactly one channel.
     for (auto c : channels)
@@ -54,6 +57,9 @@ FrameView::FrameView(const FrameMetadata &metadata, const uint16_t *const *banks
     if (valid_) {
         const float offsetQ8 = metadata_.interleaveOffset * 256;
         evenShiftQ8_ = int16_t(offsetQ8 + (offsetQ8 < 0 ? -0.5f : 0.5f));
+        if (metadata_.interleaveMatch)
+            matchBiasQ23_ = metadata_.interleaveMatch->bias(
+                evenShiftQ8_, int32_t(std::lround(std::clamp(metadata_.channels[0].zeroCode, -128.0, 127.0) * 256)));
     }
 }
 bool FrameView::validate() const {
@@ -104,6 +110,10 @@ bool FrameView::code(Channel channel, size_t index, uint8_t &output) const {
         (metadata_.layout == Layout::InterleavedCh1 && c))
         return false;
     const uint32_t position = uint32_t(metadata_.origin + uint32_t(index)) % metadata_.ring;
+    if (__builtin_expect(metadata_.interleaveMatch && !(position & 1), 0)) {
+        output = uint8_t(matchedCode(uint32_t(index), position));
+        return true;
+    }
     const uint8_t raw = byteAtPosition(c, position);
     output = __builtin_expect(AdcBusGlitch::suspect(raw), 0) ? resolveGlitch(c, index, raw) : corrected(raw, position);
     return true;
@@ -118,6 +128,7 @@ bool FrameView::signedCode(Channel channel, size_t index, int16_t &output) const
 bool FrameView::interleavedQ8(uint32_t index, int32_t &output) const {
     if (!valid_ || metadata_.layout != Layout::InterleavedCh1 || index >= metadata_.samples) return false;
     const uint32_t position = uint32_t(metadata_.origin + index) % metadata_.ring;
+    if (metadata_.interleaveMatch && !(position & 1) && matchInterleaveQ8(index, output)) return true;
     const uint8_t raw = byteAtPosition(0, position);
     if (__builtin_expect(AdcBusGlitch::suspect(raw), 0)) {
         const uint8_t resolved = resolveGlitch(0, index, raw);
@@ -127,8 +138,68 @@ bool FrameView::interleavedQ8(uint32_t index, int32_t &output) const {
         }
     }
     const int32_t q8 = int32_t(int8_t(raw)) * 256 + ((position & 1) ? 0 : evenShiftQ8_);
-    output = q8 < (-128 * 256) ? -128 * 256 : q8 > 127 * 256 ? 127 * 256 : q8;
+    output = std::clamp(q8, int32_t(-128 * 256), int32_t(127 * 256));
     return true;
+}
+namespace {
+__attribute__((always_inline)) inline int32_t matchPair(uint16_t word, const int16_t *taps, int32_t sum) {
+#if defined(OPENOSC_PAIR_SIMD)
+    uint32_t coefficients;
+    std::memcpy(&coefficients, taps, sizeof(coefficients));
+    const uint32_t samples = __sxtb16(word | (uint32_t(word) << 8)); // ADC A (odd) occupies the low half.
+    return __smladx(samples, coefficients, sum);
+#else
+    return sum + int32_t(int8_t(word >> 8)) * taps[0] + int32_t(int8_t(word)) * taps[1];
+#endif
+}
+int32_t roundSigned(int32_t value, int32_t unit) {
+    return value < 0 ? -((-value + unit / 2) / unit) : (value + unit / 2) / unit;
+}
+} // namespace
+__attribute__((noinline, cold)) bool FrameView::matchSuspect(uint8_t raw, uint32_t index, uint32_t position) const {
+    return raw == 0x7f || (raw == 0x3f && resolveGlitch(0, index, raw) != corrected(raw, position));
+}
+__attribute__((noinline)) bool FrameView::matchInterleaveQ8(uint32_t index, int32_t &output) const {
+    constexpr uint32_t radius = InterleaveMatch::Radius;
+    // Retain the captured ends and clipped waveforms. A stencil must stay inside the record.
+    if (index < radius || metadata_.samples - index <= radius) return false;
+    const uint32_t first = index - radius;
+    uint32_t logical = uint32_t(metadata_.origin + first), at = logical % metadata_.ring;
+    const auto *taps = metadata_.interleaveMatch->q15;
+    int32_t sum = 0;
+    int8_t center = 0;
+    // Accumulate on the original bytes. The fractional even shift and zero baseline are
+    // constants in this linear region; fold them into a single Q23 bias after the MACs.
+    for (unsigned i = 0; i < 2 * radius; i += 2) {
+        const uint16_t word = interleaveWordAt(at >> 1);
+        const auto even = uint8_t(word >> 8), odd = uint8_t(word);
+        const int32_t evenQ8 = int32_t(int8_t(even)) * 256 + evenShiftQ8_;
+        if (even == 0x80 || odd == 0x80 || uint32_t(evenQ8 + 128 * 256) > 255 * 256)
+            return false;
+        if (__builtin_expect(AdcBusGlitch::suspectWord(word), 0) &&
+            (matchSuspect(even, first + i, at) || matchSuspect(odd, first + i + 1, at + 1)))
+            return false;
+        if (i == radius) center = int8_t(even);
+        sum = matchPair(word, taps + i, sum);
+        logical += 2;
+        at += 2;
+        if (!logical || at == metadata_.ring) at = 0;
+    }
+    const uint8_t last = uint8_t(interleaveWordAt(at >> 1) >> 8);
+    const int32_t lastQ8 = int32_t(int8_t(last)) * 256 + evenShiftQ8_;
+    if (last == 0x80 || uint32_t(lastQ8 + 128 * 256) > 255 * 256 ||
+        (__builtin_expect(AdcBusGlitch::suspect(last), 0) && matchSuspect(last, first + 2 * radius, at)))
+        return false;
+    sum += int32_t(int8_t(last)) * taps[2 * radius];
+    const int32_t delta = roundSigned(sum * 256 + matchBiasQ23_, InterleaveMatch::Unity);
+    output = std::clamp(center * 256 + evenShiftQ8_ - delta, int32_t(-128 * 256), int32_t(127 * 256));
+    return true;
+}
+int16_t FrameView::matchedCode(uint32_t index, uint32_t position) const {
+    int32_t q8;
+    if (matchInterleaveQ8(index, q8)) return int16_t(roundSigned(q8, 256));
+    const uint8_t raw = byteAtPosition(0, position);
+    return int8_t(AdcBusGlitch::suspect(raw) ? resolveGlitch(0, index, raw) : corrected(raw, position));
 }
 uint32_t FrameView::interleaveRails(uint32_t first, uint32_t count, uint32_t limit) const {
     if (!valid_ || metadata_.layout != Layout::InterleavedCh1 || first >= metadata_.samples)

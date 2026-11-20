@@ -66,7 +66,7 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
     const bool fresh = !valid_ || m.sequence != metadata_.sequence || m.timestampUs != metadata_.timestampUs;
     bool reset = width != viewport_.width || height != viewport_.height || m.samples != metadata_.samples || m.ring != metadata_.ring ||
                  m.timebaseNs != metadata_.timebaseNs || m.rolling!=metadata_.rolling ||
-                 m.interleaveOffset != metadata_.interleaveOffset || // The same codes read otherwise.
+                 m.interleaveOffset != metadata_.interleaveOffset || m.interleaveMatch != metadata_.interleaveMatch ||
                  m.samplesPerSecond.numerator != metadata_.samplesPerSecond.numerator ||
                  m.samplesPerSecond.denominator != metadata_.samplesPerSecond.denominator;
     for (unsigned c = 0; c < 2; ++c) {

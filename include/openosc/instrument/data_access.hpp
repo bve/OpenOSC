@@ -35,6 +35,9 @@
 #include "openosc/calibration/gain_calibration.hpp"
 #include "openosc/calibration/gain_file.hpp"
 #include "openosc/calibration/interleave_file.hpp"
+#if OPENOSC_BOARD == 703
+#include "openosc/calibration/interleave_match_file.hpp"
+#endif
 #include "openosc/calibration/scope_calibration.hpp"
 #include "openosc/storage/storage_admission.hpp"
 
@@ -382,6 +385,11 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     calibration::PwmZeroCalibration hardwareZero_{scopeCalibration_,pwmFile_};
     calibration::GainFile gainFile_;
     calibration::InterleaveFile interleaveFile_;
+#if OPENOSC_BOARD == 703
+    calibration::InterleaveMatchProfiles interleaveMatchProfiles_;
+    const scope::InterleaveMatch *matchFor(const scope::FrameMetadata &metadata,
+                                          const scope::FrontendSettings &frontend, const Rational &rate) const;
+#endif
     calibration::GainCalibration gain_{scopeCalibration_,gainFile_};
     calibration::ZeroOperation zeroOperation_;
     uint32_t frontendGeneration_=0; // Of the offsets the running capture was configured with.

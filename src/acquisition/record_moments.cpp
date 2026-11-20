@@ -114,8 +114,9 @@ bool RecordMoments::measure(const FrameView &frame, Channel channel, uint32_t fi
         first > m.samples || count > m.samples - first)
         return false;
     if (!count) return true;
-    // Past a uint32 wrap of origin + index several indices share a place (as the factory reads them).
-    if (uint64_t(m.origin) + first + count > 0x100000000ULL) {
+    // A matched record needs the neighbours of each corrected sample. The cursor also
+    // preserves the record's wrap-before-modulo when origin + index crosses UINT32_MAX.
+    if (m.interleaveMatch || uint64_t(m.origin) + first + count > 0x100000000ULL) {
         auto reader = frame.cursor(channel, first);
         int16_t code;
         for (uint32_t i = 0; i < count && reader.next(code); ++i) out.add(code);
