@@ -54,6 +54,8 @@ SECTIONS {
        zeroes both in 64-bit ECC words before any constructor runs (the job is built in place later). */
     .decode_workspace (NOLOAD) : { . = ALIGN(8); _sdecode_workspace = .; KEEP(*(.decode_workspace)) . = ALIGN(8); _edecode_workspace = .; } > ITCM
     .usb_trace (NOLOAD) : { _susb_trace = .; KEEP(*(.usb_trace)) . = ALIGN(8); _eusb_trace = .; } > ITCM
+    /* Software drawing's reusable silhouette, initialized in 64-bit ECC words at reset. */
+    .scope_glow (NOLOAD) : { . = ALIGN(8); _sscope_glow = .; KEEP(*(.scope_glow)) . = ALIGN(8); _escope_glow = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")
     ASSERT(ADDR(.framebuffer) == 0x24000000, "Panel framebuffer address changed")
@@ -63,7 +65,8 @@ SECTIONS {
     ASSERT(SIZEOF(.capture_arena) == 393216, "Record banks 1-3 must be 384 KiB of AXI SRAM")
     ASSERT(SIZEOF(.acquisition) == 131072, "Record bank 0 must be the 128 KiB AHB SRAM")
     ASSERT(SIZEOF(.decode_workspace) <= 40960, "Decoder workspace exceeds its 40 KiB plan")
-    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) <= 64512, "ITCM: decoder workspace and trace ring exceed 63 KiB")
+    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) + SIZEOF(.scope_glow) <= LENGTH(ITCM),
+           "ITCM: decoder, trace ring and Glow silhouette exceed usable RAM")
     ASSERT(SIZEOF(.capture_trial) == 16384, "The AutoSetup trial area must be AXI SRAM")
     ASSERT(SIZEOF(.capture_nodes) == 960, "MDMA history nodes must be AXI SRAM")
     ASSERT(LOADADDR(.dma_data) + SIZEOF(.dma_data) <= __openosc_flash_end, "Application exceeds Flash reservation")

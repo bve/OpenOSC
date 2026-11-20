@@ -33,6 +33,7 @@ private:
     void recordGaps(const RecordGaps &gaps);      // The window's parts outside the record (record_edges.cpp).
     void recordGapLabels(const RecordGaps &gaps);
     void traces();
+    void glow(unsigned channel);
     void spectrum();
     void persistence();
     void markers();

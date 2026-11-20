@@ -1,4 +1,5 @@
 #include "openosc/display/boot_splash.hpp"
+#include "openosc/display/boot_credits.hpp"
 #include "openosc/display/display.hpp"
 #include "openosc/platform/board.hpp"
 #include "boot_splash_images.hpp"
@@ -33,9 +34,7 @@ uint32_t randomWord() {
     if (!ready) {
         if (Seed[0] == ~Seed[1]) word ^= Seed[0];
         if (!word) word = 0x9e3779b9;
-        word ^= word << 13;
-        word ^= word >> 17;
-        word ^= word << 5;
+        word = scramble(word);
     }
     Seed[0] = word;
     Seed[1] = ~word;
@@ -48,7 +47,8 @@ Style choose() {
 }
 
 void draw(Style style, uint16_t *frame) {
-    const auto &image = Images[valid(style) ? unsigned(style) : 0];
+    const unsigned index = valid(style) ? unsigned(style) : 0;
+    const auto &image = Images[index];
     auto *cursor = image.commands;
     const auto *end = cursor + image.size;
     unsigned written = 0, nextService = 1024;
@@ -65,6 +65,16 @@ void draw(Style style, uint16_t *frame) {
         }
         if (written >= nextService) { Board::service(); nextService += 1024; }
     }
+#ifdef OPENOSC_APPLICATION
+    // The style picker in the Recovery or the application has already obtained a random word.
+    const uint32_t word = Seed[0];
+    uint32_t seed = word == ~Seed[1] ? word : randomWord();
+    if (!seed) seed = 0x9e3779b9;
+    for (const auto &group : Credits[index]) {
+        drawCredits<CreditSlots>(group, frame, seed, CreditColumns, CreditColumnWidth, CreditRowStride);
+        Board::service();
+    }
+#endif
     __DSB();
 }
 } // namespace openosc::boot_splash

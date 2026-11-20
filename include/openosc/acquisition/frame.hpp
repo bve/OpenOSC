@@ -249,6 +249,7 @@ public:
     // reduction keeps its state in registers. Returns the points read.
     uint32_t column(uint32_t n, ColumnStats &out);
 private:
+    template <class Read> uint32_t packedColumn(uint32_t n, ColumnStats &out, Read read, uint32_t correction);
     struct AsCaptured {
         __attribute__((always_inline)) uint8_t operator()(uint8_t raw, uint32_t) const { return raw; }
     };

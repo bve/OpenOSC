@@ -1,5 +1,5 @@
 #include "openosc/ui/scope/painter.hpp"
-#include <algorithm>
+#include "trace_geometry.hpp"
 
 namespace openosc::plot {
 void Painter::trace(const Trace &trace, uint32_t color, uint8_t opacity, unsigned width, Style style,
@@ -8,54 +8,14 @@ void Painter::trace(const Trace &trace, uint32_t color, uint8_t opacity, unsigne
         return;
     Path path(layer_, area_, color, opacity, width, model_.statistics());
     Path extrema(layer_, area_, color, opacity, width, model_.statistics());
-    int previous = Missing;
-    for (unsigned x = 0; x < model_.viewport().width; ++x) {
-        const auto &p = trace.columns[x];
-        if (p.first == Missing) {
-            path.gap();
-            previous = Missing;
-            continue;
-        }
-        if (style == Style::Points) {
-            path.vertex(x, p.last);
-            path.vertex(x, p.last + 1);
-            path.gap();
-        } else if (center)
-            path.vertex(x, (int(p.a) + p.b) / 2);
-        else if (style == Style::Envelope) {
-            path.vertex(x, std::min(p.a, p.b));
-            path.vertex(x, std::max(p.a, p.b) + 1);
-            path.gap();
-        } else {
-            path.vertex(x, p.last);
-            const int before = previous == Missing ? p.first : previous;
-            if (std::min(p.a, p.b) < std::min(before, int(p.last)) ||
-                std::max(p.a, p.b) > std::max(before, int(p.last))) {
-                extrema.vertex(x, std::min(p.a, p.b));
-                extrema.vertex(x, std::max(p.a, p.b) + 1);
-                extrema.gap();
-            }
-            previous = p.last;
-        }
-    }
+    traceGeometry(trace, model_.viewport().width, style, center, path, extrema);
 }
 void Painter::xy(const Point *points, unsigned count, uint32_t color, uint8_t opacity, unsigned width,
                  Style style) {
     if (!opacity)
         return;
     Path path(layer_, area_, color, opacity, width, model_.statistics());
-    for (unsigned i = 0; i < count; ++i) {
-        const auto p = points[i];
-        if (p.x == Missing || p.y == Missing) {
-            path.gap();
-            continue;
-        }
-        path.vertex(p.x, p.y);
-        if (style == Style::Points) {
-            path.vertex(p.x, p.y + 1);
-            path.gap();
-        }
-    }
+    xyGeometry(points, count, style, path);
 }
 void Painter::traces() {
     const auto &o = model_.options();
@@ -66,20 +26,20 @@ void Painter::traces() {
             text("XY NEEDS CH1 + CH2", 8, 18, palette_.readout, 180);
             return;
         }
-        if (o.glow)
-            xy(s.xy, model_.xyCount(), palette_.channels[0], o.channels[0].opacity / 4, o.channels[0].width + 4,
-               o.style);
+        if (o.glow) glow(0);
         xy(s.xy, model_.xyCount(), palette_.channels[0], o.channels[0].opacity, o.channels[0].width, o.style);
         return;
     }
     if (model_.hasReference())
         trace(s.reference, palette_.reference, 160, 1, Style::Vectors, true);
+    if (o.glow) {
+        glow(0);
+        glow(1);
+    }
     for (unsigned c = 0; c < 2; ++c) {
         const auto &channel = o.channels[c];
         if (o.peakHold)
             trace(s.peaks[c], palette_.channels[c], 65U * channel.opacity / 255, 1, Style::Envelope);
-        if (o.glow)
-            trace(s.traces[c], palette_.channels[c], channel.opacity / 4, channel.width + 4, o.style);
         trace(s.traces[c], palette_.channels[c], channel.opacity, channel.width, o.style);
     }
     if (o.math != Math::Off) {

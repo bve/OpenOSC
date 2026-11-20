@@ -7,11 +7,21 @@ namespace openosc::scope {
 namespace {
 constexpr double Pi=3.14159265358979323846;
 constexpr unsigned CicOrder=4; // Plain averaging leaves alias lobes at only -13 dB.
-// Response of the decimation filter at FFT bin k, used to undo its droop.
-double cicResponse(unsigned k,unsigned count,unsigned step) {
-    const double angle=Pi*k/count;
-    return std::pow(std::sin(angle)/(step*std::sin(angle/step)),CicOrder);
-}
+double fourthPower(double v) { const double squared=v*v; return squared*squared; }
+// The CIC correction visits contiguous bins. Generate sin(k * angle) using the
+// recurrence in double precision; the amplitude array ultimately stores floats.
+class BinSine {
+public:
+    explicit BinSine(double angle) : factor_(2*std::cos(angle)), current_(std::sin(angle)) {}
+    double next() {
+        const double value=current_;
+        current_=factor_*current_-previous_;
+        previous_=value;
+        return value;
+    }
+private:
+    double factor_, current_, previous_=0;
+};
 }
 void Spectrum::window(SpectrumStorage &s,unsigned count,SpectrumWindow type) {
     if (s.windowCount==count && s.cachedWindow==type) return;
@@ -54,21 +64,25 @@ bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const Spectru
         for (unsigned n=0;n<CicOrder;++n) { const uint64_t input=value; value-=delays[n]; delays[n]=input; }
         return int64_t(value);
     };
-    const double gain=std::pow(double(step),double(CicOrder));
     // The record in order through its sequential reader: the same corrected codes as signedCode.
     auto reader=frame.cursor(Channel(options.channel));
-    int16_t first;
-    if (!frame.signedCode(Channel(options.channel),0,first)) return false;
-    // Settle on the first sample so the record starts without a filter transient.
-    if (step>1) for (unsigned n=0;n<CicOrder*step;++n) { push(first); if ((n+1)%step==0) pull(); }
-    for (unsigned i=0;i<count;++i) {
-        for (unsigned j=0;j<step;++j) {
-            int16_t sample;
-            if (!reader.next(sample)) return false;
-            if (step>1) push(sample); else s.real[i]=sample;
+    if (step==1) {
+        unsigned i=0;
+        if (reader.run(count,[&](int16_t sample) { s.real[i++]=sample; sum+=sample; })!=count) return false;
+    } else {
+        int16_t first;
+        if (!frame.signedCode(Channel(options.channel),0,first)) return false;
+        // Settle on the first sample so the record starts without a filter transient.
+        for (unsigned n=0;n<CicOrder;++n) {
+            for (unsigned j=0;j<step;++j) push(first);
+            pull();
         }
-        if (step>1) s.real[i]=float(double(pull())/gain);
-        sum+=s.real[i];
+        const double gain=fourthPower(step);
+        for (unsigned i=0;i<count;++i) {
+            if (reader.run(step,push)!=step) return false;
+            s.real[i]=float(double(pull())/gain);
+            sum+=s.real[i];
+        }
     }
     const auto &channel=frame.metadata().channels[options.channel];
     const float offset=options.removeDc ? sum/count : channel.calibrated ? channel.zeroCode : 0;
@@ -83,10 +97,20 @@ bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const Spectru
     const unsigned pairs=std::min(r.bins,count/2)-1;
     arm_cmplx_mag_f32(packed+2,s.amplitude+1,pairs);
     if (r.bins>count/2) s.amplitude[count/2]=std::abs(packed[1]);
+    if (step>1) {
+        BinSine signal(Pi/count), reduced(Pi/(count*step));
+        // Response of the decimation filter, used to undo the attenuation in its passband.
+        const float factor=2/s.weightSum;
+        for (unsigned k=1;k<r.bins;++k) {
+            const double response=fourthPower(signal.next()/(step*reduced.next()));
+            s.amplitude[k]=(s.amplitude[k]*factor)/float(response);
+        }
+        s.amplitude[0]*=1/s.weightSum;
+    } else {
+        for (unsigned k=0;k<r.bins;++k)
+            s.amplitude[k]*=(k==0 || k==count/2 ? 1 : 2)/s.weightSum;
+    }
     for (unsigned k=0;k<r.bins;++k) {
-        const float factor=(k==0 || k==count/2 ? 1 : 2)/s.weightSum;
-        s.amplitude[k]*=factor;
-        if (step>1 && k) s.amplitude[k]/=float(cicResponse(k,count,step));
         r.maximum=std::max(r.maximum,s.amplitude[k]);
         if (k && s.amplitude[k]>r.peakCodes) { r.peakCodes=s.amplitude[k]; r.peakBin=k; }
     }

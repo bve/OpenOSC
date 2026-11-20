@@ -4,13 +4,16 @@
 
 namespace openosc::storage {
 namespace {
+// f_mkdir in a frame of its own: inlined (LTO), its name buffer and directory objects sat in
+// ensureDirectory's frame under every f_stat it calls (the stack's deepest chains go through here).
+__attribute__((noinline)) FRESULT makeDirectory(const char *path) { return f_mkdir(path); }
 // One component: created if missing; FR_EXIST if something other than a directory is there.
 FRESULT component(const char *path) {
     FILINFO info{};
     const FRESULT found = f_stat(path, &info);
     if (found == FR_OK) return (info.fattrib & AM_DIR) ? FR_OK : FR_EXIST;
     if (found != FR_NO_FILE && found != FR_NO_PATH) return found;
-    const FRESULT made = f_mkdir(path);
+    const FRESULT made = makeDirectory(path);
     if (made != FR_OK && made != FR_EXIST) return made;
     return f_stat(path, &info) == FR_OK && (info.fattrib & AM_DIR) ? FR_OK : FR_EXIST;
 }

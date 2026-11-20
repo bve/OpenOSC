@@ -11,6 +11,7 @@ public:
     void palette(const MeterLook &look); // Chart in Background, line in Bar, grid in the base line colour.
     void update(const dmm::History *history, Quantity quantity, double reference, bool relative,
                 bool peerRelative = false, const char *temperatureUnit = "degC");
+    static constexpr int32_t MarkerSize = 3; // The single sample's marker (px).
 private:
     lv_obj_t *root_ = nullptr, *chart_ = nullptr, *range_ = nullptr, *reference_ = nullptr;
     lv_chart_series_t *series_ = nullptr;

@@ -225,19 +225,6 @@ bool FrameView::volts(Channel channel, size_t index, double &output) const {
     output = (raw - c.zeroCode) * c.voltsPerCode * c.probeNumerator / c.probeDenominator;
     return std::isfinite(output);
 }
-__attribute__((noinline)) uint32_t FrameView::Cursor::column(uint32_t n, ColumnStats &out) {
-    int16_t first = 0, last = 0, low = 0, high = 0;
-    int32_t sum = 0;
-    uint32_t lowAt = 0, highAt = 0, count = 0;
-    const uint32_t read = run(n, [&](int16_t code) __attribute__((always_inline)) {
-        if (!count) first = low = high = code;
-        if (code < low) { low = code; lowAt = count; }
-        if (code > high) { high = code; highAt = count; }
-        last = code; sum += code; ++count;
-    });
-    out = {first, last, low, high, sum, lowAt, highAt, count};
-    return read;
-}
 namespace {
 // One point of both channels in one register: CH1 in the low halfword, CH2 in the high, as
 // SXTB16 of a word holding CH1 in byte 0 and CH2 in byte 2.
@@ -469,7 +456,150 @@ struct Lane {
         sum += b.sum[shift ? 1 : 0];
     }
 };
+
+__attribute__((always_inline)) inline void addPoint(ColumnStats &out, int16_t code) {
+    if (!out.count) out.first = out.low = out.high = code;
+    if (code < out.low) { out.low = code; out.lowAt = out.count; }
+    if (code > out.high) { out.high = code; out.highAt = out.count; }
+    out.last = code;
+    out.sum += code;
+    ++out.count;
+}
+
+#if defined(OPENOSC_PAIR_SIMD)
+// The four bytes are consecutive points of one channel. Each lane tracks the earliest
+// extreme at its phase in the group, with the group number stored in one byte.
+struct MonoBlock {
+    static constexpr uint32_t Groups = 128; // Two signed bytes/group/halfword sum, down to -32768.
+    uint32_t low = 0x7f7f7f7f, high = 0x80808080, lowAt = 0, highAt = 0;
+    uint32_t sums = 0, last = 0;
+
+    void merge(ColumnStats &out, uint32_t count) const {
+        if (!out.count) out.first = int8_t(first);
+        for (unsigned phase = 0; phase < 4; ++phase) {
+            const unsigned shift = 8 * phase;
+            const int16_t lo = int8_t(low >> shift), hi = int8_t(high >> shift);
+            const uint32_t loAt = out.count + 4 * uint8_t(lowAt >> shift) + phase;
+            const uint32_t hiAt = out.count + 4 * uint8_t(highAt >> shift) + phase;
+            // Different phases are merged out of record order, so ties compare their indexes.
+            if ((!out.count && !phase) || lo < out.low || (lo == out.low && loAt < out.lowAt)) {
+                out.low = lo; out.lowAt = loAt;
+            }
+            if ((!out.count && !phase) || hi > out.high || (hi == out.high && hiAt < out.highAt)) {
+                out.high = hi; out.highAt = hiAt;
+            }
+        }
+        out.last = int8_t(last >> 24);
+        out.sum += int16_t(sums) + (int32_t(sums) >> 16);
+        out.count += count;
+    }
+    uint32_t first = 0;
+};
+
+template <class Read, bool Correct> __attribute__((noinline))
+uint32_t monoRun(Read read, uint32_t p, uint32_t end, uint32_t correction, MonoBlock &block) {
+    uint32_t low = block.low, high = block.high, lowAt = 0, highAt = 0, sums = 0, last = 0;
+    uint32_t at = 0;
+    for (; p != end; p += 4, at += 0x01010101U) {
+        const uint32_t raw = read(p);
+        if (__builtin_expect(suspectPair(raw), 0)) break;
+        const uint32_t code = Correct ? __qadd8(raw, correction) : raw;
+        __SSUB8(code, low); low = __SEL(low, code); lowAt = __SEL(lowAt, at);
+        __SSUB8(high, code); high = __SEL(high, code); highAt = __SEL(highAt, at);
+        sums = add16(sums, add16(evenCodes(code), oddCodes(code)));
+        if (!at) block.first = code;
+        last = code;
+    }
+    block.low = low; block.high = high; block.lowAt = lowAt; block.highAt = highAt;
+    block.sums = sums; block.last = last;
+    return p;
+}
+
+struct MonoBytesRead {
+    const uint16_t *const *banks;
+    __attribute__((always_inline)) uint32_t operator()(uint32_t p) const {
+        const uint32_t k = p >> 2;
+        return uint32_t(reinterpret_cast<const uint8_t *>(banks[0])[k]) |
+               uint32_t(reinterpret_cast<const uint8_t *>(banks[1])[k]) << 8 |
+               uint32_t(reinterpret_cast<const uint8_t *>(banks[2])[k]) << 16 |
+               uint32_t(reinterpret_cast<const uint8_t *>(banks[3])[k]) << 24;
+    }
+};
+
+struct MonoInterleavedRead {
+    const uint16_t *const *banks;
+    __attribute__((always_inline)) uint32_t operator()(uint32_t p) const {
+        const unsigned bank = (p >> 1) & 2;
+        const uint32_t k = p >> 3;
+        // In capture words the high byte precedes the low one in time.
+        const uint32_t words = banks[bank][k] | uint32_t(banks[bank + 1][k]) << 16;
+#if defined(__ARM_FEATURE_DSP)
+        return __REV16(words);
+#else
+        return (words & 0xff00ff00U) >> 8 | (words & 0x00ff00ffU) << 8;
+#endif
+    }
+};
+#endif
 } // namespace
+
+#if defined(OPENOSC_PAIR_SIMD)
+template <class Read> __attribute__((noinline))
+uint32_t FrameView::Cursor::packedColumn(uint32_t n, ColumnStats &out, Read read, uint32_t correction) {
+    const uint32_t ring = frame_.metadata_.ring;
+    while (out.count < n) {
+        // Neither a physical ring wrap nor the uint32 origin wrap can be inside a group.
+        uint32_t points = std::min(n - out.count, ring - position_);
+        if (logical_) points = std::min(points, uint32_t(0) - logical_);
+        const uint32_t groupPoints = std::min(points & ~3U, 4 * MonoBlock::Groups);
+        if (!(position_ & 3) && groupPoints) {
+            MonoBlock block;
+            const uint32_t end = position_ + groupPoints;
+            const uint32_t stopped = correction ? monoRun<Read, true>(read, position_, end, correction, block)
+                                                : monoRun<Read, false>(read, position_, end, 0, block);
+            const uint32_t reduced = stopped - position_;
+            if (reduced) {
+                block.merge(out, reduced);
+                index_ += reduced; logical_ += reduced; remaining_ -= reduced;
+                position_ = !logical_ || stopped == ring ? 0 : stopped;
+            }
+            if (stopped == end) continue;
+            // A possible ADC bus glitch needs the original neighbours and their calibration.
+            for (unsigned i = 0; i < 4; ++i) {
+                int16_t code = 0;
+                next(code);
+                addPoint(out, code);
+            }
+        } else {
+            int16_t code = 0;
+            next(code);
+            addPoint(out, code);
+        }
+    }
+    return n;
+}
+#endif
+
+__attribute__((noinline)) uint32_t FrameView::Cursor::column(uint32_t n, ColumnStats &out) {
+#if defined(OPENOSC_PAIR_SIMD)
+    n = std::min(n, remaining_);
+    if (n >= 8 && !frame_.split_.active() && !frame_.metadata_.interleaveMatch) {
+        if (frame_.metadata_.layout == Layout::FourByteBanks) {
+            out = {};
+            return packedColumn(n, out, MonoBytesRead{frame_.banks_}, 0);
+        }
+        if (frame_.metadata_.layout == Layout::InterleavedCh1) {
+            const uint32_t correction = uint8_t(frame_.evenShift_) * 0x00010001U;
+            out = {};
+            return packedColumn(n, out, MonoInterleavedRead{frame_.banks_}, correction);
+        }
+    }
+#endif
+    ColumnStats scalar;
+    const uint32_t count = run(n, [&](int16_t code) __attribute__((always_inline)) { addPoint(scalar, code); });
+    out = scalar;
+    return count;
+}
 // Rare: the canonical bus correction of a suspect byte, exactly as Cursor applies it, out of the
 // hot loop so that the loop makes no call and keeps its state in registers.
 __attribute__((noinline, cold)) uint32_t FrameView::PairCursor::corrected(uint16_t word, uint32_t index) const {

@@ -266,6 +266,29 @@ bool EdgeScanner::votedFrequency(double samplesPerSecond, double &hertz) const {
     hertz = samplesPerSecond * inliers / sum;
     return std::isfinite(hertz) && hertz > 0;
 }
+namespace {
+// The band and edge passes and the tone estimate in frames of their own, one after the other: inlined
+// together, the two level histograms and the edge scanner (about 1.6 KiB) sat under the tone's 1 KiB
+// state in one frame of the deepest stack chain (Trigger Midpoint -> poll -> summarize, GitHub #62).
+// True when the edge pass ran and found edges active (ToneEstimate::wanted).
+__attribute__((noinline)) bool bandsAndEdges(const FrameView &frame, Channel channel, bool withEdges, SignalSummary &result) {
+    SignalBand bands[2];
+    StateLevels levels[2];
+    SignalBands::measure(frame, bands, withEdges ? &levels : nullptr);
+    robust(result, bands[unsigned(channel)]);
+    if (!withEdges) return false;
+    EdgeScanner edges;
+    const SignalBand thresholds = levels[unsigned(channel)].thresholds(bands[unsigned(channel)]); // One spike sets no threshold.
+    edges.begin(thresholds.low, thresholds.high, EdgeScanner::laneBurst(frame.metadata()));
+    edges.scan(frame, channel);
+    if (const double candidate = edges.retryCandidate()) { edges.confirm(candidate); edges.scan(frame, channel); }
+    edges.finish(frame.metadata().samplesPerSecond.value(), result);
+    return edges.active();
+}
+__attribute__((noinline)) ToneResult tone(const FrameView &frame, Channel channel, double mean) {
+    return ToneEstimate::measure(frame, channel, mean);
+}
+} // namespace
 SignalSummary Analyzer::summarize(const FrameView &frame, Channel channel, bool withEdges, bool withBand) {
     SignalSummary result;
     const uint32_t count = frame.metadata().samples;
@@ -274,20 +297,11 @@ SignalSummary Analyzer::summarize(const FrameView &frame, Channel channel, bool 
         return {};
     result.hasPulses = withEdges; // No edge pass, no pulse count: not a zero.
     if (!withEdges && !withBand) return result;
-    SignalBand bands[2];
-    StateLevels levels[2];
-    SignalBands::measure(frame, bands, withEdges ? &levels : nullptr);
-    robust(result, bands[unsigned(channel)]);
+    const bool edgesActive = bandsAndEdges(frame, channel, withEdges, result);
     if (withEdges) {
-        EdgeScanner edges;
-        const SignalBand thresholds = levels[unsigned(channel)].thresholds(bands[unsigned(channel)]); // One spike sets no threshold.
-        edges.begin(thresholds.low, thresholds.high, EdgeScanner::laneBurst(frame.metadata()));
-        edges.scan(frame, channel);
-        if (const double candidate = edges.retryCandidate()) { edges.confirm(candidate); edges.scan(frame, channel); }
         const double rate = frame.metadata().samplesPerSecond.value();
-        edges.finish(rate, result);
-        if (ToneEstimate::wanted(result, rate, edges.active()))
-            ToneEstimate::apply(result, ToneEstimate::measure(frame, channel, result.mean), rate);
+        if (ToneEstimate::wanted(result, rate, edgesActive))
+            ToneEstimate::apply(result, tone(frame, channel, result.mean), rate);
     }
     return result;
 }

@@ -7,8 +7,9 @@ extern uint32_t _estack, _sitext, _stext, _etext, _sidata, _sdata, _edata, _sbss
 extern uint32_t _sidma_data, _sdma_data, _edma_data;
 #endif
 #ifdef OPENOSC_APPLICATION
-// ITCM: the decoder workspace and the trace ring (.usb_trace, empty unless OPENOSC_USB_TRACE), 8-byte aligned.
+// ITCM workspaces using 64-bit ECC words.
 extern uint64_t _sdecode_workspace, _edecode_workspace, _susb_trace, _eusb_trace;
+extern uint64_t _sscope_glow, _escope_glow;
 #endif
 void Reset_Handler();
 void Bootstrap_Fault();
@@ -59,6 +60,7 @@ void Reset_Handler() {
     __DSB(); __ISB();
     for (auto* p = &_sdecode_workspace; p < &_edecode_workspace; ++p) *p = 0;
     for (auto* p = &_susb_trace; p < &_eusb_trace; ++p) *p = 0;
+    for (auto* p = &_sscope_glow; p < &_escope_glow; ++p) *p = 0;
     __DSB();
 #endif
     for (unsigned i = 0; i < 171; ++i)

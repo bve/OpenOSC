@@ -1,5 +1,6 @@
 #include "openosc/ui/scope/persistence.hpp"
 #include "openosc/ui/scope/model.hpp"
+#include "raster_line.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -97,37 +98,12 @@ void Persistence::resize(unsigned width,unsigned height) {
 }
 void Persistence::line(unsigned c,int x1,int y1,int x2,int y2) {
     if (!duration_ || c>=(duration_==InfinitePersistence ? 3U : 2U) || !width_ || !height_) return;
-    const int right=width_-1,bottom=height_-1;
-    const auto code=[&](int x,int y) { return (x<0?1:x>right?2:0)|(y<0?4:y>bottom?8:0); };
-    // Clip before Bresenham: heavily clipped traces never make an unbounded
-    // off-screen walk and never wrap into another row/channel's bitmap.
-    for (;;) {
-        const int a=code(x1,y1),b=code(x2,y2);
-        if (!(a|b)) break;
-        if (a&b) return;
-        const int out=a?a:b; int x,y;
-        if (out&12) {
-            y=out&4 ? 0 : bottom;
-            x=x1+int64_t(x2-x1)*(y-y1)/(y2-y1);
-        } else {
-            x=out&1 ? 0 : right;
-            y=y1+int64_t(y2-y1)*(x-x1)/(x2-x1);
-        }
-        if (a) { x1=x; y1=y; } else { x2=x; y2=y; }
-    }
+    if (!clipLine(x1,y1,x2,y2,width_-1,height_-1)) return;
     const auto bit=uint8_t(1U<<c);
     activeChannels_ |= bit;
     // A clipped segment visits every row between its endpoints.
     for (int y=std::min(y1,y2); y<=std::max(y1,y2); ++y) activeRows_[y] |= bit;
-    const int dx=std::abs(x2-x1),dy=-std::abs(y2-y1),sx=x1<x2?1:-1,sy=y1<y2?1:-1;
-    int error=dx+dy;
-    for (;;) {
-        mark(c,x1,y1);
-        if (x1==x2 && y1==y2) break;
-        const int twice=2*error;
-        if (twice>=dy) { error+=dy; x1+=sx; }
-        if (twice<=dx) { error+=dx; y1+=sy; }
-    }
+    rasterLine(x1,y1,x2,y2,[&](int x,int y) { mark(c,x,y); });
 }
 void Model::accumulate() {
     auto &p=storage_.persistence;

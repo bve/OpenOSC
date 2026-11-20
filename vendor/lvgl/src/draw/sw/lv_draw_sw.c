@@ -449,6 +449,11 @@ static void execute_drawing(lv_draw_task_t * t)
         case LV_DRAW_TASK_TYPE_MASK_RECTANGLE:
             lv_draw_sw_mask_rect(t, t->draw_dsc);
             break;
+        case LV_DRAW_TASK_TYPE_SOFTWARE_CALLBACK: {
+                const lv_draw_sw_callback_dsc_t * dsc = t->draw_dsc;
+                dsc->render(t, dsc);
+                break;
+            }
 #if LV_USE_VECTOR_GRAPHIC && LV_USE_THORVG
         case LV_DRAW_TASK_TYPE_VECTOR:
             lv_draw_sw_vector(t, t->draw_dsc);

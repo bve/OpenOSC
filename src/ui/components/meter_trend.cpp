@@ -17,18 +17,22 @@ void MeterTrend::create(lv_obj_t *parent, const Theme &theme) {
     lv_obj_set_style_bg_opa(chart_, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(chart_, lv_color_hex(theme.background), 0);
     lv_obj_set_style_border_width(chart_, 1, 0);
+    // The plot inside the frame: a minimum, a maximum and the single sample's marker stay clear of the border.
+    lv_obj_set_style_pad_all(chart_, MarkerSize / 2 + 1, 0);
     lv_obj_set_style_border_color(chart_, lv_color_hex(theme.grid), 0);
     lv_obj_set_style_line_color(chart_, lv_color_hex(theme.grid), LV_PART_MAIN);
     lv_obj_set_style_line_width(chart_, 1, LV_PART_MAIN);
     lv_obj_set_style_line_width(chart_, 1, LV_PART_ITEMS);
     lv_obj_set_style_width(chart_, 0, LV_PART_INDICATOR);
     lv_obj_set_style_height(chart_, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(chart_, LV_OPA_COVER, LV_PART_INDICATOR); // The single sample's marker (its size set in update).
     lv_chart_set_type(chart_, LV_CHART_TYPE_LINE);
-    lv_chart_set_point_count(chart_, dmm::History::Capacity);
+    lv_chart_set_point_count(chart_, 2);
     lv_chart_set_axis_range(chart_, LV_CHART_AXIS_PRIMARY_Y, 0, 1000);
     lv_chart_set_div_line_count(chart_, 3, 6);
     series_ = lv_chart_add_series(chart_, lv_color_hex(theme.accent), LV_CHART_AXIS_PRIMARY_Y);
-    lv_chart_set_series_ext_y_array(chart_, series_, values_);
+    std::fill(std::begin(values_), std::end(values_), LV_CHART_POINT_NONE);
+    lv_chart_set_series_ext_y_array(chart_, series_, values_); // Capacity slots: every point count fits.
     range_ = Elements::label(root_, "", 0, 58);
     reference_ = Elements::label(root_, "", 0, 74);
     for (auto *label : {range_, reference_}) {
@@ -48,18 +52,30 @@ void MeterTrend::palette(const MeterLook &look) {
     if (!lv_color_eq(lv_chart_get_series_color(chart_, series_), line)) lv_chart_set_series_color(chart_, series_, line);
     Elements::textColor(reference_, palette.muted);
 }
+// The chart holds the real samples only (GitHub #63): n of them span the width from the first one,
+// 2..Capacity points, no empty slots before them. LVGL draws no line below two points, so a single
+// sample is a marker between two empty points (the middle of three); none, an empty chart.
 void MeterTrend::update(const dmm::History *history, Quantity quantity, double reference, bool relative,
                         bool peerRelative, const char *temperatureUnit) {
     int32_t values[dmm::History::Capacity];
     std::fill(std::begin(values), std::end(values), LV_CHART_POINT_NONE);
+    const unsigned count = history ? unsigned(std::min<size_t>(history->size(), dmm::History::Capacity)) : 0;
+    const uint32_t points = count >= 2 ? count : count ? 3 : 2;
     const auto commit = [&] {
-        if (std::equal(std::begin(values), std::end(values), std::begin(values_))) return;
-        std::copy(std::begin(values), std::end(values), std::begin(values_));
+        const int32_t marker = count == 1 ? MarkerSize : 0;
+        if (lv_obj_get_style_width(chart_, LV_PART_INDICATOR) != marker) {
+            lv_obj_set_style_width(chart_, marker, LV_PART_INDICATOR);
+            lv_obj_set_style_height(chart_, marker, LV_PART_INDICATOR);
+        }
+        const bool same = lv_chart_get_point_count(chart_) == points &&
+                          std::equal(std::begin(values), std::end(values), std::begin(values_));
+        if (same) return;
+        std::copy(std::begin(values), std::end(values), std::begin(values_)); // Before the count: never a stale slot.
+        lv_chart_set_point_count(chart_, points); // The external array stays (start point 0).
         lv_chart_refresh(chart_);
     };
-    const unsigned count = history ? history->size() : 0;
-    if (count < 2) {
-        Elements::setText(range_, "Need two valid samples"); Elements::setText(reference_, "");
+    if (!count) {
+        Elements::setText(range_, "No valid samples yet"); Elements::setText(reference_, "");
         commit(); return;
     }
     double first; history->value(0, first);
@@ -72,7 +88,7 @@ void MeterTrend::update(const dmm::History *history, Quantity quantity, double r
     for (unsigned i = 0; i < count; ++i) {
         double value; history->value(i, value);
         const double normalized = span > 0 && std::isfinite(span) ? (value - minimum) / span : .5;
-        values[dmm::History::Capacity - count + i] = int(std::clamp(normalized, 0.0, 1.0) * 1000);
+        values[count == 1 ? 1 : i] = int(std::clamp(normalized, 0.0, 1.0) * 1000);
     }
     static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
     const char *unit = unsigned(quantity) < 6 ? units[unsigned(quantity)] : "";
@@ -93,7 +109,7 @@ void MeterTrend::update(const dmm::History *history, Quantity quantity, double r
         format(reference, false, low);
         std::snprintf(text, sizeof text, "REL reference %s", low);
     } else if (peerRelative) std::snprintf(text, sizeof text, "REL reference: controller");
-    else std::snprintf(text, sizeof text, "%u samples / session history", count);
+    else std::snprintf(text, sizeof text, "%u sample%s / session history", count, count == 1 ? "" : "s");
     Elements::setText(reference_, text);
     commit();
 }

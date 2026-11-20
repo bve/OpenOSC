@@ -27,6 +27,16 @@ extern "C" {
  *      TYPEDEFS
  **********************/
 
+typedef struct _lv_draw_sw_callback_dsc_t lv_draw_sw_callback_dsc_t;
+struct _lv_draw_sw_callback_dsc_t {
+    lv_draw_dsc_base_t base;
+    void (*render)(lv_draw_task_t * task, const lv_draw_sw_callback_dsc_t * dsc);
+};
+
+/** Queue a software callback with a copy of its descriptor, including trailing fields
+ *  covered by base.dsc_size. Referenced data must live until the current refresh ends. */
+void lv_draw_sw_callback(lv_layer_t * layer, const lv_area_t * coords, const lv_draw_sw_callback_dsc_t * dsc);
+
 struct _lv_draw_task_t {
     lv_draw_task_t * next;
 

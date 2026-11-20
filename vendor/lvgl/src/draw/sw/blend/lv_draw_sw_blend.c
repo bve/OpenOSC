@@ -56,6 +56,10 @@ static inline void /* LV_ATTRIBUTE_FAST_MEM */ lv_draw_sw_blend_color(lv_color_f
 static inline void /* LV_ATTRIBUTE_FAST_MEM */ lv_draw_sw_blend_image(lv_color_format_t layer_cf,
                                                                       lv_draw_sw_blend_image_dsc_t * image_dsc);
 
+#ifdef LV_DRAW_SW_RGB565_FILL_HOOK
+/* The backend may handle a clipped RGB565 fill before building the generic descriptor. */
+bool LV_DRAW_SW_RGB565_FILL_HOOK(lv_layer_t * layer, const lv_area_t * area, const lv_draw_sw_blend_dsc_t * dsc);
+#endif
 
 /**********************
  *  STATIC VARIABLES
@@ -90,6 +94,12 @@ void lv_draw_sw_blend(lv_draw_task_t * t, const lv_draw_sw_blend_dsc_t * dsc)
     }
 
     if(dsc->src_buf == NULL) {
+#ifdef LV_DRAW_SW_RGB565_FILL_HOOK
+        if(layer->color_format == LV_COLOR_FORMAT_RGB565 && LV_DRAW_SW_RGB565_FILL_HOOK(layer, &blend_area, dsc)) {
+            LV_PROFILER_DRAW_END;
+            return;
+        }
+#endif
         lv_draw_sw_blend_fill_dsc_t fill_dsc;
         fill_dsc.dest_w = lv_area_get_width(&blend_area);
         fill_dsc.dest_h = lv_area_get_height(&blend_area);

@@ -23,6 +23,9 @@
 #define LV_DRAW_DMA2D_CACHE 0
 // Rows of a skewed line's mask per blend (a steep 1..3 px stroke is one to a few bytes wide).
 #define LV_DRAW_SW_LINE_MASK_BYTES 320
+#if defined(__ARM_FEATURE_DSP)
+#define LV_DRAW_SW_RGB565_FILL_HOOK openosc_rgb565_narrow_fill
+#endif
 #define LV_DRAW_QUEUE_LIMIT 16 // Tasks queued behind a transfer before the tree waits (~4 KiB of the LVGL heap).
 #ifndef __ASSEMBLER__
 #ifdef __cplusplus

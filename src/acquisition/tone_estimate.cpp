@@ -1,6 +1,8 @@
 #include "openosc/acquisition/analysis.hpp"
 #include <algorithm>
 #include <cmath>
+#include <new>
+#include <type_traits>
 
 namespace openosc::scope {
 namespace {
@@ -15,7 +17,10 @@ double vertex(double a, double b, double c) {
 }
 } // namespace
 void ToneEstimate::begin(uint32_t samples, double mean) {
-    *this = {};
+    // Reset in place: `*this = {}` built a 1 KiB temporary on the stack first (the Trigger Midpoint
+    // chain through Analyzer::summarize then overran the ZT706S stack budget).
+    static_assert(std::is_trivially_destructible_v<ToneEstimate>);
+    new (this) ToneEstimate{};
     samples_ = samples; mean_ = mean;
     if (samples < MinimumSamples) { stage_ = Rounds + 1; return; }
     length_ = Coarse; segments_ = std::min<uint32_t>(CoarseSegments, samples / Coarse); filters_ = Bins;

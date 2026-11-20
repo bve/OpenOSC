@@ -64,6 +64,7 @@ typedef enum {
 #if LV_USE_3DTEXTURE
     LV_DRAW_TASK_TYPE_3D,
 #endif
+    LV_DRAW_TASK_TYPE_SOFTWARE_CALLBACK,
 } lv_draw_task_type_t;
 
 typedef enum {

@@ -87,13 +87,12 @@ void * lv_draw_create_unit(size_t size)
     return new_unit;
 }
 
-lv_draw_task_t * lv_draw_add_task(lv_layer_t * layer, const lv_area_t * coords, lv_draw_task_type_t type)
+static lv_draw_task_t * add_task(lv_layer_t * layer, const lv_area_t * coords, lv_draw_task_type_t type, size_t dsc_size)
 {
     LV_CHECK_ARG(layer != NULL, return NULL);
     LV_CHECK_ARG(coords != NULL, return NULL);
 
     LV_PROFILER_DRAW_BEGIN;
-    size_t dsc_size = get_draw_dsc_size(type);
     LV_ASSERT_FORMAT_MSG(dsc_size > 0, "Draw task size is 0 for type %d", type);
     lv_draw_task_t * new_task = lv_malloc_zeroed(LV_ALIGN_UP(sizeof(lv_draw_task_t), 8) + dsc_size);
     LV_ASSERT_MALLOC(new_task);
@@ -124,6 +123,20 @@ lv_draw_task_t * lv_draw_add_task(lv_layer_t * layer, const lv_area_t * coords, 
 
     LV_PROFILER_DRAW_END;
     return new_task;
+}
+
+lv_draw_task_t * lv_draw_add_task(lv_layer_t * layer, const lv_area_t * coords, lv_draw_task_type_t type)
+{
+    return add_task(layer, coords, type, get_draw_dsc_size(type));
+}
+
+void lv_draw_sw_callback(lv_layer_t * layer, const lv_area_t * coords, const lv_draw_sw_callback_dsc_t * dsc)
+{
+    LV_CHECK_ARG(dsc && dsc->render && dsc->base.dsc_size >= sizeof(*dsc), return);
+    lv_draw_task_t * t = add_task(layer, coords, LV_DRAW_TASK_TYPE_SOFTWARE_CALLBACK, dsc->base.dsc_size);
+    if(!t) return;
+    lv_memcpy(t->draw_dsc, dsc, dsc->base.dsc_size);
+    lv_draw_finalize_task_creation(layer, t);
 }
 
 #if !LV_USE_OS && defined(LV_DRAW_QUEUE_LIMIT)
@@ -794,6 +807,8 @@ static inline size_t get_draw_dsc_size(lv_draw_task_type_t type)
             return sizeof(lv_draw_blur_dsc_t);
         case LV_DRAW_TASK_TYPE_MASK_RECTANGLE:
             return sizeof(lv_draw_mask_rect_dsc_t);
+        case LV_DRAW_TASK_TYPE_SOFTWARE_CALLBACK:
+            return sizeof(lv_draw_sw_callback_dsc_t);
 
         /* no struct match for LV_DRAW_TASK_TYPE_MASK_BITMAP, set it to zero now */
         case LV_DRAW_TASK_TYPE_MASK_BITMAP:
