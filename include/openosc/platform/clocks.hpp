@@ -3,7 +3,8 @@
 namespace openosc {
 class ClockControl {
 public:
-    static bool configure();
+    static bool configure(bool keepBootDisplay);
+    static bool configureDisplayClock();
     // PLL1 retimed through HSI (VOS0 kept; flash wait states and SysTick follow HAL_RCC_ClockConfig).
     // At startup, or at run time with every PLL1-timed user stopped first (RunModeSwitch). USB
     // (HSI48), LTDC (PLL3), NOR SPI and the battery ADC (HSI) do not depend on PLL1.

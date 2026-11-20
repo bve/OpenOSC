@@ -9,8 +9,8 @@
 
 int main() {
     using namespace openosc;
+    Display::takeBootFrame(); // Discard a marker left by an older app that did not consume it.
     if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
-    boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     Board::delay(30);
     const bool requestedByApp = RecoveryRequest::take();
     // Recovery itself faulted last time: its menu, not an auto-start into the same fault (taken once).
@@ -18,15 +18,25 @@ int main() {
     const bool recoveryRequested = (Keypad::read() & Keypad::F2) || requestedByApp || faulted;
     Display screen;
     UpdateOperation update(screen);
+    bool logoShown = false;
 #ifndef OPENOSC_RAM_TEST
-    if (!recoveryRequested && update.installed()) Handoff::jump(layout::VectorBase);
+    // Show the logo while CRC checks run. A damaged application still falls back to the menu.
+    if (!recoveryRequested) logoShown = screen.initialize(true);
+#endif
+    boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
+#ifndef OPENOSC_RAM_TEST
+    if (!recoveryRequested && update.installed()) {
+        if (logoShown) Display::offerBootFrame();
+        Handoff::jump(layout::VectorBase);
+    }
 #else
     (void)recoveryRequested;
 #endif
-    if (!screen.initialize()) {
+    if (!logoShown && !screen.initialize()) {
         boot_diagnostics.error = 2;
         Watchdog::fatal(2);
     }
+    if (logoShown) screen.clear();
     boot_diagnostics.stage = 3;
     screen.text(8, 10, "OPENOSC RECOVERY", Display::Cyan);
     screen.text(8, 40, "INITIALIZING STORAGE...");

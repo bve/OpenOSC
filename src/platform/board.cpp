@@ -14,7 +14,7 @@ extern "C" const uint8_t D1CorePrescTable[16] = {0,0,0,0,1,2,3,4,1,2,3,4,6,7,8,9
 extern "C" { volatile openosc::Diagnostics boot_diagnostics = {}; }
 
 namespace openosc {
-bool Board::initialize() {
+bool Board::initialize(bool keepBootDisplay) {
     boot_diagnostics.magic = 0x4f534342;
     boot_diagnostics.stage = 1;
     // First: from here on this image owns the watchdog (docs/WATCHDOG.md), and the previous run's
@@ -55,10 +55,10 @@ bool Board::initialize() {
     // its own. Once, before any USB attach (Registers only: usbPcd is not set up yet).
     UsbCore::powerOff();
 #endif
-    LTDC->GCR &= ~LTDC_GCR_LTDCEN;
+    if (!keepBootDisplay) LTDC->GCR &= ~LTDC_GCR_LTDCEN;
     HAL_Init();
     __enable_irq();
-    if (!ClockControl::configure()) { boot_diagnostics.error = 1; return false; }
+    if (!ClockControl::configure(keepBootDisplay)) { boot_diagnostics.error = 1; return false; }
 #ifdef OPENOSC_APPLICATION
     DmaMemory::initialize();
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;

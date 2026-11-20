@@ -42,10 +42,10 @@ extern "C" void openosc_dma2d_reset(void) {
 }
 bool LvglDisplay::initialize() {
     resetRenderer();
-    std::memset(framebuffers, 0, sizeof framebuffers);
+    std::memset(framebuffers[1], 0, sizeof framebuffers[1]);
     Display panel;
-    if (!panel.initialize()) return false;
-    flip_.attach(ltdc, framebuffers[0]); // Display::initialize scans buffer 0.
+    if (!Display::scanningBootBuffer() && !panel.initialize(true)) return false;
+    flip_.attach(ltdc, framebuffers[0]);
     lv_init();
     // Completion is the START bit, read in the main context; the IRQ clears flags, notes errors
     // and requests a dispatch. Below acquisition (5) and USB (4).
@@ -56,7 +56,8 @@ bool LvglDisplay::initialize() {
     if (!display_) return false;
     lv_display_set_user_data(display_, this);
     lv_display_set_color_format(display_, LV_COLOR_FORMAT_RGB565);
-    lv_display_set_buffers(display_, framebuffers[0], framebuffers[1], sizeof framebuffers[0], LV_DISPLAY_RENDER_MODE_DIRECT);
+    // Keep buffer 0 on the panel until LVGL presents its first complete screen.
+    lv_display_set_buffers(display_, framebuffers[1], framebuffers[0], sizeof framebuffers[0], LV_DISPLAY_RENDER_MODE_DIRECT);
     lv_display_set_flush_cb(display_, flush);
     lv_display_set_flush_wait_cb(display_, wait);
     front_ = framebuffers[0];

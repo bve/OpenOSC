@@ -1,10 +1,15 @@
 #include "openosc/platform/board.hpp"
+#include "openosc/platform/clocks.hpp"
 #include "openosc/platform/power.hpp"
 #include "openosc/display/display.hpp"
 
 namespace openosc {
 namespace {
 LTDC_HandleTypeDef lcd;
+// Above both images' stacks and below ResetRecord. The app consumes it before Board::initialize.
+constexpr uint32_t BootFrameAddress = 0x2001ff40;
+constexpr uint32_t BootFrameMagic = 0x4f534331;
+volatile uint32_t* bootFrame() { return reinterpret_cast<volatile uint32_t*>(BootFrameAddress); }
 void pins(GPIO_TypeDef* port, uint32_t mask, uint32_t af) {
     GPIO_InitTypeDef gpio{};
     gpio.Pin = mask; gpio.Mode = GPIO_MODE_AF_PP;
@@ -12,18 +17,12 @@ void pins(GPIO_TypeDef* port, uint32_t mask, uint32_t af) {
     HAL_GPIO_Init(port, &gpio);
 }
 }
-bool Display::initialize() {
+bool Display::initialize(bool bootLogo) {
+    PowerControl::backlight(false);
     __HAL_RCC_LTDC_CLK_ENABLE();
     __HAL_RCC_LTDC_FORCE_RESET(); __HAL_RCC_LTDC_RELEASE_RESET();
 #ifndef OPENOSC_APPLICATION
-    RCC_PeriphCLKInitTypeDef clock{};
-    clock.PeriphClockSelection = RCC_PERIPHCLK_LTDC;
-    // 25 MHz / 25 * 400 / 20 = 20 MHz, wide VCO at 400 MHz.
-    clock.PLL3.PLL3M = 25; clock.PLL3.PLL3N = 400;
-    clock.PLL3.PLL3P = 2; clock.PLL3.PLL3Q = 2; clock.PLL3.PLL3R = 20;
-    clock.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_0;
-    clock.PLL3.PLL3VCOSEL = RCC_PLL3VCOWIDE;
-    if (HAL_RCCEx_PeriphCLKConfig(&clock) != HAL_OK) return false;
+    if (!ClockControl::configureDisplayClock()) return false;
 #endif
     pins(GPIOA, GPIO_PIN_3 | GPIO_PIN_5 | GPIO_PIN_9, GPIO_AF14_LTDC);
     pins(GPIOA, GPIO_PIN_8, GPIO_AF13_LTDC);
@@ -39,10 +38,26 @@ bool Display::initialize() {
     Board::delay(50);
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
     Board::delay(10);
-    if (!configure(0x24000000)) return false;
+    if (!configure(FrameAddress)) return false;
     LTDC_Layer2->CR = 0;
-    clear(); present(); PowerControl::backlight(true);
+    if (bootLogo) drawBootLogo();
+    else clear();
+    present(); PowerControl::backlight(true);
     return true;
+}
+bool Display::scanningBootBuffer() {
+    return __HAL_RCC_LTDC_IS_CLK_ENABLED() && (LTDC->GCR & LTDC_GCR_LTDCEN) &&
+           (LTDC_Layer1->CR & LTDC_LxCR_LEN) && LTDC_Layer1->CFBAR == FrameAddress;
+}
+void Display::offerBootFrame() {
+    bootFrame()[0] = BootFrameMagic;
+    bootFrame()[1] = ~BootFrameMagic;
+    __DSB();
+}
+bool Display::takeBootFrame() {
+    const bool offered = bootFrame()[0] == BootFrameMagic && bootFrame()[1] == ~BootFrameMagic;
+    bootFrame()[0] = bootFrame()[1] = 0;
+    return offered && (RCC->CR & RCC_CR_PLL3RDY) && scanningBootBuffer();
 }
 // The controller's timings and layer, scanning `frame`.
 bool Display::configure(uint32_t frame) {

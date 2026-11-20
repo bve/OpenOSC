@@ -4,9 +4,14 @@ namespace openosc {
 class Display {
 public:
     static constexpr unsigned Width = 320, Height = 240;
+    static constexpr uint32_t FrameAddress = 0x24000000;
     static constexpr uint16_t Background = 0x0841, White = 0xffff,
         Cyan = 0x07ff, Green = 0x07e0, Red = 0xf800, Selected = 0x21cd;
-    bool initialize();
+    bool initialize(bool bootLogo = false);
+    static bool scanningBootBuffer();
+    // One-use handoff from the second stage to the application.
+    static void offerBootFrame();
+    static bool takeBootFrame();
     void clear(uint16_t color = Background);
     void rectangle(unsigned x, unsigned y, unsigned w, unsigned h, uint16_t color);
     void text(unsigned x, unsigned y, const char* text, uint16_t color = White);
@@ -18,6 +23,7 @@ public:
     static bool restart(const void *frame);
 private:
     static bool configure(uint32_t frame);
+    void drawBootLogo();
 };
 }
 

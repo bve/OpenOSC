@@ -3,6 +3,8 @@
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/clocks.hpp"
+#include "openosc/platform/power.hpp"
+#include "openosc/display/display.hpp"
 #include "openosc/application/controller.hpp"
 #include "openosc/application/boot_guard.hpp"
 #include "openosc/application/boot_timing.hpp"
@@ -28,8 +30,11 @@ private:
 int main() {
     using namespace openosc;
     StackGuard::arm(); // The lowest stack words, far below main's frame now; checked by the main loop.
-    if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
+    const bool bootFrame = Display::takeBootFrame();
+    if (!Board::initialize(bootFrame)) Watchdog::fatal(boot_diagnostics.error);
     BootTiming::mark(BootTiming::Start);
+    // With an older second stage, draw the same logo before storage or preferences can wait.
+    const bool bootDisplayReady = bootFrame || Display{}.initialize(true);
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     BootTiming::mark(BootTiming::Crc);
     NorFlash nor;
@@ -61,6 +66,7 @@ int main() {
         if (!ClockControl::selectPerformance(0)) Watchdog::fatal(4);
     }
     BootTiming::mark(BootTiming::Clocks);
+    if (bootDisplayReady) PowerControl::retime();
 #ifdef OPENOSC_USB_TRACE
     // Both the DWT timestamp scale and TIM7 divider depend on the selected profile.
     usbtrace::start();

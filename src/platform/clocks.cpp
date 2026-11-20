@@ -12,7 +12,7 @@ static_assert(Pll3Vco >= 128000000 && Pll3Vco <= 560000000, "PLL3 wide VCO range
 static_assert(Pll3Vco / Pll3.q == 48000000 && Pll3Vco % Pll3.q == 0, "USB needs exactly 48 MHz");
 static_assert(Pll3Vco / Pll3.r == 20000000 && Pll3Vco % Pll3.r == 0, "LCD pixel clock 20 MHz");
 }
-bool ClockControl::configure() {
+bool ClockControl::configure(bool keepBootDisplay) {
     HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
     __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
     uint32_t start = HAL_GetTick();
@@ -31,6 +31,12 @@ bool ClockControl::configure() {
     if (HAL_RCC_OscConfig(&oscillator) != HAL_OK) return false;
     if (!selectPerformance(0)) return false;
 #ifdef OPENOSC_APPLICATION
+    // The second stage has already configured PLL3 if it handed us a live logo.
+    if (!keepBootDisplay && !configureDisplayClock()) return false;
+#endif
+    return true;
+}
+bool ClockControl::configureDisplayClock() {
     RCC_PeriphCLKInitTypeDef peripheral{};
     peripheral.PeriphClockSelection = RCC_PERIPHCLK_LTDC | RCC_PERIPHCLK_USB;
     // Independent PLL3 outputs keep USB at48 MHz and LCD at20 MHz in both
@@ -40,9 +46,7 @@ bool ClockControl::configure() {
     peripheral.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_2;
     peripheral.PLL3.PLL3VCOSEL = RCC_PLL3VCOWIDE;
     peripheral.UsbClockSelection = RCC_USBCLKSOURCE_PLL3;
-    if (HAL_RCCEx_PeriphCLKConfig(&peripheral) != HAL_OK) return false;
-#endif
-    return true;
+    return HAL_RCCEx_PeriphCLKConfig(&peripheral) == HAL_OK;
 }
 uint32_t ClockControl::activeMode() {
     if (__HAL_RCC_GET_SYSCLK_SOURCE() != RCC_SYSCLKSOURCE_STATUS_PLLCLK) return RunModeCount;
