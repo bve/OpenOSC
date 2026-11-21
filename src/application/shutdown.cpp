@@ -1,5 +1,8 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/application/decode_csv_file.hpp"
+#if OPENOSC_BOARD == 703
+#include "openosc/application/bode_csv_file.hpp"
+#endif
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/input.hpp"
@@ -24,10 +27,11 @@ void ApplicationController::shutdownNotice(const char *text, uint32_t now) {
 class ApplicationController::ShutdownSteps final : public ShutdownSequence::Steps {
 public:
     static constexpr const char *DecodeCsvShutdown = "DECODE CSV CANCELLED: SHUTDOWN";
+    static constexpr const char *BodeCsvShutdown = "FRA CSV CANCELLED: SHUTDOWN";
     explicit ShutdownSteps(ApplicationController &a) : a_(a) {}
-    // Every background file user ends before the saves and the unmount: an unfinished decoded CSV is
-    // closed and its .TMP removed now (its export ended), so nothing writes the volume after it.
-    void prepare() override { a_.imageReader_.cancel(); a_.images_.cancelClear(); decodeCsvFile().cancel(DecodeCsvShutdown); }
+    // Every background file user ends before the saves and the unmount: an unfinished decoded or FRA CSV
+    // is closed and its .TMP removed now (its export ended), so nothing writes the volume after it.
+    void prepare() override { a_.imageReader_.cancel(); a_.images_.cancelClear(); cancelCsvFiles(); }
     bool screenshotBusy() override { return a_.shots_.busy(); }
     void cancelScreenshot() override { a_.shots_.cancel(); }
     bool saveTheme() override { SettingsStore files(a_); return a_.saves_.flushTheme(files); }
@@ -43,7 +47,7 @@ public:
     bool instrumentsStopped() override { return a_.data_.shutdownReady(); }
     void cancelRecorders() override {
         a_.data_.scopeRecorder().cancel(true); a_.data_.meterLogger().cancel(true); // Out of time: the .TMPs stay.
-        decodeCsvFile().cancel(DecodeCsvShutdown); // Already ended in prepare(): idempotent.
+        cancelCsvFiles(); // Already ended in prepare(): idempotent.
     }
     // Finished steps, failed or not (each may end after a NOR timeout): watchdog progress.
     bool unmount() override { const bool done = a_.fs_.unmount(); Watchdog::progress(); return done; }
@@ -57,6 +61,12 @@ public:
     bool resume() override;
 private:
     ApplicationController &a_;
+    static void cancelCsvFiles() {
+        decodeCsvFile().cancel(DecodeCsvShutdown);
+#if OPENOSC_BOARD == 703
+        bodeCsvFile().cancel(BodeCsvShutdown);
+#endif
+    }
 };
 // RefusedRestart's steps on this instrument: every clock user is still stopped (beginShutdown).
 class ApplicationController::RefusedRestartSteps final : public RefusedRestart::Steps {
@@ -96,6 +106,9 @@ bool ApplicationController::ShutdownSteps::resume() {
     return result.resumed;
 }
 void ApplicationController::requestShutdown(uint32_t now) {
+#if OPENOSC_BOARD == 703
+    if (panel_ == Panel::Bode) finishBode(now, nullptr); // Every source of a shutdown: the sweep ends, restored.
+#endif
     ShutdownSteps steps(*this);
     shutdownSequence_.begin(confirmAction_, now, steps);
     shutdown_ = shutdownSequence_.action();

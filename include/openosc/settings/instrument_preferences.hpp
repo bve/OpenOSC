@@ -49,6 +49,11 @@ struct MeterPreferences {
     // Per-element overrides over palette and face (Measurement > Appearance); none: the base look.
     // The reading's font override, when set, is the reading's face; Default: `face`.
     MeterAppearance appearance;
+    // Measurement > Appearance > Preset (GitHub #68). face, palette and appearance above are always the
+    // user's one Custom look; Hybrid shows MeterAppearanceCatalog's constant instead and keeps them, so
+    // Custom brings them back. A manual edit while Hybrid shows starts a Custom look from it (custom()).
+    static constexpr uint32_t Presets = 2, CustomPreset = 0, HybridPreset = 1;
+    uint32_t preset = CustomPreset;
     // The blocks' order under the status bar: the digital faces (display 0..2) and the analog dial
     // (display 3) each keep their own. Files before them: defaults (soft keys at the bottom).
     DigitalArrangement digitalArrangement;
@@ -58,8 +63,20 @@ struct MeterPreferences {
     dmm::HoldSettings hold;
     dmm::TemperatureSettings temperature;
     bool analog() const { return display == AnalogDisplay; } // Which of the two orders shows.
+    bool hybrid() const { return preset == HybridPreset; }
+    // The look the DMM shows: Hybrid's constant, or the Custom look.
+    unsigned shownPalette() const { return hybrid() ? MeterAppearanceCatalog::HybridPalette : palette; }
+    unsigned shownFace() const { return hybrid() ? MeterAppearanceCatalog::HybridFace : face; }
+    const MeterAppearance &shownAppearance() const { return hybrid() ? MeterAppearanceCatalog::hybrid() : appearance; }
+    // Before a manual edit: Hybrid becomes the Custom look it shows (the previous Custom is replaced),
+    // and the preset Custom. Custom: nothing changes.
+    void custom() {
+        if (!hybrid()) return;
+        palette = MeterAppearanceCatalog::HybridPalette; face = MeterAppearanceCatalog::HybridFace;
+        appearance = MeterAppearanceCatalog::hybrid(); preset = CustomPreset;
+    }
     bool valid() const {
-        return display < Displays && statistics <= 1 && bar <= 1 && automatic <= 1 && range < 8 && face < Faces && palette < Palettes &&
+        return display < Displays && statistics <= 1 && bar <= 1 && automatic <= 1 && range < 8 && face < Faces && palette < Palettes && preset < Presets &&
                rangeFunction <= MeterFunctionCount && appearance.valid() && digitalArrangement.valid() && analogArrangement.valid() &&
                hold.valid() && temperature.valid();
     }

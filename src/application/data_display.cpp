@@ -29,6 +29,7 @@ void ApplicationController::pauseHiddenCapture(uint32_t now, bool enumerating) {
     const bool measuring = data_.interleaveMeasurement().active()
 #if OPENOSC_BOARD == 703
         || (panel_ == Panel::InterleaveMatch && interleaveMatch_.step() == calibration::InterleaveMatchWizard::Step::Measuring)
+        || bodeRunning() // A sweep takes records behind its own plot.
 #endif
         ;
     if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !measuring && !autoBusy() &&
@@ -58,6 +59,15 @@ void ApplicationController::refreshSoftKeys() {
     else if (panel_ == Panel::Confirmation) keys = Keys::cancel("");
     else if (panel_ == Panel::Zero) keys = editing ? Keys::list(true) : Keys::cancel("Calibration");
     else if (panel_ == Panel::InterleaveMatch) keys = Keys::cancel("");
+#if OPENOSC_BOARD == 703
+    else if (panel_ == Panel::Bode && view_.bode().visible()) {
+        keys.keys[0] = bodeRunning() ? ui::SoftKey{"Stop", "Sweep", true} : ui::SoftKey{"Run", "Sweep", true};
+        keys.keys[1] = {"Setup", "", !bodeRunning()};
+        const auto &shown = view_.bode().data(); // Results and Table go back to the plot; the plot to the table.
+        keys.keys[2] = shown.results || shown.cursor.table ? ui::SoftKey{"Plot", "View", true} : ui::SoftKey{"Table", "View", true};
+        keys.keys[3] = {"Exit", "Bode", true};
+    }
+#endif
     else if (panel_ == Panel::Images) keys = imageSoftKeys();
     else if (panel_ == Panel::Generator || panel_ == Panel::Frequency) {
         using Generator = ui::GeneratorKeys::Panel;
@@ -143,11 +153,11 @@ void ApplicationController::displayData(uint32_t now) {
     // The DAC stream halves the capture's maximum rate: said once as it starts (output on, PWM to DAC,
     // a Dedicated square below 1 kHz, a startup restore); the Scope's GEN note keeps ", ADC max /2".
     const bool captureHalved = data_.generatorLoadsBus();
-    if (captureHalved && !captureHalvedNoticed_ && uiReady_) view_.notify("GEN on DAC: Scope max sample rate /2 while it runs", now);
+    if (captureHalved && !captureHalvedNoticed_ && uiReady_ && panel_ != Panel::Bode)
+        view_.notify("GEN on DAC: Scope max sample rate /2 while it runs", now);
     captureHalvedNoticed_ = captureHalved;
-    if (state_.mode == MeasurementMode::Oscilloscope)
+    if (state_.mode == MeasurementMode::Oscilloscope && panel_ != Panel::Bode) {
         view_.scopeTriggerState(data_.scopeRequest().trigger.mode, data_.scopeWaiting());
-    if (state_.mode==MeasurementMode::Oscilloscope) {
         view_.scopeCounters(data_.scopeCounters());
         view_.scopeAutoSetup(autoBusy());
         view_.scopeCalibrating(data_.zeroBusy());
@@ -162,11 +172,13 @@ void ApplicationController::displayData(uint32_t now) {
     const unsigned interval = panel_ != Panel::None ? 40 : state_.mode == MeasurementMode::Oscilloscope ? 16
                               : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
-    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero || panel_==Panel::InterleaveMatch) {
+    // Bode (#72): the sweep's own service takes its records; no readouts, no decoder, no trace meanwhile.
+    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::Bode) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
         dataAt_ = now;
-        if (state_.mode == MeasurementMode::Oscilloscope) view_.captureStatus(data_.status(), data_.scopeHeld());
-        else if (state_.mode == MeasurementMode::Multimeter) {
+        if (state_.mode == MeasurementMode::Oscilloscope) {
+            if (panel_ != Panel::Bode) view_.captureStatus(data_.status(), data_.scopeHeld());
+        } else if (state_.mode == MeasurementMode::Multimeter) {
             const auto &meter = data_.meter();
             char word[sizeof lastMeterHoldWord_];
             meterHoldWord(word, sizeof word);
@@ -262,8 +274,8 @@ void ApplicationController::displayData(uint32_t now) {
         if (dataRefresh_ || (selecting == dmm::Function::Unknown && lastMeterSequence_ != meter.displayed().sequence) || lastMeterSelecting_ != selecting ||
             lastMeterHold_ != meter.holding() || lastMeterStatus_ != status) {
             const ui::MeterContext context{&meter.statistics(), &meter.history(), &meter.relative(), prefs_.meter.display,
-                                          bool(prefs_.meter.statistics), prefs_.meter.face, prefs_.meter.palette,
-                                          &prefs_.meter.appearance, word, bool(prefs_.meter.bar), data_.meterLogger().active(),
+                                          bool(prefs_.meter.statistics), prefs_.meter.shownFace(), prefs_.meter.shownPalette(),
+                                          &prefs_.meter.shownAppearance(), word, bool(prefs_.meter.bar), data_.meterLogger().active(),
                                           selecting};
             view_.multimeter(shownReading(meter, selecting), meter.holding(), status, context);
             lastMeterSelecting_ = selecting;

@@ -1,6 +1,9 @@
 #pragma once
 #include "openosc/settings/preferences.hpp"
 #include "openosc/ui/components/profile_glyph.hpp"
+#if OPENOSC_BOARD == 703
+#include "openosc/ui/components/bode_view.hpp"
+#endif
 #include "openosc/settings/scope_appearance.hpp"
 #include "openosc/ui/components/scope_styles.hpp"
 #include "openosc/ui/scope/controls.hpp"
@@ -118,6 +121,12 @@ public:
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
     const char *toast() const { return toastActive_ && toast_ ? lv_label_get_text(toast_) : ""; } // On show now.
     bool toastShowing() const { return toastActive_; } // A notice is on show (store(): none over another).
+#if OPENOSC_BOARD == 703
+    // The frequency response plot (GitHub #72, ZT703S only), hidden until shown. Shown as a menu is: the
+    // host's overlay (no Scope elements drawn under it, the keys' bar at the bottom), the menu box hidden.
+    ui::BodeView &bode() { return bode_; }
+    void bodePlot(const ui::BodeViewData &data);
+#endif
     void powerHold(int percent, const char *title) { powerHold_.show(percent, title); } // PowerHold::percent; -1 hides.
     void service(uint32_t now);
 
@@ -165,6 +174,10 @@ private:
     int statusRight_ = -1; // The pill edge the indicators were last laid out for.
     bool fpsWanted_ = false, fpsVisible_ = false;
     lv_obj_t *clock_ = nullptr;
+#if OPENOSC_BOARD == 703
+    ui::BodeView bode_;
+    bool bodeHeader_ = false;
+#endif
     bool clockEnabled_ = false;
     // Where the glyph and the right side are: 0 the usual places (Off, outside the Scope), 1 beside the
     // battery icon, 2 beside a text battery with USB/GEN/overview closed up (StatusBarLayout::clock).

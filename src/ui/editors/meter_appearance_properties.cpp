@@ -33,9 +33,15 @@ unsigned MeterAppearanceProperties::count() const {
     for (unsigned r = 0; r < Rows; ++r) n += shown(Row(r));
     return n;
 }
-bool MeterAppearanceProperties::hybrid() const {
-    return palette_ == MeterAppearanceCatalog::HybridPalette && face_ == MeterAppearanceCatalog::HybridFace &&
-           appearance_ == MeterAppearanceCatalog::hybrid();
+unsigned MeterAppearanceProperties::shownPalette() const { return hybrid_ ? MeterAppearanceCatalog::HybridPalette : palette_; }
+unsigned MeterAppearanceProperties::shownFace() const { return hybrid_ ? MeterAppearanceCatalog::HybridFace : face_; }
+const MeterAppearance &MeterAppearanceProperties::shownAppearance() const {
+    return hybrid_ ? MeterAppearanceCatalog::hybrid() : appearance_;
+}
+void MeterAppearanceProperties::edit() {
+    if (!hybrid_) return;
+    palette_ = MeterAppearanceCatalog::HybridPalette; face_ = MeterAppearanceCatalog::HybridFace;
+    appearance_ = MeterAppearanceCatalog::hybrid(); hybrid_ = false;
 }
 PropertyKind MeterAppearanceProperties::kind(unsigned index) const {
     const auto row = at(index);
@@ -59,10 +65,10 @@ unsigned MeterAppearanceProperties::options(unsigned index) const {
     }
 }
 unsigned MeterAppearanceProperties::option(unsigned index) const {
-    const auto &style = appearance_[element_];
+    const auto &style = shownAppearance()[element_];
     switch (at(index)) {
-    case Preset: return hybrid() ? 1 : 0;
-    case Base: return palette_;
+    case Preset: return hybrid_ ? 1 : 0;
+    case Base: return shownPalette();
     case Element: return unsigned(element_);
     case Color: return ColorRows::option(style.colorValue());
     case Font: return choice(style.font);
@@ -86,30 +92,28 @@ void MeterAppearanceProperties::optionName(unsigned index, unsigned option, char
 }
 bool MeterAppearanceProperties::choose(unsigned index, unsigned option) {
     if (option >= options(index)) return false;
-    auto &style = appearance_[element_];
-    switch (at(index)) {
-    case Preset:
-        if (option == 1) {
-            appearance_ = MeterAppearanceCatalog::hybrid();
-            palette_ = MeterAppearanceCatalog::HybridPalette; face_ = MeterAppearanceCatalog::HybridFace;
-        }
-        return true; // Custom: what is set stays.
-    case Base: palette_ = option; return true;
+    const auto row = at(index);
+    // The value in force again is no edit: Hybrid stays Hybrid, the Custom look untouched.
+    if (row != Element && option == this->option(index)) return true;
+    switch (row) {
+    case Preset: hybrid_ = option == 1; return true; // The Custom look stays as it is either way.
     case Element: element_ = MeterRole(option); return true;
     case Color: {
-        auto value = style.colorValue();
+        auto value = color();
         if (!ColorRows::choose(option, value, inherited(element_))) return false;
-        style.setColor(value);
+        edit();
+        appearance_[element_].setColor(value);
         return true;
     }
-    case Font: style.font = stored(option); return true;
-    case Style: style.style = stored(option); return true;
+    case Base: edit(); palette_ = option; return true;
+    case Font: edit(); appearance_[element_].font = stored(option); return true;
+    case Style: edit(); appearance_[element_].style = stored(option); return true;
     default: return false;
     }
 }
 uint32_t MeterAppearanceProperties::inherited(MeterRole role) const {
     if (!theme_) return ColorRows::Unknown;
-    return MeterStyles::look(palette_, face_, MeterAppearance(), *theme_, parameters_).color(role);
+    return MeterStyles::look(shownPalette(), shownFace(), MeterAppearance(), *theme_, parameters_).color(role);
 }
 void MeterAppearanceProperties::value(unsigned index, char *output, size_t capacity) const {
     const auto row = at(index);
@@ -121,6 +125,7 @@ void MeterAppearanceProperties::adjust(unsigned index, int delta) {
     if (!channelRow(row)) return;
     auto value = color();
     ColorRows::adjust(colorRow(row), delta, value);
+    edit();
     appearance_[element_].setColor(value);
 }
 int MeterAppearanceProperties::coarseStep(unsigned index) const { return channelRow(at(index)) ? ColorRows::CoarseStep : 1; }
@@ -133,6 +138,7 @@ void MeterAppearanceProperties::setNumber(unsigned index, int32_t number) {
     if (!channelRow(row)) return;
     auto value = color();
     ColorRows::setNumber(colorRow(row), number, value);
+    edit();
     appearance_[element_].setColor(value);
 }
 bool MeterAppearanceProperties::optionSwatch(unsigned index, unsigned option, uint32_t &rgb) const {
@@ -144,7 +150,7 @@ bool MeterAppearanceProperties::optionSwatch(unsigned index, unsigned option, ui
     case Element: { // Each element as it is drawn now.
         if (option >= MeterAppearance::Roles) return false;
         const auto role = MeterRole(option);
-        return ColorRows::valueSwatch(appearance_[role].colorValue(), inherited(role), rgb);
+        return ColorRows::valueSwatch(shownAppearance()[role].colorValue(), inherited(role), rgb);
     }
     case Color: return ColorRows::optionSwatch(option, color(), inherited(element_), rgb);
     default: return false;
@@ -156,8 +162,11 @@ bool MeterAppearanceProperties::valueSwatch(unsigned index, uint32_t &rgb) const
     if (row == Color || channelRow(row)) return ColorRows::valueSwatch(color(), inherited(element_), rgb);
     return false;
 }
-void MeterAppearanceProperties::reset(Row row) {
-    if (row == ResetAll) appearance_ = MeterAppearance();
-    else if (row == ResetElement) appearance_[element_] = MeterRoleStyle();
+const char *MeterAppearanceProperties::reset(Row row) {
+    if (row != ResetAll && row != ResetElement) return nullptr;
+    edit();
+    if (row == ResetAll) { appearance_ = MeterAppearance(); return "All elements reset to base"; }
+    appearance_[element_] = MeterRoleStyle();
+    return "Element reset to base";
 }
 } // namespace openosc::ui

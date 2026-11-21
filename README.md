@@ -11,6 +11,8 @@ instrument, the SCPI reference, troubleshooting and pages for contributors.
 
 > **Status:** work in progress. ZT703S is the main development and test device.
 > **ZT706S:** I don't have one. Users run it, but many features are untested on that model.
+> **Clones of the ZT703S and ZT706S** should work too: install the files for the model they are based on.
+> If something does not work on a clone, please [open an issue](https://github.com/bve/OpenOSC/issues/new/choose).
 
 > [!WARNING]
 > **This firmware is for enthusiasts only.** If you are generally happy with the stock firmware,
@@ -53,6 +55,14 @@ Captured on a ZT703S running OpenOSC.
   <tr>
     <td align="center">CH1 interleave on the ZT703S (experimental)</td>
     <td align="center">Interleave offset calibration</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/bode.png" width="320" alt="Bode analyzer: gain and phase of a filter from 100 Hz to 100 kHz"></td>
+    <td><img src=".github/images/multimeter-type-k.png" width="320" alt="Multimeter: Type K thermocouple reading 22.5 °C"></td>
+  </tr>
+  <tr>
+    <td align="center">Bode analyzer (ZT703S)</td>
+    <td align="center">Type K temperature</td>
   </tr>
   <tr>
     <td><img src=".github/images/decoder-split.png" width="320" alt="Protocol decoder, split view: SPI waveform above, decoded table below"></td>
@@ -125,24 +135,28 @@ Captured on a ZT703S running OpenOSC.
 **Oscilloscope**
 
 - Two channels, 20 mV/div to 10 V/div, timebase from 10 ns/div to 20 s/div
-- Trigger modes Auto, Normal and Single, with adjustable pre/post-trigger position
+- Trigger modes Auto, Normal and Single, with adjustable pre/post-trigger position and Center trigger
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
 - Auto Setup for both channels (hold **AUTO** for 2 s; a short press resets the pan)
 - Configurable on-screen measurements, two per channel in the footer, time and level cursors
 - Hardware frequency counter with an averaged on-screen overlay
-- XY, MATH and reference waveforms; sin(x)/x and spline interpolation, infinite persistence
+- XY, MATH and reference waveforms; sin(x)/x and spline interpolation, fading or infinite persistence, Glow
 - FFT up to 2048 points with four window functions, dBFS or linear scale
 - Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view, event detail; decoded data saved as CSV
-- Zero offset calibration of both channels, stored as a file and never written to the factory calibration
+- Bode analyzer (**Analyze → Bode (FRA)**, ZT703S): gain and phase of a circuit against frequency with the
+  built-in generator, cursors, −3 dB points, bandwidth, gain and phase margins, CSV export
+- Zero and gain calibration of both channels, stored as files and never written to the factory calibration
 - Selectable performance profiles: 200/100, 280/140 and 360/90 (core MHz / MS/s per channel),
   switched instantly without a restart
-- ZT703S, experimental: CH1 interleave over both ADCs, up to 280 MS/s on CH1 alone at 10/25 ns/div
+- CH1 interleave over both ADCs, up to 280 MS/s on CH1 alone: experimental on the ZT703S, with on-device
+  offset and gain/timing calibration; Off/On/Auto on the ZT706S
 - Save waveforms as RAW or CSV
 
 **Multimeter**
 
 - DC/AC voltage, millivolts, DC/AC current and milliamps, resistance, continuity, diode, capacitance
+- Type K thermocouple temperature in °C or °F, with cold-junction compensation
 - Auto and manual ranges (the AUTO/RANGE key works as in the stock firmware) and REL
 - HOLD modes (**MENU → Measurement → Hold**): Manual, Delayed (after a countdown), Stable (waits
   for a stable reading) and Auto (holds every new stable reading)
@@ -181,7 +195,7 @@ Captured on a ZT703S running OpenOSC.
 - The labels above F1–F4 always show what each key does right now; in menus they stay at the
   bottom, right above the keys
 - Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
-  plus custom RGB colors for individual elements. Multimeter colors can be customized as well
+  plus custom RGB colors for individual elements. Multimeter looks: Custom and Hybrid
 - BMP screenshots with a built-in viewer
 - Settings and the color theme are stored as JSON files on the external SPI Flash and saved when
   you switch the device off, restart it or enter Recovery. The microcontroller's internal Flash
