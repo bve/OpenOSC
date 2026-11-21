@@ -65,6 +65,10 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["pan_moves_waveform"].is<bool>()) return false;
         candidate.panReverse = indicators["pan_moves_waveform"].as<bool>();
     }
+    if (indicators.containsKey("menu_left_step")) { // Absent in older files: Back.
+        if (!indicators["menu_left_step"].is<bool>()) return false;
+        candidate.menuLeftBack = !indicators["menu_left_step"].as<bool>();
+    }
     if (root.containsKey("hold_ms")) {
         if (!root["hold_ms"].is<unsigned>()) return false;
         const unsigned ms = root["hold_ms"].as<unsigned>();
@@ -213,6 +217,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["show_fps"] = values.showFps == 1;
     document["display"]["show_sample_rate"] = values.showFps == 2;
     document["display"]["pan_moves_waveform"] = values.panReverse == 1;
+    document["display"]["menu_left_step"] = values.menuLeftBack == 0;
     document["display"]["clock_indicator"] = values.clockIndicator == 1;
     document["hold_ms"] = values.holdMs();
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
