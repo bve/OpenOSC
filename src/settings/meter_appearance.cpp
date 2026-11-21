@@ -46,21 +46,29 @@ bool MeterAppearance::operator==(const MeterAppearance &b) const {
     for (unsigned i = 0; i < Roles; ++i) if (!(roles[i] == b.roles[i])) return false;
     return true;
 }
-MeterAppearance MeterAppearanceCatalog::hybrid() {
+namespace {
+// The Hybrid look, built at compile time: a constant in flash, handed out by reference (no RAM copy).
+constexpr MeterAppearance makeHybrid() {
+    using C = ColorCatalog;
+    using Catalog = MeterAppearanceCatalog;
     MeterAppearance a;
-    const auto set = [&](MeterRole role, const char *swatch) { a[role].color = swatchByKey(swatch); };
-    set(MeterRole::Background, "black");
-    set(MeterRole::Reading, "amber"); set(MeterRole::Unit, "amber");
-    a[MeterRole::Reading].font = ReadingIbm; a[MeterRole::Unit].font = TextIbm; // IBM, whatever the face.
-    set(MeterRole::Function, "white");
-    set(MeterRole::Arc, "white"); set(MeterRole::Ticks, "white"); set(MeterRole::ScaleNumbers, "white");
-    set(MeterRole::Needle, "orange"); a[MeterRole::Needle].style = Bold;
-    set(MeterRole::StatNames, "gray");
-    set(MeterRole::Minimum, "silver"); set(MeterRole::Maximum, "silver"); set(MeterRole::Average, "silver");
-    set(MeterRole::Range, "gray"); set(MeterRole::Secondary, "silver"); set(MeterRole::Mode, "sky"); set(MeterRole::Details, "gray");
-    set(MeterRole::Bar, "amber");
-    set(MeterRole::CardActive, "cyan"); set(MeterRole::CardInactive, "gray"); set(MeterRole::CardText, "silver");
-    set(MeterRole::CardSelection, "cyan");
+    const auto set = [&a](MeterRole role, uint8_t swatch) { a.roles[unsigned(role)].color = swatch; };
+    set(MeterRole::Background, C::Black);
+    set(MeterRole::Reading, C::Amber); set(MeterRole::Unit, C::Amber);
+    a.roles[unsigned(MeterRole::Reading)].font = Catalog::ReadingIbm; // IBM, whatever the face.
+    a.roles[unsigned(MeterRole::Unit)].font = Catalog::TextIbm;
+    set(MeterRole::Function, C::White);
+    set(MeterRole::Arc, C::White); set(MeterRole::Ticks, C::White); set(MeterRole::ScaleNumbers, C::White);
+    set(MeterRole::Needle, C::Orange); a.roles[unsigned(MeterRole::Needle)].style = Catalog::Bold;
+    set(MeterRole::StatNames, C::Gray);
+    set(MeterRole::Minimum, C::Silver); set(MeterRole::Maximum, C::Silver); set(MeterRole::Average, C::Silver);
+    set(MeterRole::Range, C::Gray); set(MeterRole::Secondary, C::Silver); set(MeterRole::Mode, C::Sky); set(MeterRole::Details, C::Gray);
+    set(MeterRole::Bar, C::Amber);
+    set(MeterRole::CardActive, C::Cyan); set(MeterRole::CardInactive, C::Gray); set(MeterRole::CardText, C::Silver);
+    set(MeterRole::CardSelection, C::Cyan);
     return a;
 }
+constexpr MeterAppearance Hybrid = makeHybrid();
+} // namespace
+const MeterAppearance &MeterAppearanceCatalog::hybrid() { return Hybrid; }
 } // namespace openosc

@@ -84,7 +84,7 @@ ui::MeterProperties ApplicationController::meterProperties() const {
     return ui::MeterProperties(meter.displayed(),prefs_.meter.display,prefs_.meter.statistics,
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
-        prefs_.meter.face, prefs_.meter.palette, &themes_.theme(), prefs_.meter.hold.mode)
+        prefs_.meter.shownFace(), prefs_.meter.shownPalette(), &themes_.theme(), prefs_.meter.hold.mode)
         .barGraph(prefs_.meter.bar).temperature(prefs_.meter.temperature);
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
@@ -109,7 +109,7 @@ void ApplicationController::meterPanelKeys(uint32_t keys, uint32_t now) {
         const auto &theme = themes_.theme();
         const uint32_t cards = theme.elements[unsigned(MeasurementMode::Multimeter)][unsigned(ElementId::Parameters)].color;
         appearanceEditor_ = ui::MeterAppearanceProperties(prefs_.meter.palette, prefs_.meter.face, prefs_.meter.appearance,
-                                                          appearanceEditor_.element(), &theme, cards);
+                                                          appearanceEditor_.element(), &theme, cards, prefs_.meter.hybrid());
         openPanel(Panel::MeterAppearance, appearanceEditor_);
         return;
     }
@@ -119,10 +119,11 @@ void ApplicationController::meterPanelKeys(uint32_t keys, uint32_t now) {
 }
 // Appearance: every committed choice and reset is taken at once and saved; the reading, range,
 // REL, HOLD and statistics are untouched (only MeterScreen's style changes). Back: the DMM panel.
+// The preferences keep the editor's Custom look and its preset (GitHub #68): Hybrid and Custom
+// switch without losing the Custom one; a reset says what it did.
 void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
     if (!keys) return;
     using Outcome = ui::PropertyNavigator::Outcome;
-    using Editor = ui::MeterAppearanceProperties;
     const auto outcome = navigator_.keys(keys, appearanceEditor_);
     if (outcome == Outcome::Back) {
         meterEditor_ = meterProperties();
@@ -131,14 +132,16 @@ void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
     }
     if (outcome == Outcome::Activate) { // A reset may drop the R/G/B rows: the action keeps its selection at its new index.
         const auto action = appearanceEditor_.at(navigator_.row());
-        appearanceEditor_.reset(action);
+        const char *done = appearanceEditor_.reset(action);
         navigator_.reset(appearanceEditor_.index(action));
+        if (done) view_.notify(done, now);
     }
     if (outcome == Outcome::Changed || outcome == Outcome::Activate) {
         auto &meter = prefs_.meter;
-        const bool element = appearanceEditor_.at(navigator_.row()) == Editor::Element; // Selects, sets nothing.
-        if (!element) {
-            meter.palette = appearanceEditor_.palette(); meter.face = appearanceEditor_.face(); meter.appearance = appearanceEditor_.appearance();
+        const auto &e = appearanceEditor_;
+        const uint32_t preset = e.hybrid() ? MeterPreferences::HybridPreset : MeterPreferences::CustomPreset;
+        if (meter.preset != preset || meter.palette != e.palette() || meter.face != e.face() || meter.appearance != e.appearance()) {
+            meter.palette = e.palette(); meter.face = e.face(); meter.appearance = e.appearance(); meter.preset = preset;
             changed(now); dataRefresh_ = true;
         }
     }
@@ -179,8 +182,14 @@ void ApplicationController::meterChanged(unsigned row, uint32_t now) {
     case Row::Display: prefs_.meter.display=meterEditor_.display(); break;
     case Row::Statistics: prefs_.meter.statistics=meterEditor_.statistics(); break;
     case Row::BarGraph: prefs_.meter.bar=meterEditor_.barGraph(); break;
-    case Row::Digits: prefs_.meter.face=meterEditor_.face(); break;
-    case Row::Colors: prefs_.meter.palette=meterEditor_.palette(); break;
+    // Base digits and colours: a manual edit of the look in force (while Hybrid shows, the Custom look
+    // starts from it, MeterPreferences::custom); the value in force again changes nothing.
+    case Row::Digits:
+        if (meterEditor_.face() == prefs_.meter.shownFace()) return;
+        prefs_.meter.custom(); prefs_.meter.face=meterEditor_.face(); break;
+    case Row::Colors:
+        if (meterEditor_.palette() == prefs_.meter.shownPalette()) return;
+        prefs_.meter.custom(); prefs_.meter.palette=meterEditor_.palette(); break;
     case Row::ColdJunction: case Row::TemperatureUnit:
         meterTemperatureSettings(meterEditor_.temperature(), now);
         meterEditor_ = meterProperties();

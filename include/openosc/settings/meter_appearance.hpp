@@ -63,9 +63,11 @@ public:
     enum ReadingFont : uint8_t { ReadingIbm, ReadingMono, ReadingSegment };
     enum TextFont : uint8_t { TextIbm, TextMono };
     enum LineStyle : uint8_t { Thin, Bold }; // Arc, ticks, needle.
-    // The look of the user's photo (dark body, white dial, light needle, amber reading and unit,
-    // muted statistics, cyan cards), as overrides: applying it leaves every element editable.
-    static MeterAppearance hybrid();
+    // Preset Hybrid: the look of the user's photo (dark body, white dial, light needle, amber reading
+    // and unit, muted statistics, cyan cards) as overrides over Dark and IBM. A constant (flash): the
+    // DMM shows it while the preset is Hybrid (MeterPreferences::preset), and a manual edit starts a
+    // Custom look from it; the user's Custom look is kept apart (MeterPreferences::face/palette/appearance).
+    static const MeterAppearance &hybrid();
     static constexpr unsigned HybridPalette = 0, HybridFace = ReadingIbm; // Dark, IBM.
 };
 } // namespace openosc

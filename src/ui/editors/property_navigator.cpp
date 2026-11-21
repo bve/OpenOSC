@@ -4,7 +4,8 @@
 namespace openosc::ui {
 void PropertyNavigator::restore(PropertyList &list) const { list.cancelEdit(row_, saved_); }
 bool PropertyNavigator::cancel(PropertyList &list) {
-    const bool number = mode_ == Mode::Number;
+    // A row gone or no longer a Number keeps its value: the restore never lands on another row.
+    const bool number = mode_ == Mode::Number && row_ < list.count() && list.kind(row_) == PropertyKind::Number;
     if (number) restore(list);
     mode_ = Mode::Browse;
     return number;
@@ -24,7 +25,8 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     const uint32_t repeated = repeated_;
     repeated_ = 0; // This call's only.
     const unsigned count = list.count();
-    if (!keys || !count) return Outcome::None;
+    if (!keys) return Outcome::None;
+    if (!count) { mode_ = Mode::Browse; return Outcome::None; } // Emptied: an open list or edit closes, no row to read.
     const bool gone = row_ >= count;
     if (gone) row_ = count - 1;
     const auto kind = list.kind(row_);
@@ -37,8 +39,8 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     case Mode::Choice: {
         const unsigned options = list.options(row_);
         if (!options) { mode_ = Mode::Browse; return Outcome::None; } // The list emptied while open.
-        if (draft_ >= options) draft_ = 0; // It shrank: its first option.
         if (keys & backKeys) { mode_ = Mode::Browse; return Outcome::None; }
+        if (draft_ >= options) { draft_ = 0; return Outcome::None; } // It shrank: the key shows its first option, takes none.
         if (keys & Keypad::Menu) { // Wins over a move pressed with it.
             mode_ = Mode::Browse;
             if (draft_ == list.option(row_)) return Outcome::None;

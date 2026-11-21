@@ -28,6 +28,8 @@ struct NamedColor { const char *name, *key; uint32_t rgb; };
 class ColorCatalog {
 public:
     static constexpr unsigned Swatches = 16;
+    // The table's indices by name, for looks built at compile time (MeterAppearanceCatalog::hybrid).
+    enum Named : uint8_t { White, Silver, Gray, Graphite, Black, Navy, Amber, Orange, Yellow, Red, Green, Cyan, Sky, Blue, Violet, Paper };
     static const NamedColor &swatch(unsigned index);
     static uint8_t byKey(const char *key); // ColorValue::Inherit if none.
 };

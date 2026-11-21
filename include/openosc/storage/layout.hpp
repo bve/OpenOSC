@@ -18,6 +18,8 @@ struct Layout {
     // Decoded events (CSV, docs/SCOPE_PROTOCOL_DECODERS_CSV.md): created by the application when it first
     // saves one (DecodeCsvFile), not by prepare(): Recovery and the formatter never need it.
     static constexpr const char *Decode = "/openosc/DECODE";
+    // Frequency response runs (CSV, BodeCsvFile): made by the application on its first save, as Decode.
+    static constexpr const char *Fra = "/openosc/FRA";
     // Parents before children: the order prepare() creates them in.
     static constexpr const char *Directories[] = {Root, Update, Backup, Settings, SettingsCopyDirectory, Ui, Calibration, Screenshots, Captures, Logs};
     // Empty directories the factory startup creates in the root after every reset. Not OpenOSC data:

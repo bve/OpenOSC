@@ -21,8 +21,10 @@ const scope::FrameMetadata *InstrumentBackend::configuration() const {
     const auto &metadata = application_.data_.scopeMetadata();
     return metadata.valid() ? &metadata : nullptr;
 }
+// A Bode sweep's settings in force (bodeOwns, ZT703S): the generator, the capture and its records are the
+// sweep's; the paths that would change them or hold its records refuse until they are restored.
 bool InstrumentBackend::configure(const ScopeRequest &r, bool level) {
-    if (application_.data_.zeroBusy()) return false;
+    if (application_.data_.zeroBusy() || application_.bodeOwns()) return false;
     auto &a = application_; if (!a.cancelAuto(Board::milliseconds())) return false;
     return a.applyFollowing(r,Board::milliseconds(),ApplicationController::ScopeApply::StageIfHeld,
                             level ? ApplicationController::LevelIntent::Set : ApplicationController::LevelIntent::Follow);
@@ -31,7 +33,7 @@ bool InstrumentBackend::configureScope(const ScopeRequest &r) { return configure
 bool InstrumentBackend::setTrigger(const ScopeRequest &r) { return configure(r, true); }
 void InstrumentBackend::demand() const { application_.data_.frameHosts().demand(host_, Board::milliseconds()); }
 bool InstrumentBackend::run(bool single) {
-    if (application_.data_.zeroBusy()) return false;
+    if (application_.data_.zeroBusy() || application_.bodeOwns()) return false;
     application_.data_.frameHosts().rearm(host_, application_.data_.scopeFrameSequence(), Board::milliseconds());
     // The decoded record kept for hosts is of before the new arm (and a share skips acquireScope's Single
     // stale guard): it goes; the new arm's records are shared again once decoded.
@@ -46,7 +48,7 @@ bool InstrumentBackend::run(bool single) {
 bool InstrumentBackend::autoScale() {
     auto &a=application_;
     if (a.data_.measurementMode()!=MeasurementMode::Oscilloscope || a.data_.zeroBusy() ||
-        a.data_.scopeRecording() || a.autoBusy()) return false;
+        a.data_.scopeRecording() || a.autoBusy() || a.bodeOwns()) return false;
     a.startAuto(Board::milliseconds());
     return a.autoBusy();
 }
@@ -54,14 +56,14 @@ bool InstrumentBackend::autoScale() {
 // done are DataAccess's.
 bool InstrumentBackend::forceTrigger() {
     auto &a = application_;
-    if (a.data_.measurementMode() != MeasurementMode::Oscilloscope || a.autoBusy()) return false;
+    if (a.data_.measurementMode() != MeasurementMode::Oscilloscope || a.autoBusy() || a.bodeOwns()) return false;
     demand(); // The forced record is read next (Root HIL 2026-11-13: Normal TFOR lost it to the next capture).
     return a.data_.forceScope();
 }
 uint32_t InstrumentBackend::frameSequence() const {
     const auto &a = application_;
     const auto &d = a.data_;
-    if (d.measurementMode() != MeasurementMode::Oscilloscope || d.zeroBusy()) return 0;
+    if (d.measurementMode() != MeasurementMode::Oscilloscope || d.zeroBusy() || a.bodeOwns()) return 0;
     demand(); // ACQ:FRAME?: the host polls for the record it will read.
     if (!decodedRecords()) return d.scopeFrameSequence();
     // The decoder on (plan §5.3): the record record() serves: the decoded one kept for hosts, else the
@@ -87,6 +89,7 @@ bool InstrumentBackend::record(scope::FrameLease &out) {
 }
 void InstrumentBackend::stop() {
     auto &a=application_;
+    if (a.bodeOwns()) return;
     if (!a.cancelAuto(Board::milliseconds(),true)) return;
     a.data_.holdScope(true); a.dataRefresh_=true;
 }
@@ -95,6 +98,7 @@ bool InstrumentBackend::waiting() const { return application_.data_.scopeWaiting
 bool InstrumentBackend::triggered() const { return application_.data_.scopeTriggered(); }
 const scope::FrameView *InstrumentBackend::frame(bool refresh) {
     if (refresh) releaseFrame();
+    if (application_.bodeOwns()) { releaseFrame(); return nullptr; } // Not a sweep's record: its lease would hold capture.
     application_.data_.noteFrameDemand(Board::milliseconds());
     demand();
     if (!lease_.valid() && !record(lease_)) return nullptr;
@@ -174,8 +178,10 @@ uint32_t InstrumentBackend::operationTimeoutMs() const {
 }
 DataStatus InstrumentBackend::operationStatus() const { return application_.data_.dmmCommandStatus(); }
 generator::Snapshot InstrumentBackend::generator() const { return application_.data_.generator().snapshot(); }
-bool InstrumentBackend::configureGenerator(const generator::Settings &s) { return application_.applyGenerator(s,Board::milliseconds()); }
-bool InstrumentBackend::output(bool value) { return application_.requestGeneratorOutput(value, Board::milliseconds()); }
+bool InstrumentBackend::configureGenerator(const generator::Settings &s) {
+    return !application_.bodeOwns() && application_.applyGenerator(s,Board::milliseconds());
+}
+bool InstrumentBackend::output(bool value) { return !application_.bodeOwns() && application_.requestGeneratorOutput(value, Board::milliseconds()); }
 scpi::Backend::InterleaveStatus InstrumentBackend::interleave() const {
     const auto &a = application_;
     const uint32_t blockers = a.data_.interleaveBlockers();
@@ -185,9 +191,10 @@ scpi::Backend::InterleaveStatus InstrumentBackend::interleave() const {
             features.adcInterleave, mode == scope::InterleaveMode::Auto};
 }
 bool InstrumentBackend::interleave(bool on) {
+    if (application_.bodeOwns()) return false;
     return application_.selectInterleave(on ? scope::InterleaveMode::On : scope::InterleaveMode::Off, Board::milliseconds());
 }
-bool InstrumentBackend::interleaveAuto() { return application_.selectInterleave(scope::InterleaveMode::Auto, Board::milliseconds()); }
+bool InstrumentBackend::interleaveAuto() { return !application_.bodeOwns() && application_.selectInterleave(scope::InterleaveMode::Auto, Board::milliseconds()); }
 bool InstrumentBackend::generatorStartup() const { return application_.prefs_.generatorStartup; }
 bool InstrumentBackend::generatorStartup(bool restore) {
     auto &a = application_;
@@ -211,6 +218,7 @@ int InstrumentBackend::coreMhz(uint32_t mhz) {
     while (mode < RunModeCount && RunModes[mode].coreHz != mhz * 1000000ULL) ++mode;
     if (mode == RunModeCount) return -224; // Only the profiles of the Settings menu.
     if (!RemoteClock::allowed(mode, application_.remote_)) return -221; // Remote keeps 200 MHz.
+    if (application_.bodeOwns()) return -221; // The DAC's clock is the sweep's.
     switch (application_.changeRunMode(mode, Board::milliseconds(), RemoteClock::persists(application_.remote_)).outcome) {
     case RunModeSwitch::Outcome::Applied:
     case RunModeSwitch::Outcome::Unchanged: return 0;
