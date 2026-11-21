@@ -8,7 +8,7 @@ namespace openosc::ui {
 //         (the first after the last) or switches a Toggle, once per press (not on its auto-repeat);
 //         on a Number, Action or Info row Right does nothing; F4 goes back. Left (leftBack): Back, or
 //         Step: the option before (none before the first; a Toggle: On to Off only), else nothing.
-// Choice: one move a key event: Up/Down in the list (Left/Right as Step: up/down, no wrap); MENU takes
+// Choice: one move a key event: Up/Down in the list (Left as Step: Left/Right up/down, no wrap); MENU takes
 //         it, over any move; F4 (and Left as Back) cancel.
 // Number: Left/Right and Up/Down step the value; MENU keeps it; F4 restores it.
 // One field at a time is committed: a Choice taken, a Toggle switched, a Number finished with MENU
