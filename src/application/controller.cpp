@@ -307,7 +307,7 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
         return;
     }
     if (events.shortPress & Keypad::Mode) {
-        if (selectMode(nextMode(state_.mode), now) == ModeChange::Refused) view_.notify("Cannot switch measurement hardware",now);
+        if (selectMode(nextMode(state_.mode, prefs_.generatorInRotation != 0), now) == ModeChange::Refused) view_.notify("Cannot switch measurement hardware",now);
         return;
     }
     if ((events.longPress & Keypad::Menu) && !state_.settingsOpen) {

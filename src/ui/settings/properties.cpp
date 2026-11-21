@@ -34,6 +34,7 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     if (CalibrationRows::handles(entry.action)) return calibration_.kind(entry.action);
     switch (entry.action) {
     case Action::Brightness: return PropertyKind::Number;
+    case Action::GeneratorRotation: return PropertyKind::Toggle;
     case Action::ShowFps: case Action::ClockIndicator: case Action::PanDirection: case Action::HoldTime:
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
@@ -49,7 +50,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     switch (action(row)) {
     case Action::ShowFps: return 3;
     case Action::ClockIndicator: return 2;
-    case Action::PanDirection: return 2;
+    case Action::PanDirection: case Action::GeneratorRotation: return 2;
     case Action::HoldTime: return 3;
     case Action::BatteryDisplay: return 3;
     case Action::RunProfile: return RunModeCount;
@@ -68,6 +69,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::ShowFps: return prefs_.showFps;
     case Action::ClockIndicator: return prefs_.clockIndicator;
     case Action::PanDirection: return prefs_.panReverse;
+    case Action::GeneratorRotation: return prefs_.generatorInRotation;
     case Action::HoldTime: return prefs_.holdTime;
     case Action::BatteryDisplay: return prefs_.batteryDisplay;
     case Action::RunProfile: return activeRunMode_ < RunModeCount ? activeRunMode_ : prefs_.scope.runMode;
@@ -183,6 +185,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::ShowFps: prefs_.showFps = index; break;
     case Action::ClockIndicator: prefs_.clockIndicator = index; break;
     case Action::PanDirection: prefs_.panReverse = index; break;
+    case Action::GeneratorRotation: prefs_.generatorInRotation = index; break;
     case Action::HoldTime: prefs_.holdTime = index; break;
     case Action::BatteryDisplay: prefs_.batteryDisplay = index; break;
     case Action::RunProfile: prefs_.scope.runMode = index; break;

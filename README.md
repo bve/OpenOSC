@@ -170,8 +170,10 @@ Captured on a ZT703S running OpenOSC.
 - Digit-by-digit frequency entry; duty cycle for square
 - Keeps running in the background while you use the oscilloscope or the multimeter
 - Output is OFF after power-on by default, or restores its last state
-  (**Settings → Device → Power → Generator at startup**)
-- Rearrangeable screen (**Settings → Display → Generator layout**)
+  (**Settings → Generator → Output at startup**)
+- Rearrangeable screen (**Settings → Generator → Layout**)
+- Can be left out of the MODE rotation (**Settings → Generator → In MODE rotation**); then
+  **Settings → Generator → Open generator** opens it
 - ZT703S: square output as in the stock firmware (DAC below 1 kHz, PWM from 1 kHz) or PWM
   always; Reference 1 kHz preset
 - ZT706S: its external generator module, up to 10 MHz

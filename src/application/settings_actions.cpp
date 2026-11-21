@@ -20,6 +20,12 @@ ui::SettingsProperties ApplicationController::settingsRows() const {
                      data_.interleaveMeasurement().active()});
     return rows;
 }
+void ApplicationController::openGenerator(uint32_t now) {
+    const auto change = selectMode(MeasurementMode::Generator, now);
+    if (change == ModeChange::Busy) return; // cancelAuto said why.
+    if (change == ModeChange::Refused) { view_.notify("Cannot switch measurement hardware", now); return; }
+    if (state_.settingsOpen) closeSettings();
+}
 void ApplicationController::closeSettings() {
     state_.settingsOpen = false;
     dataRefresh_ = true;
@@ -61,6 +67,7 @@ void ApplicationController::settingsKeys(uint32_t keys, uint32_t now) {
     case Outcome::Activate:
         if (settingsMenu_.current().action == ui::SettingsAction::Back) { if (!back()) return; }
         else if (settingsMenu_.current().action == ui::SettingsAction::GeneratorLayout) { openGeneratorLayout(true); return; } // A panel, not an action.
+        else if (settingsMenu_.current().action == ui::SettingsAction::OpenGenerator) { openGenerator(now); return; }
         else settingsAction(settingsMenu_.current().action, now);
         break;
     case Outcome::Changed: // A committed field; the interleave offset's edit puts it in force (not saved).
@@ -107,6 +114,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.idle = chosen.idle;
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
+    prefs_.generatorInRotation = chosen.generatorInRotation;
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();

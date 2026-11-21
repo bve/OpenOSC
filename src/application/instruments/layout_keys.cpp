@@ -34,7 +34,7 @@ void ApplicationController::openGeneratorLayout(bool fromSettings) {
 }
 void ApplicationController::generatorLayoutKeys(uint32_t keys, uint32_t now) {
     if (!layoutKeys(keys, generatorLayout_, prefs_.generatorArrangement, now)) return;
-    if (generatorLayoutFromSettings_) { // Back to its row in Settings / Display.
+    if (generatorLayoutFromSettings_) { // Back to its row in Settings / Generator.
         panel_ = Panel::None; state_.settingsOpen = true;
         navigator_.reset(settingsMenu_.selected());
         showSettings();
