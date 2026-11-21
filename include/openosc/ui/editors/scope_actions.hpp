@@ -8,13 +8,9 @@ namespace openosc::ui {
 // (a choice: Off, Time, Level, Time+Level), taken at once.
 class ScopeActions final : public PropertyList {
 public:
-    // Bode: the frequency response analysis (GitHub #72), the ZT703S's DAC generator only.
+    // Bode: the frequency response analysis (GitHub #72), with either board's generator (ZT703S DAC, ZT706S module).
     enum Action { Display, Measurements, Cursors, Layout, Colors, Acquisition, Decoder, ArmSingle, SaveRaw, SaveCsv, Spectrum, CenterChannels, ResetPan, TriggerMidpoint, Bode, All };
-#if OPENOSC_BOARD == 703
     static constexpr unsigned Count = All;
-#else
-    static constexpr unsigned Count = Bode;
-#endif
     explicit ScopeActions(const plot::Options &options = {}) : cursors_(options.cursors),
           spectrum_(options.mode == plot::Mode::Spectrum || options.mode == plot::Mode::SpectrumOverlay) {}
     const char *title() const override { return "ANALYZE"; }

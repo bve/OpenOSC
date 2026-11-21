@@ -1,28 +1,40 @@
-// Frequency response analysis on the ZT703S (GitHub #72): Analyze -> Bode (FRA). The sweep itself is
+// Frequency response analysis (GitHub #72): Analyze -> Bode (FRA), on the ZT703S (DAC2) and the ZT706S
+// (the USART3 module, ModuleOutput), one session and one controller for both. The sweep itself is
 // scope::BodeSweep (acquisition/bode.cpp), its results scope::BodeResults (acquisition/bode_analysis.cpp),
 // its CSV BodeCsvFile (bode_csv_file.cpp); here its session, the instrument behind it and the UI.
 // - The generator and the capture are set through DataAccess directly, never applyGenerator/applyScope:
 //   no preference changes, no saves, and GeneratorStartup follows no request (the output's ON/OFF is
-//   not the user's). The sweep plays a sine at the drive chosen in its setup (the generator's own level,
-//   or Dedicated/Low/High, or Custom DAC codes), set at Run only.
+//   not the user's). The sweep plays a sine at the drive chosen in its setup, set at Run only: ZT703S the
+//   generator's own level, or Dedicated/Low/High, or Custom DAC codes; ZT706S the generator's amplitude
+//   (the module has no DAC codes or level profiles: Drive is that one choice, no Custom rows).
+// - The generator is asked once a point (BodePort::tune) and polled (tuned): the DAC is confirmed at
+//   once, the module only by its acknowledge of exactly that frame with the output ON; the settle counts
+//   from it. Its bounded retries are ModuleRecovery's; Failed or MaximumTuneMs fails the sweep.
+// - ZT706S gating: the module's control-word bit 10 is in every Scope word (frontend 0x1600 and the
+//   channels' words); only the DMM word needs generator::controlBits. Bode runs in the Scope only: no
+//   enable of its own.
 // - The original capture request and generator settings and output state are kept when the sweep starts
 //   and put back when it ends (done, stopped, failed) and whenever the panel goes: Exit/MODE, a mode
 //   change by any path (selectMode), a shutdown (requestShutdown), Remote (setRemote), the Scope taken
 //   over (HOLD, a recording, a calibration, AutoSetup), recovery. An original OFF output is switched off
-//   before anything else (the old excitation never plays again); a restore a busy instrument refused
-//   keeps the originals and is tried again (RetryMs) until it is whole. While the sweep's settings are in
-//   force (bodeOwns) the SCPI paths that would change them or hold its records are refused, and a mode or
-//   Remote change waits for the restore.
+//   before anything else (the old excitation never plays again). The generator's original is asked once
+//   and then polled until confirmed (ON acknowledged with the original settings, or OFF confirmed): a
+//   request refused is asked again (RetryMs, RetryLimit times), one the generator gave up on (or that
+//   MaximumTuneMs did not confirm) ends the restore with a notice. The capture's request is tried again
+//   (RetryMs) while refused. Until the restore is whole (bodeOwns) the SCPI paths that would change the
+//   generator or the capture or hold its records are refused, no new sweep starts, and a mode or Remote
+//   change waits for it.
 // - The run as it ran (its settings, the drive that played) is kept apart from the setup: the results,
 //   the Results page and the CSV are of it, whatever the setup says after. While its CSV is written the
 //   points stay as they are: no new sweep starts.
 #include "openosc/application/controller.hpp"
-#if OPENOSC_BOARD == 703
 #include "openosc/acquisition/bode.hpp"
 #include "openosc/acquisition/bode_analysis.hpp"
 #include "openosc/application/bode_csv_file.hpp"
 #include "openosc/generator/capabilities.hpp"
 #include "openosc/generator/frequency.hpp"
+#include "openosc/generator/module_link.hpp"
+#include "openosc/generator/module_recovery.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/ui/editors/scope_actions.hpp"
 #include "openosc/ui/scope/format.hpp"
@@ -58,15 +70,33 @@ struct BodeSession {
     scope::BodeResults analysis;
     bool saving = false;       // A CSV of it being written: no new sweep.
     unsigned measured = 0;
-    uint32_t timerHz = 0;      // The DAC timer's clock when the setup opened.
-    uint64_t maximum = 0;      // Millihertz: the sine's limit at that clock and the chosen drive's level.
+    uint32_t timerHz = 0;      // ZT703S: the DAC timer's clock when the setup opened (the module has none).
+    uint64_t maximum = 0;      // Millihertz: the sine's limit for the chosen drive (Drives::maximum).
+    uint64_t tuning = 0;       // Millihertz: the frequency asked of the generator (tuned() confirms it).
     uint32_t retryAt = 0;      // A refused restore's next attempt (ms).
+    uint32_t askedAt = 0;      // When the generator's original was asked (ms): MaximumTuneMs to confirm it.
     unsigned attempts = 0;     // Refused restores in a row: RetryLimit of them give up (a fault, not Busy).
-    bool abandoned = false;    // Given up: said once.
+    bool asked = false;        // The generator's original asked (and not refused): polled, never sent again.
+    const char *abandoned = nullptr; // Given up, and why: said once.
     char status[24] = "";
 };
 constexpr uint32_t RetryMs = 50;
 constexpr unsigned RetryLimit = 100; // 5 s of refusals: the instrument is not busy but faulty.
+// The module's own bound (an exchange from submit, ModuleRecovery's rounds and their delays) under the
+// sweep's backstop for a confirmation, which the restore uses too.
+static_assert(board::Current::Features.generator != board::GeneratorDriver::SerialModule ||
+              (generator::ModuleRecovery::Rounds + 1) * generator::ModuleLink::ExchangeMs +
+              generator::ModuleRecovery::Rounds * generator::ModuleRecovery::DelayMs < Sweep::MaximumTuneMs,
+              "A sweep's confirmation deadline below the module's own bounded retries");
+// A request the generator took, from its driver's state alone (both drivers: the DAC confirms at once,
+// the module by its acknowledge): Done once that state is confirmed, Pending while a frame or a recovery
+// round is under way, Failed once the driver stopped trying. Reads only: never a send.
+enum class Confirmation : uint8_t { Pending, Done, Failed };
+template <class Output> Confirmation confirmation(const Output &output, bool on) {
+    if (on ? output.onConfirmed() : output.offConfirmed()) return Confirmation::Done;
+    if (output.busy() || output.recovering() || output.status() == DataStatus::Busy) return Confirmation::Pending;
+    return Confirmation::Failed;
+}
 constexpr int32_t CodeMax = 4095, CodeCoarse = 100; // Custom DAC codes: 0..4095, Left/Right 1, Up/Down 100.
 alignas(8) __attribute__((section(".bode"))) unsigned char storage[sizeof(BodeSession)];
 bool built = false;
@@ -75,8 +105,10 @@ BodeSession &session() {
     return *reinterpret_cast<BodeSession *>(storage);
 }
 // The frequencies offered for the start and the stop: 1-2-5 from 1 Hz below the limit, then the limit.
+// The ZT703S's limit is below 500 kHz (DacCapabilities: 344 kHz at most), so the steps above it are the module's.
 constexpr uint64_t Steps[] = {1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000,
-                              10000000, 20000000, 50000000, 100000000, 200000000};
+                              10000000, 20000000, 50000000, 100000000, 200000000, 500000000, 1000000000, 2000000000,
+                              5000000000};
 unsigned frequencies(uint64_t maximum) {
     unsigned n = 0;
     while (n < sizeof Steps / sizeof *Steps && Steps[n] < maximum) ++n;
@@ -94,39 +126,75 @@ template <size_t N> unsigned choiceOf(const uint32_t (&values)[N], uint32_t valu
     for (unsigned i = 0; i < N; ++i) if (values[i] == value) return i;
     return 0;
 }
-// The sine a drive plays: the generator's own settings (From GEN), or them at another level; Custom with
-// the setup's codes (Levels::codes: what WaveTable spans).
-generator::Settings excitationOf(const generator::Settings &gen, Drive drive, uint16_t low, uint16_t high) {
-    auto s = gen;
-    s.shape = generator::Shape::Sine;
-    if (drive == Drive::Dedicated) s.level = generator::Level::Dedicated;
-    else if (drive == Drive::Low) s.level = generator::Level::Low;
-    else if (drive == Drive::High) s.level = generator::Level::High;
-    else if (drive == Drive::Custom) { s.level = generator::Level::Custom; s.minimumCode = low; s.maximumCode = high; }
-    return s;
+// The drives a board's generator offers and what each plays (one place for the board's difference):
+// - ZT703S (Levels): the generator's own settings (From GEN), or them at another level; Custom with the
+//   setup's codes (Levels::codes: what WaveTable spans). The limit: the DAC's for that level at the
+//   timer clock the setup saw, which must be known.
+// - ZT706S (the module's amplitude): From GEN only, the generator's amplitude as set. The limit: the
+//   highest sine the module represents at that amplitude without lowering it; no clock of its own.
+struct Drives {
+    static constexpr bool Levels = generator::Capabilities::Levels;
+    static constexpr unsigned Count = Levels ? unsigned(Drive::Custom) + 1 : 1;
+    static constexpr bool NeedsClock = Levels;
+    static generator::Settings excitation(const generator::Settings &gen, Drive drive, uint16_t low, uint16_t high) {
+        auto s = gen;
+        s.shape = generator::Shape::Sine;
+        if (!Levels) return s;
+        if (drive == Drive::Dedicated) s.level = generator::Level::Dedicated;
+        else if (drive == Drive::Low) s.level = generator::Level::Low;
+        else if (drive == Drive::High) s.level = generator::Level::High;
+        else if (drive == Drive::Custom) { s.level = generator::Level::Custom; s.minimumCode = low; s.maximumCode = high; }
+        return s;
+    }
+    static uint64_t maximum(const generator::Settings &excitation, uint32_t timerHz) {
+        if (Levels) return generator::DacCapabilities::maximumMillihertz(generator::Shape::Sine, excitation.level, timerHz);
+        return generator::ModuleCapabilities::sineMaximumMillihertz(excitation.amplitudeMillivolts);
+    }
+    // Why a drive cannot play at all (nullptr: it can).
+    static const char *refusal(const generator::Settings &excitation) {
+        if (!excitation.valid()) return "Bode: the drive's codes are not valid";
+        if (!Levels && !excitation.amplitudeMillivolts) return "Bode: GEN amplitude is 0 V";
+        return nullptr;
+    }
+};
+generator::Settings excitationOf(const BodeSession &s, const generator::Settings &gen) {
+    return Drives::excitation(gen, s.drive, s.customLow, s.customHigh);
 }
-// The sine's highest frequency at the level a drive plays, at the clock the setup saw.
+// The sine's highest frequency for the drive chosen, at the clock the setup saw (ZT703S).
 void limit(BodeSession &s, const generator::Settings &gen) {
-    const auto level = excitationOf(gen, s.drive, s.customLow, s.customHigh).level;
-    s.maximum = generator::DacCapabilities::maximumMillihertz(generator::Shape::Sine, level, s.timerHz);
+    s.maximum = Drives::maximum(excitationOf(s, gen), s.timerHz);
     if (s.settings.stopMillihertz > s.maximum) s.settings.stopMillihertz = s.maximum;
     if (s.settings.startMillihertz > s.maximum) s.settings.startMillihertz = s.maximum;
+}
+// The generator's timer clock the limits need: true with it read (or none needed, the ZT706S module).
+bool readClock(DataAccess &data, BodeSession &s) {
+    s.timerHz = data.generator().snapshot().timerHz; // The DAC timer's clock as the output last read it.
+    return !Drives::NeedsClock || s.timerHz;
 }
 // The generator and the capture for the sweep (BodePort), straight through DataAccess.
 class Instrument final : public scope::BodePort {
 public:
     Instrument(DataAccess &data, BodeSession &s) : data_(data), s_(s) {}
-    bool tune(uint64_t millihertz, double &hz) override {
-        auto settings = s_.excitation; // The drive chosen at Run.
-        settings.frequencyHz = generator::Frequency::rational(millihertz);
+    bool tune(uint64_t millihertz) override {
         auto &output = data_.generator();
         s_.touched = true;
-        if (!output.configure(settings)) return false;
-        if (!output.enabled() && !output.enable()) return false;
-        const auto snapshot = output.snapshot();
-        if (snapshot.status != DataStatus::Ok || !snapshot.applied.actualHz.valid()) return false;
-        hz = snapshot.applied.actualHz.value(); // What the DAC plays, not the setting.
-        return hz > 0;
+        s_.tuning = millihertz;
+        const auto settings = asked();
+        if (!output.configure(settings)) return false; // Changed while ON: the module's frame is queued.
+        return output.enabled() || output.enable();    // OFF before: ON (with them) is queued.
+    }
+    Tuning tuned(double &hz) override {
+        const auto &output = data_.generator();
+        if (!output.enabled() || !output.settings().same(asked())) return Tuning::Failed; // Not the sweep's any more.
+        switch (confirmation(output, true)) {
+        case Confirmation::Pending: return Tuning::Pending;
+        case Confirmation::Failed: return Tuning::Failed;
+        case Confirmation::Done: break;
+        }
+        const auto &actual = output.plan().actualHz; // What it plays (the DAC's plan, the module's frame), not the setting.
+        if (!actual.valid()) return Tuning::Failed;
+        hz = actual.value();
+        return hz > 0 ? Tuning::Ready : Tuning::Failed;
     }
     bool configure(const ScopeRequest &request) override { s_.touched = true; return data_.configureScope(request); }
     uint64_t nowUs() const override { return data_.nowUs(); }
@@ -134,6 +202,11 @@ public:
 private:
     DataAccess &data_;
     BodeSession &s_;
+    generator::Settings asked() const { // The drive chosen at Run at the frequency asked.
+        auto settings = s_.excitation;
+        settings.frequencyHz = generator::Frequency::rational(s_.tuning);
+        return settings;
+    }
 };
 // SETUP: the range, the density, the settle, the averages, the drive (its codes when Custom), Run; with a
 // result: the plot, the Results page and its CSV. Rows shown are listed (Custom's codes only for Custom).
@@ -186,7 +259,7 @@ public:
         case Density: return sizeof Settings::PointsChoices / sizeof *Settings::PointsChoices;
         case Settle: return sizeof Settings::SettleChoices / sizeof *Settings::SettleChoices;
         case Averages: return sizeof Settings::AverageChoices / sizeof *Settings::AverageChoices;
-        case Level: return unsigned(Drive::Custom) + 1;
+        case Level: return Drives::Count;
         default: return 0;
         }
     }
@@ -225,7 +298,7 @@ public:
         case Settle: if (index >= 8) return false; t.settleMs = Settings::SettleChoices[index]; return true;
         case Averages: if (index >= 3) return false; t.averages = Settings::AverageChoices[index]; return true;
         case Level:
-            if (index > unsigned(Drive::Custom)) return false;
+            if (index >= Drives::Count) return false;
             s_.drive = Drive(index); limit(s_, gen_); return true;
         default: return false;
         }
@@ -237,24 +310,46 @@ private:
     unsigned n_ = 0;
 };
 // The instrument as it was before the sweep; true once all of it is back (or nothing was changed). The
-// sweep's lease goes first; an original OFF is switched off before its settings return (a configure
-// while off plays nothing), an original ON gets its settings (while on: the stream restarts with them)
-// and is switched on. The capture's request returns (staged for the next RUN while HOLD keeps a record).
-// Every step is idempotent: a refused one (Busy) leaves `touched` and the originals for the next try.
+// sweep's lease goes first. The generator's original is asked once: an original OFF is switched off
+// before its settings return (a configure while off plays nothing: the DAC halted, the module's
+// settings kept for its next ON), an original ON gets its settings (while on: the DAC restarts with
+// them, the module's frame is queued) and is switched on. Then it is only polled (confirmation(): no
+// disable() or enable() again, which after a module failure would be a new request): a refused ask is
+// asked again (RetryMs, RetryLimit), a request the driver gave up on or MaximumTuneMs did not confirm
+// ends the restore (abandoned, said once). The capture's request returns (staged for the next RUN while
+// HOLD keeps a record), tried again while refused. Ownership (`touched`) ends only with all of it.
 bool restore(DataAccess &data, BodeSession &s, uint32_t now) {
     s.sweep.cancel();
     if (!s.touched) return true;
     auto &output = data.generator();
-    bool generator = true;
-    if (!s.generatorOn) {
-        if (output.enabled()) output.disable(); // Not when off: disable() would end the calibration reference.
-        generator = output.offConfirmed() && output.configure(s.generator);
-    } else generator = output.configure(s.generator) && output.enable();
+    bool refused = false;
+    if (!s.asked) {
+        if (!s.generatorOn) {
+            if (output.enabled()) output.disable(); // Not when off: disable() would end the calibration reference.
+            s.asked = !output.enabled() && output.configure(s.generator);
+        } else s.asked = output.configure(s.generator) && output.enable();
+        if (s.asked) s.askedAt = now;
+        else refused = true;
+    }
+    bool generator = false;
+    if (s.asked) {
+        const bool kept = output.enabled() == s.generatorOn && output.settings().same(s.generator);
+        const auto state = kept ? confirmation(output, s.generatorOn) : Confirmation::Failed;
+        if (state == Confirmation::Done) generator = true;
+        else if (state == Confirmation::Failed || now - s.askedAt >= Sweep::MaximumTuneMs) {
+            s.abandoned = "Bode: GEN did not confirm its restore: check GEN";
+            generator = true; // The generator's part ends here (its driver keeps the original as the request).
+        }
+    }
     const bool scope = data.scopeRequest().same(s.original) ||
         (data.scopeHeld() ? data.stageScope(s.original) : data.configureScope(s.original));
-    if (generator && scope) { s.touched = false; s.attempts = 0; return true; }
-    if (++s.attempts >= RetryLimit) { s.touched = false; s.attempts = 0; s.abandoned = true; } // Never a lock for ever.
-    s.retryAt = now + RetryMs;
+    if (!scope) refused = true;
+    if (generator && scope) { s.touched = false; s.asked = false; s.attempts = 0; return true; }
+    if (refused && ++s.attempts >= RetryLimit) { // Never a lock for ever.
+        s.touched = false; s.asked = false; s.attempts = 0;
+        s.abandoned = "Bode: restore refused: check GEN and the Scope";
+    }
+    s.retryAt = refused ? now + RetryMs : now; // A confirmation is polled every pass.
     return false;
 }
 // The sweep's end in the header: how many of its points are valid of those measured (and of all).
@@ -265,12 +360,14 @@ void ended(BodeSession &s, const char *word) {
     else std::snprintf(s.status, sizeof s.status, "%s %u/%u, %u valid", word, s.measured, s.sweep.count(), valid);
 }
 const char *failure(Sweep::Failure f) {
-    return f == Sweep::Failure::Generator ? "Bode stopped: generator refused the frequency" : "Bode stopped: capture refused";
+    return f == Sweep::Failure::Generator ? "Bode stopped: generator refused the frequency"
+        : f == Sweep::Failure::Unconfirmed ? "Bode stopped: generator did not confirm the frequency" : "Bode stopped: capture refused";
 }
 } // namespace
 
 bool ApplicationController::bodeRunning() const { return built && panel_ == Panel::Bode && session().sweep.running(); }
 bool ApplicationController::bodeOwns() const { return built && (session().touched || session().sweep.running()); }
+bool ApplicationController::bodeRestoring() const { return bodeOwns() && !session().sweep.running(); }
 void ApplicationController::openBode(uint32_t now) {
     const auto &request = data_.scopeRequest();
     const char *why = state_.mode != MeasurementMode::Oscilloscope || remote_ ? "Bode needs the Scope (not Remote)"
@@ -279,14 +376,13 @@ void ApplicationController::openBode(uint32_t now) {
         : data_.scopeMetadata().layout == scope::Layout::InterleavedCh1 ? "Turn Interleave CH1 off for Bode"
         : data_.scopeRecording() || data_.zeroBusy() || autoBusy() ? "Finish the running operation first"
         : data_.generator().status() == DataStatus::HardwareError ? "Generator fault: switch it off and on"
+        : data_.generator().busy() ? "Generator busy: try again when GEN is set" // A ZT706S frame on its way.
         : nullptr;
     if (why) { view_.notify(why, now); return; }
     auto &s = session();
     if (!restore(data_, s, now)) { view_.notify("Bode: the last sweep's restore is pending", now); return; } // Never two sessions' originals.
-    const auto &generator = data_.generator();
-    s.timerHz = generator.snapshot().timerHz; // The DAC timer's clock as the output last read it.
-    if (!s.timerHz) { view_.notify("Generator clock unknown: switch GEN on and off", now); return; }
-    limit(s, generator.settings());
+    if (!readClock(data_, s)) { view_.notify("Generator clock unknown: switch GEN on and off", now); return; }
+    limit(s, data_.generator().settings());
     panel_ = Panel::Bode;
     s.cursor.table = false; s.cursor.marker = scope::BodeMarkers::None; s.results = false; // The plot first.
     s.setupFromResult = false;
@@ -313,7 +409,8 @@ void ApplicationController::showBode(bool plot) {
 }
 void ApplicationController::finishBode(uint32_t now, const char *notice) {
     if (panel_ != Panel::Bode) return;
-    if (!restore(data_, session(), now)) notice = "Bode: instrument busy, restoring"; // serviceBode tries again.
+    // Not whole yet: serviceBode polls a confirmation (a ZT706S acknowledge) or tries a refusal again.
+    if (!restore(data_, session(), now)) notice = session().asked ? "Bode closed: restoring GEN" : "Bode: instrument busy, restoring";
     view_.bode().hide();
     closePanel();
     dataRefresh_ = true;
@@ -322,19 +419,24 @@ void ApplicationController::finishBode(uint32_t now, const char *notice) {
 void ApplicationController::startBodeSweep(uint32_t now) {
     auto &s = session();
     if (s.saving || bodeCsvFile().busy()) { view_.notify("Bode: saving the CSV, the next sweep after it", now); return; }
-    // The DAC clock and the generator's level as they are now (a host may have changed either since the
-    // setup opened, e.g. over SCPI while the result showed): the limit, then the grid, from them.
-    s.timerHz = data_.generator().snapshot().timerHz;
-    if (!s.timerHz) { view_.notify("Generator clock unknown: switch GEN on and off", now); return; }
+    // The DAC clock and the generator's level (amplitude) as they are now (a host may have changed either
+    // since the setup opened, e.g. over SCPI while the result showed): the limit, then the grid, from them.
+    if (!readClock(data_, s)) { view_.notify("Generator clock unknown: switch GEN on and off", now); return; }
     limit(s, data_.generator().settings());
     const auto grid = scope::BodeGrid::of(s.settings, 1000, s.maximum);
     if (!grid.valid()) { view_.notify("Bode: Stop must be above Start", now); return; }
     if (!restore(data_, s, now)) { view_.notify("Bode: the last sweep's restore is pending", now); return; }
+    // The originals only from a settled generator: a ZT706S frame still on its way (the user's, or a
+    // recovery round) would make enabled() an intent, not the state the restore must return to.
+    const auto &output = data_.generator();
+    const auto original = confirmation(output, output.enabled());
+    if (original == Confirmation::Pending) { view_.notify("Generator busy: try again when GEN is set", now); return; }
+    if (original == Confirmation::Failed) { view_.notify("Generator state unconfirmed: set output in GEN", now); return; }
     s.original = data_.scopeRequest();
-    s.generator = data_.generator().settings();
-    s.generatorOn = data_.generator().enabled();
-    const auto excitation = excitationOf(s.generator, s.drive, s.customLow, s.customHigh);
-    if (!excitation.valid()) { view_.notify("Bode: the drive's codes are not valid", now); return; }
+    s.generator = output.settings();
+    s.generatorOn = output.enabled();
+    const auto excitation = excitationOf(s, s.generator);
+    if (const char *why = Drives::refusal(excitation)) { view_.notify(why, now); return; }
     if (!s.sweep.start(s.settings, grid, s.original, s.points)) { view_.notify("Bode: cannot start", now); return; }
     s.run = s.settings; s.excitation = excitation; s.runDrive = s.drive; // The run as it runs.
     s.analysis = {};
@@ -429,9 +531,10 @@ void ApplicationController::serviceBode(uint32_t now) {
     }
     // A refused restore again (after the panel went too: a path that closed it); not while the instrument
     // shuts down (it stops everything itself and keeps the user's preferences, which the sweep never changed).
+    // A confirmation still pending (the ZT706S module's acknowledge) is polled every pass, nothing sent.
     const bool retry = s.touched && !s.sweep.running() && int32_t(now - s.retryAt) >= 0 && shutdown_ == Shutdown::None;
-    if (retry) restore(data_, s, now);
-    if (s.abandoned) { s.abandoned = false; view_.notify("Bode: restore refused: check GEN and the Scope", now); }
+    if (retry && restore(data_, s, now)) dataRefresh_ = true; // Whole: Run is offered again.
+    if (s.abandoned) { view_.notify(s.abandoned, now); s.abandoned = nullptr; }
     if (panel_ != Panel::Bode) return;
     const char *taken = shutdown_ != Shutdown::None || recoveryPending_ ? "" : remote_ ? "Bode stopped: USB Remote"
         : state_.mode != MeasurementMode::Oscilloscope ? "" : nullptr;
@@ -468,4 +571,3 @@ void ApplicationController::serviceBode(uint32_t now) {
     }
 }
 } // namespace openosc
-#endif

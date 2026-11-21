@@ -64,9 +64,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         acquisitionEditor_.snapshot(view_.waveform().model().metadata());
         openPanel(Panel::Acquisition, acquisitionEditor_); return;
     case Actions::Decoder: openDecoder(0); return; // Protocol: Off until chosen.
-#if OPENOSC_BOARD == 703
     case Actions::Bode: openBode(now); return; // Its own panel, or a notice why not.
-#endif
     case Actions::CenterChannels:
         if (!centerChannels(now)) return;
         break;

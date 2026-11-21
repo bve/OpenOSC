@@ -1,6 +1,6 @@
 #include "openosc/application/bode_csv_file.hpp"
-#if OPENOSC_BOARD == 703
 #include "openosc/acquisition/ranges.hpp"
+#include "openosc/generator/capabilities.hpp"
 #include "openosc/data/decimal.hpp"
 #include "openosc/storage/directories.hpp"
 #include "openosc/storage/layout.hpp"
@@ -26,10 +26,23 @@ constexpr struct { uint16_t flag; const char *name; } FlagNames[] = {
     {Point::Alias, "alias"}, {Point::FewCycles, "few_cycles"}, {Point::Incomplete, "incomplete"},
     {Point::Uncalibrated, "uncalibrated"}, {Point::NoFrame, "no_frame"}, {Point::NoTone, "no_tone"}, {Point::Partial, "partial"},
 };
+// The lines in order. The drive's lines are the board's: ZT703S its level, the level's factory caption
+// and its DAC codes at the ends; ZT706S the module's amplitude and what it rests on (no DAC codes).
 enum Item : unsigned {
     MetaFormatLine, MetaFirmware, MetaStatus, MetaMeasured, MetaPlanned, MetaRequestedStart, MetaRequestedStop, MetaStart, MetaStop, MetaDensity, MetaSettle,
-    MetaAveragesLine, MetaShape, MetaLevel, MetaLevelLabel, MetaCodesStart, MetaCodesStop, MetaReference, MetaResponse, MetaGain, MetaPhase, MetaHeaderLine, MetaFirstRow
+    MetaAveragesLine, MetaShape, MetaLevel, MetaLevelLabel, MetaCodesStart, MetaCodesStop, MetaAmplitude, MetaAmplitudeBasis,
+    MetaReference, MetaResponse, MetaGain, MetaPhase, MetaHeaderLine, MetaFirstRow
 };
+constexpr bool Levels = generator::Capabilities::Levels;
+constexpr unsigned DriveLines = Levels ? MetaAmplitude - MetaLevel : MetaReference - MetaAmplitude;
+constexpr unsigned MetadataLines = MetaShape + 1 + DriveLines + (MetaHeaderLine - MetaReference); // Then the header, the rows.
+// The n-th metadata line's item: the common lines, the board's drive lines, the common tail.
+constexpr Item metadataItem(unsigned n) {
+    if (n <= MetaShape) return Item(n);
+    n -= MetaShape + 1;
+    if (n < DriveLines) return Item((Levels ? MetaLevel : MetaAmplitude) + n);
+    return Item(MetaReference + n - DriveLines);
+}
 #ifdef OPENOSC_VERSION
 constexpr const char *FirmwareName = "OpenOSC " OPENOSC_VERSION;
 #else
@@ -146,9 +159,9 @@ void BodeCsvFile::finish() {
     saved_ = true;
 }
 bool BodeCsvFile::line(unsigned item, Line &out) const {
-    if (item < MetaHeaderLine) metadata(item, out);
-    else if (item == MetaHeaderLine) out.put(Header);
-    else if (item - MetaFirstRow < run_.count) row(item - MetaFirstRow, out);
+    if (item < MetadataLines) metadata(metadataItem(item), out);
+    else if (item == MetadataLines) out.put(Header);
+    else if (item - MetadataLines - 1 < run_.count) row(item - MetadataLines - 1, out);
     else return false;
     out.end();
     return true;
@@ -186,6 +199,8 @@ void BodeCsvFile::metadata(unsigned item, Line &out) const {
     }
     case MetaCodesStart: out.key("generator_dac_codes_at_start"); out.codes(g, run_.grid.start); break;
     case MetaCodesStop: out.key("generator_dac_codes_at_stop"); out.codes(g, run_.grid.stop); break;
+    case MetaAmplitude: out.key("generator_amplitude_v"); out.fixed(g.amplitudeMillivolts / 1000.0, 1); break;
+    case MetaAmplitudeBasis: out.key("generator_amplitude_basis"); out.put("module_nominal"); break; // Not measured.
     case MetaReference: out.key("reference"); out.put("CH1"); break;
     case MetaResponse: out.key("response"); out.put("CH2"); break;
     case MetaGain: out.key("gain"); out.put("20*log10(CH2/CH1) dB"); break;
@@ -221,4 +236,3 @@ void BodeCsvFile::row(unsigned index, Line &out) const {
     }
 }
 } // namespace openosc
-#endif

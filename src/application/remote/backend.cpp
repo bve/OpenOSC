@@ -21,7 +21,7 @@ const scope::FrameMetadata *InstrumentBackend::configuration() const {
     const auto &metadata = application_.data_.scopeMetadata();
     return metadata.valid() ? &metadata : nullptr;
 }
-// A Bode sweep's settings in force (bodeOwns, ZT703S): the generator, the capture and its records are the
+// A Bode sweep's settings in force (bodeOwns, both boards): the generator, the capture and its records are the
 // sweep's; the paths that would change them or hold its records refuse until they are restored.
 bool InstrumentBackend::configure(const ScopeRequest &r, bool level) {
     if (application_.data_.zeroBusy() || application_.bodeOwns()) return false;
@@ -218,7 +218,7 @@ int InstrumentBackend::coreMhz(uint32_t mhz) {
     while (mode < RunModeCount && RunModes[mode].coreHz != mhz * 1000000ULL) ++mode;
     if (mode == RunModeCount) return -224; // Only the profiles of the Settings menu.
     if (!RemoteClock::allowed(mode, application_.remote_)) return -221; // Remote keeps 200 MHz.
-    if (application_.bodeOwns()) return -221; // The DAC's clock is the sweep's.
+    if (application_.bodeOwns()) return -221; // The generator and the capture are the sweep's (the DAC's clock too).
     switch (application_.changeRunMode(mode, Board::milliseconds(), RemoteClock::persists(application_.remote_)).outcome) {
     case RunModeSwitch::Outcome::Applied:
     case RunModeSwitch::Outcome::Unchanged: return 0;

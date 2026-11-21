@@ -5,15 +5,9 @@
 #include "openosc/board/current.hpp"
 
 namespace {
-// The ring (12 KiB) is in ITCM (.usb_trace, ld/application.ld), so the trace build keeps the 48 KiB
-// DTCM stack minimum of the ordinary build; Reset_Handler enables and zeroes it first. The ZT703S's
-// ITCM also holds the Bode session (.bode, GitHub #72): its trace ring is half (6 KiB, 256 kept after
-// a reset). scripts/usb_trace_capture.py reads the capacity from usb_trace_entries' size.
-#if OPENOSC_BOARD == 703
+// The 6 KiB ring shares ITCM with the Bode session on both boards. Reset_Handler zeroes it, with room
+// in DTCM for the 48 KiB stack minimum. scripts/usb_trace_capture.py reads the capacity from the ELF.
 constexpr uint32_t Capacity = 512, KeepAfterReset = 256;
-#else
-constexpr uint32_t Capacity = 1024, KeepAfterReset = 512;
-#endif
 constexpr uint32_t SampleHz = 20000, MinimumRun = 3;
 static_assert(KeepAfterReset < Capacity);
 constexpr uint8_t Idle = 0b110; // D+ high, D- low, USB33RDY set.

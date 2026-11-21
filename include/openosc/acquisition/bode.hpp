@@ -6,7 +6,7 @@
 #include <cstdint>
 
 namespace openosc::scope {
-// Frequency response analysis (GitHub #72, ZT703S): the built-in generator's sine swept over a log
+// Frequency response analysis (GitHub #72; ZT703S DAC, ZT706S module): the built-in generator's sine swept over a log
 // grid, CH1 the reference at the DUT's input, CH2 its output; at each point, once the DUT and the
 // capture have settled, both channels' amplitude and phase at the generator's actual frequency (one
 // DFT bin under a Hann window, the record's DC taken out), gain = 20 log10 |CH2|/|CH1| in dB and phase
@@ -23,7 +23,8 @@ struct BodeSettings {
     static constexpr uint32_t MaximumAverages = 10;
 };
 // The log grid: count() points (at least 2, at most MaximumPoints) from the start to the stop, both
-// clamped to [minimum, maximum] (the DAC's limits at the clock that runs) and the stop above the start
+// clamped to [minimum, maximum] (the generator's limits for the drive: the DAC's at the clock that runs, the
+// ZT706S module's at its amplitude) and the stop above the start
 // by at least a ratio; equal steps in log f, pointsPerDecade or fewer when MaximumPoints caps them.
 struct BodeGrid {
     uint64_t start = 0, stop = 0; // Millihertz, as clamped.
@@ -84,20 +85,28 @@ private:
     template <class Read> void pass(uint32_t first, uint32_t n, Read read); // One pass over n pairs.
 };
 // What a sweep asks of the instrument (the controller over DataAccess; a fake in the tests).
+// The generator is asked once a point and then only polled: the ZT703S DAC takes a setting at once, the
+// ZT706S module acknowledges its frame later (or never), so tune() submits and tuned() never sends.
 class BodePort {
 public:
-    // The generator's sine at `millihertz` (its output on); the frequency it actually plays (Hz).
-    virtual bool tune(uint64_t millihertz, double &actualHz) = 0;
+    enum class Tuning : uint8_t { Pending, Ready, Failed };
+    // Asks for the generator's sine at `millihertz` with its output on; false: refused (nothing pending).
+    virtual bool tune(uint64_t millihertz) = 0;
+    // That request's state: Ready once the generator confirms exactly it playing (ON), with the frequency
+    // it actually plays (Hz); Failed once it reports it will not (no acknowledge after its own bounded
+    // retries, a fault, another setting in force); Pending meanwhile. Sends nothing.
+    virtual Tuning tuned(double &actualHz) = 0;
     virtual bool configure(const ScopeRequest &request) = 0; // The capture for a point.
     virtual uint64_t nowUs() const = 0;
     virtual bool frame(FrameLease &lease) = 0;               // The newest frame, if any.
 protected:
     ~BodePort() = default;
 };
-// The sweep: one point at a time, every step bounded. A point: tune the generator, configure the
-// capture (both channels, Auto on CH1, no Roll, the default 64K record (32768 a channel, all of it read),
+// The sweep: one point at a time, every step bounded. A point: tune the generator (asked once, then
+// polled until Ready: Failed, or MaximumTuneMs without either, fails the sweep), configure the capture (both channels, Auto on CH1, no Roll, the default 64K record (32768 a channel, all of it read),
 // a timebase showing about ten cycles, the current V/div
-// adjusted when a channel clips or is too small), wait the settle time, take the first record whose
+// adjusted when a channel clips or is too small), wait the settle time from the generator's confirmation
+// (a range change: from the new capture), take the first record whose
 // first point is after it, measure it in steps; then the next. Results go to the caller's points.
 // Averaging: after a record the point stays (no new tune or settle) for the next distinct record (its
 // sequence and timestamp not the last one's) until `averages` of them, valid or not, are taken; a range
@@ -106,9 +115,13 @@ protected:
 // NoFrame with nothing. The slot of the point being measured holds its last record's result meanwhile.
 class BodeSweep {
 public:
-    enum class State : uint8_t { Idle, Tune, Wait, Measure, Done, Cancelled, Failed };
-    enum class Failure : uint8_t { None, Generator, Capture };
+    enum class State : uint8_t { Idle, Tune, Tuning, Wait, Measure, Done, Cancelled, Failed };
+    // Generator: the request refused; Unconfirmed: asked, but never confirmed (Failed, or the time ran out).
+    enum class Failure : uint8_t { None, Generator, Capture, Unconfirmed };
     static constexpr unsigned MaximumAdjustments = 4;        // V/div changes for one point.
+    // A point's confirmation at most: above the ZT706S module's own bound (4 exchanges of 5.3 s with
+    // 3 recovery delays of 1 s: 24.2 s), a backstop that never lets a sweep wait for ever.
+    static constexpr uint32_t MaximumTuneMs = 30000;
     static constexpr uint32_t MinimumWaitMs = 3000;           // A record's deadline: at least this,
     static constexpr double WaitRecords = 4;                  // or this many records' durations.
     static constexpr uint32_t StepBudget = 4096;              // Points per channel a step reads.
@@ -126,7 +139,7 @@ public:
     void cancel();
     State state() const { return state_; }
     Failure failure() const { return failure_; }
-    bool running() const { return state_ == State::Tune || state_ == State::Wait || state_ == State::Measure; }
+    bool running() const { return state_ == State::Tune || state_ == State::Tuning || state_ == State::Wait || state_ == State::Measure; }
     unsigned index() const { return index_; }   // The point being measured (or count when done).
     unsigned records() const { return records_; } // Records taken at it since its range was last set.
     unsigned count() const { return grid_.count; }
@@ -140,7 +153,8 @@ private:
     BodePoint *points_ = nullptr;
     BodeTone tone_;
     FrameLease lease_;
-    uint64_t settledUs_ = 0, deadlineUs_ = 0, takenUs_ = 0; // takenUs_/takenSequence_: the last record taken.
+    // deadlineUs_: the record's (Wait) or the confirmation's (Tuning); takenUs_/takenSequence_: the last record taken.
+    uint64_t settledUs_ = 0, deadlineUs_ = 0, takenUs_ = 0;
     double actualHz_ = 0;
     Mean mean_;
     uint32_t takenSequence_ = 0;
@@ -150,6 +164,7 @@ private:
     State state_ = State::Idle;
     Failure failure_ = Failure::None;
     void finishPoint(const BodePoint &point);
+    bool arm(BodePort &port); // The capture for the point at actualHz_, the settle from now.
     uint64_t recordWaitUs() const; // One record's deadline after the settle (or the last record).
     void fail(Failure failure) { failure_ = failure; state_ = State::Failed; lease_.release(); }
 };

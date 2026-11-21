@@ -67,10 +67,8 @@ bool ApplicationController::selectInterleave(scope::InterleaveMode mode, uint32_
 ApplicationController::ModeChange ApplicationController::selectMode(MeasurementMode next, uint32_t now) {
     if (next == state_.mode) return ModeChange::Selected;
     if (!cancelAuto(now)) return ModeChange::Busy;
-#if OPENOSC_BOARD == 703
     if (panel_ == Panel::Bode) finishBode(now, nullptr); // Any path (SCPI too): the instrument restored first.
-    if (bodeOwns()) return ModeChange::Busy; // Its restore refused (busy): tried again, then the mode.
-#endif
+    if (bodeOwns()) return ModeChange::Busy; // Its restore refused (busy) or unconfirmed: tried again, then the mode.
     const auto previousMeasurement = data_.measurementMode();
     if (!data_.select(next)) return ModeChange::Refused; // The menu and its edit stay as they are.
     dropEdit(now);
@@ -247,9 +245,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     case Panel::Acquisition: scopeEditorKeys(keys, now); break;
     case Panel::Measurements: measurementKeys(keys, now); break;
     case Panel::Generator: generatorEditorKeys(keys, now); break;
-#if OPENOSC_BOARD == 703
     case Panel::Bode: bodeKeys(KeyEvents{}, keys, now); break; // onKeys hands it on first (MODE included).
-#endif
     default: dataKeys(keys, now, fine); break;
     }
 }

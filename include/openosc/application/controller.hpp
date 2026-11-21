@@ -133,7 +133,9 @@ private:
     void finishInterleaveMatch(uint32_t now, const char *notice, bool returnToSettings = true);
     void showInterleaveMatch();
     calibration::InterleaveMatchWizard interleaveMatch_;
-    // Frequency response (GitHub #72, bode.cpp): its session lives in ITCM (BodeSession), none here.
+#endif
+    // Frequency response (GitHub #72, bode.cpp; ZT703S and ZT706S): its session lives in ITCM
+    // (BodeSession), none here.
     void openBode(uint32_t now);
     void startBodeSweep(uint32_t now);
     void saveBodeCsv(uint32_t now); // Setup's Save CSV: the last run as it ran (BodeCsvFile).
@@ -143,9 +145,7 @@ private:
     void showBode(bool plot);
     bool bodeRunning() const;
     bool bodeOwns() const; // The sweep's settings in force: running, or their restore pending (SCPI refused).
-#else
-    bool bodeOwns() const { return false; }
-#endif
+    bool bodeRestoring() const; // Not running, its restore not yet whole (a ZT706S acknowledge): no new sweep.
     // The loop pass's overlay pause of full-rate capture (DataAccess::pauseCapture).
     void pauseHiddenCapture(uint32_t now, bool enumerating);
     bool interleaveWatched_=false;

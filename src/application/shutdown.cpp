@@ -1,8 +1,6 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/application/decode_csv_file.hpp"
-#if OPENOSC_BOARD == 703
 #include "openosc/application/bode_csv_file.hpp"
-#endif
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/input.hpp"
@@ -63,9 +61,7 @@ private:
     ApplicationController &a_;
     static void cancelCsvFiles() {
         decodeCsvFile().cancel(DecodeCsvShutdown);
-#if OPENOSC_BOARD == 703
         bodeCsvFile().cancel(BodeCsvShutdown);
-#endif
     }
 };
 // RefusedRestart's steps on this instrument: every clock user is still stopped (beginShutdown).
@@ -106,9 +102,7 @@ bool ApplicationController::ShutdownSteps::resume() {
     return result.resumed;
 }
 void ApplicationController::requestShutdown(uint32_t now) {
-#if OPENOSC_BOARD == 703
     if (panel_ == Panel::Bode) finishBode(now, nullptr); // Every source of a shutdown: the sweep ends, restored.
-#endif
     ShutdownSteps steps(*this);
     shutdownSequence_.begin(confirmAction_, now, steps);
     shutdown_ = shutdownSequence_.action();

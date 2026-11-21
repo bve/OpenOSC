@@ -140,8 +140,8 @@ namespace openosc {
         serviceInterleaveOffsetUi(now);
 #if OPENOSC_BOARD == 703
         serviceInterleaveMatchUi(now);
-        serviceBode(now);
 #endif
+        serviceBode(now);
         pauseHiddenCapture(now, usb.enumerating(now));
         serviceImages(now);
         if (uiReady_ && !shots_.busy()) {
@@ -292,8 +292,9 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     if (panel_==Panel::Zero) { zeroKeys(keys,now); return; }
 #if OPENOSC_BOARD == 703
     if (panel_ == Panel::InterleaveMatch) { interleaveMatchKeys(keys, now); return; }
-    if (panel_ == Panel::Bode) { bodeKeys(events, keys, now); return; } // MODE leaves it (restored); Remote ends it in serviceBode.
 #endif
+    if (panel_ == Panel::Bode) { bodeKeys(events, keys, now); return; } // MODE leaves it (restored); Remote ends it in serviceBode.
+    if (bodeRestoring()) return; // Closing Bode can leave its generator ACK pending; the restore still owns Scope.
     if (remote_ || !uiReady_) { // Locked: Remote, or no UI to operate (headless).
         if (events.longPress & Keypad::Menu) setRemote(false, "USB Remote off");
         return;

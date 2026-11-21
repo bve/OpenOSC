@@ -11,10 +11,8 @@ bool ApplicationController::setRemote(bool enabled, const char *left) {
     if (enabled == remote_ && (enabled || uiReady_)) return true;
     if (shots_.busy() || data_.scopeRecording() || data_.dmmBusy() || data_.zeroBusy() || panel_ == Panel::InterleaveMatch) return false;
     const auto now = Board::milliseconds(); if (!cancelAuto(now)) return false;
-#if OPENOSC_BOARD == 703
     if (enabled && panel_ == Panel::Bode) finishBode(now, nullptr); // Restored before the clock and the host change.
-    if (enabled && bodeOwns()) return false; // Its restore refused (busy): tried again, then Remote.
-#endif
+    if (enabled && bodeOwns()) return false; // Its restore refused (busy) or unconfirmed: tried again, then Remote.
     if (enabled) {
         if (images_.clearing()) return false;
         // A busy image reader refuses the clock change itself (Refused): nothing is cancelled for a

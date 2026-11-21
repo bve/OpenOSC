@@ -29,8 +29,8 @@ void ApplicationController::pauseHiddenCapture(uint32_t now, bool enumerating) {
     const bool measuring = data_.interleaveMeasurement().active()
 #if OPENOSC_BOARD == 703
         || (panel_ == Panel::InterleaveMatch && interleaveMatch_.step() == calibration::InterleaveMatchWizard::Step::Measuring)
-        || bodeRunning() // A sweep takes records behind its own plot.
 #endif
+        || bodeRunning() // A sweep takes records behind its own plot.
         ;
     if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !measuring && !autoBusy() &&
         data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto) hiddenAt_ = now;
@@ -59,15 +59,14 @@ void ApplicationController::refreshSoftKeys() {
     else if (panel_ == Panel::Confirmation) keys = Keys::cancel("");
     else if (panel_ == Panel::Zero) keys = editing ? Keys::list(true) : Keys::cancel("Calibration");
     else if (panel_ == Panel::InterleaveMatch) keys = Keys::cancel("");
-#if OPENOSC_BOARD == 703
     else if (panel_ == Panel::Bode && view_.bode().visible()) {
-        keys.keys[0] = bodeRunning() ? ui::SoftKey{"Stop", "Sweep", true} : ui::SoftKey{"Run", "Sweep", true};
+        // Run waits for a restore still unconfirmed (a ZT706S acknowledge): no sweep over it.
+        keys.keys[0] = bodeRunning() ? ui::SoftKey{"Stop", "Sweep", true} : ui::SoftKey{"Run", "Sweep", !bodeRestoring()};
         keys.keys[1] = {"Setup", "", !bodeRunning()};
         const auto &shown = view_.bode().data(); // Results and Table go back to the plot; the plot to the table.
         keys.keys[2] = shown.results || shown.cursor.table ? ui::SoftKey{"Plot", "View", true} : ui::SoftKey{"Table", "View", true};
         keys.keys[3] = {"Exit", "Bode", true};
     }
-#endif
     else if (panel_ == Panel::Images) keys = imageSoftKeys();
     else if (panel_ == Panel::Generator || panel_ == Panel::Frequency) {
         using Generator = ui::GeneratorKeys::Panel;

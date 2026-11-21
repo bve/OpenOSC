@@ -163,6 +163,14 @@ void BodeSweep::finishPoint(const BodePoint &point) {
     ++index_; adjustments_ = 0; records_ = 0; mean_ = {};
     state_ = index_ < grid_.count ? State::Tune : State::Done;
 }
+bool BodeSweep::arm(BodePort &port) {
+    request_.timebaseNs = timebaseFor(actualHz_);
+    if (!port.configure(request_)) { fail(Failure::Capture); return false; }
+    settledUs_ = port.nowUs() + uint64_t(settings_.settleMs) * 1000;
+    deadlineUs_ = settledUs_ + recordWaitUs();
+    state_ = State::Wait;
+    return true;
+}
 uint64_t BodeSweep::recordWaitUs() const {
     const double recordUs = double(request_.timebaseNs) * 10 / 1000;
     return uint64_t(std::max(double(MinimumWaitMs) * 1000, WaitRecords * recordUs));
@@ -190,16 +198,22 @@ BodePoint BodeSweep::Mean::of(const BodePoint &last, unsigned wanted) const {
 }
 bool BodeSweep::step(BodePort &port) {
     switch (state_) {
-    case State::Tune: {
-        if (!adjustments_ && !port.tune(grid_.at(index_), actualHz_)) { fail(Failure::Generator); return false; }
-        request_.timebaseNs = timebaseFor(actualHz_);
-        if (!port.configure(request_)) { fail(Failure::Capture); return false; }
-        const uint64_t now = port.nowUs();
-        settledUs_ = now + uint64_t(settings_.settleMs) * 1000;
-        deadlineUs_ = settledUs_ + recordWaitUs();
-        state_ = State::Wait;
+    case State::Tune:
+        if (adjustments_) return arm(port); // The same frequency, confirmed: only the capture again.
+        if (!port.tune(grid_.at(index_))) { fail(Failure::Generator); return false; }
+        deadlineUs_ = port.nowUs() + uint64_t(MaximumTuneMs) * 1000;
+        state_ = State::Tuning;
+        [[fallthrough]]; // A generator that takes it at once (the DAC) is confirmed in the same step.
+    case State::Tuning:
+        switch (port.tuned(actualHz_)) {
+        case BodePort::Tuning::Ready:
+            if (!(actualHz_ > 0)) { fail(Failure::Unconfirmed); return false; }
+            return arm(port);
+        case BodePort::Tuning::Failed: fail(Failure::Unconfirmed); return false;
+        case BodePort::Tuning::Pending: break;
+        }
+        if (port.nowUs() >= deadlineUs_) { fail(Failure::Unconfirmed); return false; }
         return true;
-    }
     case State::Wait: {
         if (port.frame(lease_)) {
             const auto &m = lease_.view().metadata();

@@ -22,6 +22,18 @@ struct ModuleCapabilities {
     }
     static bool duty(Shape shape) { return shape == Shape::Square; }
     static uint16_t amplitudeLimitMillivolts(Shape shape, uint64_t millihertz) { return ModuleWave::limitMillivolts(shape, millihertz); }
+    // The highest sine the module plays at `amplitudeMillivolts` as set (its limit for that frequency not
+    // below it) and represents exactly: ClockHz/n, n samples of one tick each (ModuleWave::timing finds
+    // that very n for it); 0 for an amplitude no frequency takes. 10 MHz at 3 V or less, 9.52 MHz at
+    // 3.5 V, 6.90 MHz at 4 V, 995 kHz at 5 V (nominal: the module's clock is the factory's constant).
+    static uint64_t sineMaximumMillihertz(uint16_t amplitudeMillivolts) {
+        for (unsigned n = ModuleWave::MinimumSamples; n <= ModuleWave::MaximumSamples; ++n) {
+            const uint64_t millihertz = uint64_t(ModuleWave::ClockHz) * 1000 / n;
+            if (millihertz <= maximumMillihertz(Shape::Sine) && amplitudeMillivolts <= ModuleWave::limitMillivolts(Shape::Sine, millihertz))
+                return millihertz;
+        }
+        return 0;
+    }
     // The one validation of a setting (driver, SCPI, settings file): what the module can do as asked,
     // nothing clamped silently. A shape whose limit is below the frequency or amplitude already set
     // is refused (the UI editors clamp first and say so), and a square whose duty no sample count at

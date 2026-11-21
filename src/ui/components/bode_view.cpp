@@ -1,5 +1,5 @@
 #include "openosc/ui/components/bode_view.hpp"
-#if OPENOSC_BOARD == 703 // ZT703S only (GitHub #72): nothing of it on the ZT706S.
+#include "openosc/generator/capabilities.hpp"
 #include "openosc/acquisition/ranges.hpp"
 #include "openosc/ui/components/elements.hpp"
 #include "openosc/ui/scope/format.hpp"
@@ -8,8 +8,21 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#ifdef OPENOSC_APPLICATION
+#include <new>
+#endif
 
 namespace openosc::ui {
+#ifdef OPENOSC_APPLICATION
+namespace {
+alignas(8) __attribute__((section(".bode"))) unsigned char viewStorage[sizeof(BodeView)];
+BodeView *viewInstance = nullptr;
+} // namespace
+BodeView &bodeView() {
+    if (!viewInstance) viewInstance = new (viewStorage) BodeView();
+    return *viewInstance;
+}
+#endif
 namespace {
 constexpr const char *Degree = "\xc2\xb0";
 constexpr const char *NoValue = "--"; // ui_12 has no em dash.
@@ -395,7 +408,12 @@ void BodeView::runLines(lv_layer_t *layer, int y) const {
                       unsigned(d.run->settleMs), unsigned(d.run->averages));
     } else std::snprintf(s, sizeof s, "No run yet: F1 Run");
     text(layer, s, Margin, y, Width - 2 * Margin, muted_);
-    if (d.excitation && d.count) {
+    if (d.excitation && d.count && !generator::Capabilities::Levels) { // ZT706S: the module's amplitude, no codes.
+        char amplitude[16];
+        generator::LevelText::name(*d.excitation, amplitude, sizeof amplitude);
+        std::snprintf(s, sizeof s, "Drive from GEN: sine, %s (module nominal)", amplitude);
+        text(layer, s, Margin, y + Line, Width - 2 * Margin, muted_);
+    } else if (d.excitation && d.count) {
         const auto &e = *d.excitation;
         const char *level = generator::Levels::Names[unsigned(e.level) % 4];
         if (e.level == generator::Level::Custom) std::snprintf(s, sizeof s, "Drive %s: sine, DAC codes %u-%u", driveName(d.drive), e.minimumCode, e.maximumCode);
@@ -424,4 +442,3 @@ void BodeView::footer(lv_layer_t *layer, int y) const {
     if (width(s) + 12 + width(ranges) <= Width - 2 * Margin) text(layer, ranges, Margin, y, Width - 2 * Margin, muted_, LV_TEXT_ALIGN_RIGHT);
 }
 } // namespace openosc::ui
-#endif

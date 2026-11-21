@@ -83,4 +83,10 @@ private:
     unsigned pointA() const { return data_.second ? data_.other : data_.cursor.point; }
     unsigned pointB() const { return data_.second ? data_.cursor.point : data_.other; }
 };
+#ifdef OPENOSC_APPLICATION
+// The application's one view (ApplicationView::bode()): in ITCM (.bode, beside the session; zeroed at
+// reset) and built in place on first use, so its copy of the data is on no stack (the controller and
+// its view are main()'s frame, which the ZT706S's DTCM budget leaves little room in).
+BodeView &bodeView();
+#endif
 } // namespace openosc::ui

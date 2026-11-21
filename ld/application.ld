@@ -56,8 +56,8 @@ SECTIONS {
     .usb_trace (NOLOAD) : { _susb_trace = .; KEEP(*(.usb_trace)) . = ALIGN(8); _eusb_trace = .; } > ITCM
     /* Software drawing's reusable silhouette, initialized in 64-bit ECC words at reset. */
     .scope_glow (NOLOAD) : { . = ALIGN(8); _sscope_glow = .; KEEP(*(.scope_glow)) . = ALIGN(8); _escope_glow = .; } > ITCM
-    /* The ZT703S frequency response session (GitHub #72: its settings, sweep and 256 points), zeroed at reset
-       in 64-bit ECC words, built in place on first use; empty on other boards. */
+    /* The frequency response session (GitHub #72, both boards: its settings, sweep and 256 points), zeroed
+       at reset in 64-bit ECC words, built in place on first use. */
     .bode (NOLOAD) : { . = ALIGN(8); _sbode = .; KEEP(*(.bode)) . = ALIGN(8); _ebode = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")

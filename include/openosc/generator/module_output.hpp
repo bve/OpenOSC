@@ -40,6 +40,7 @@ public:
     bool loadsBus() const { return false; }
     Applied applied() const { return applied_; }
     unsigned recoveryRounds() const { return recovery_.rounds(); }
+    bool recovering() const { return recovery_.waiting(); } // A failed exchange's next round is due (ModuleRecovery).
     bool offConfirmed() const { return !busy() && applied_ == Applied::Off; }
     bool onConfirmed() const { return !busy() && applied_ == Applied::On; } // Acknowledged by the module.
     DataStatus status() const { return portFailed_ ? DataStatus::HardwareError : link_.status(); }

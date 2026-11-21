@@ -43,6 +43,7 @@ public:
     bool onConfirmed() const { return enabled_ && status_ == DataStatus::Ok; }
     bool enabled() const { return enabled_; }
     bool busy() const { return false; }
+    bool recovering() const { return false; } // No retries of its own: a start goes through or is refused at once.
     // BDMA to the DAC shares the AHB with the GPIOD reads: at full speed requests are lost and the
     // record overruns at no fixed DAC rate (1 kHz fails, 1.5 kHz does not), so capture slows down
     // whenever the DAC streams. PWM output needs no DMA.
