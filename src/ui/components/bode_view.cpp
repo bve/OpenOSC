@@ -140,9 +140,10 @@ void BodeView::header(lv_layer_t *layer) const {
     const int y = Top + RowA;
     int x = Margin;
     text(layer, "CH2/CH1", x, y, 60, muted_); x += width("CH2/CH1") + 8;
-    text(layer, "gain dB", x, y, 60, gain_); x += width("gain dB") + 8;
+    const bool plot = !d.results && !d.cursor.table; // The plot names only the graphs it shows.
+    if (!plot || showsGain(d.graphs)) { text(layer, "gain dB", x, y, 60, gain_); x += width("gain dB") + 8; }
     char phase[16]; std::snprintf(phase, sizeof phase, "phase %s", Degree);
-    text(layer, phase, x, y, 60, phase_);
+    if (!plot || showsPhase(d.graphs)) text(layer, phase, x, y, 60, phase_);
     text(layer, d.status, Width - Margin - 130, y, 130, accent_, LV_TEXT_ALIGN_RIGHT);
     if (d.running && d.count) {
         const int end = Margin + int((Width - 2 * Margin) * uint64_t(d.measured) / d.count);
@@ -209,62 +210,93 @@ void BodeView::delta(lv_layer_t *layer, int left, int y) const {
     text(layer, "|", x, y, bar + 2, muted_); x += bar;
     text(layer, "B", x, y, letter + 2, d.second ? accent_ : muted_);
 }
+namespace {
+// One graph's rows and its vertical scale (GitHub #77): `high` at `top`, `low` at `bottom`, lines every `step`.
+struct Panel {
+    int top = 0, bottom = 0;
+    double high = 0, low = 0;
+    int step = 1;
+    int y(double v) const { return top + int(std::lround((high - v) / (high - low) * (bottom - top))); }
+};
+// The scale for values in [low, high] (`any`: there are some): the first spacing that holds their span in
+// `intervals` steps (else the last), the ends on whole steps at least two steps apart, inside [floor, ceiling]
+// when given (the phase). Nothing measured: `none` as it is.
+Panel fit(Panel panel, const int *spacings, unsigned n, bool any, double low, double high, unsigned intervals, bool bounded) {
+    if (!any) return panel;
+    for (unsigned i = 0; i < n; ++i) {
+        panel.step = spacings[i];
+        if (high - low <= double(intervals) * spacings[i]) break;
+    }
+    const double step = panel.step;
+    panel.high = std::ceil(high / step) * step;
+    panel.low = std::min(std::floor(low / step) * step, panel.high - 2 * step);
+    if (bounded) { // The phase: -180..180 is the most there is (its steps divide 180).
+        panel.high = std::min(panel.high, 180.0);
+        panel.low = std::max(panel.low, -180.0);
+        if (panel.high - panel.low < 2 * step) panel.high = std::min(panel.low + 2 * step, 180.0);
+    }
+    return panel;
+}
+// A graph's lines (0 stronger) and its labels on them, right-aligned left of the axis in `ink`: 0 first, then
+// the ends, then the steps, none over another; each label's top inside [minTop, maxTop] (in its graph).
+// Inlined into plot(): its locals share plot()'s frame (LVGL draws on the main stack), no frame stacked on it.
+[[gnu::always_inline]] inline void scale(lv_layer_t *layer, const Panel &p, uint32_t ink, uint32_t grid, uint32_t zero, int minTop, int maxTop) {
+    line(layer, BodeView::Left, p.top, BodeView::Right, p.top, p.high == 0 ? zero : grid);
+    line(layer, BodeView::Left, p.bottom, BodeView::Right, p.bottom, p.low == 0 ? zero : grid);
+    const double first = std::floor((p.high - 1) / p.step) * p.step; // The first step under the top.
+    for (double v = first; v > p.low; v -= p.step) line(layer, BodeView::Left, p.y(v), BodeView::Right, p.y(v), v == 0 ? zero : grid);
+    constexpr unsigned MaximumLabels = 12;
+    int taken[MaximumLabels]; unsigned labels = 0; // Their tops.
+    char a[12];
+    const auto label = [&](double v) {
+        if (v > p.high || v < p.low || labels == MaximumLabels) return;
+        const int y = std::clamp(p.y(v) - 7, minTop, maxTop);
+        for (unsigned i = 0; i < labels; ++i) if (std::abs(taken[i] - y) < BodeView::Line) return;
+        taken[labels++] = y;
+        std::snprintf(a, sizeof a, "%d", int(v)); // Whole steps: integers (newlib-nano prints no %f).
+        text(layer, a, 0, y, BodeView::Left - 3, ink, LV_TEXT_ALIGN_RIGHT);
+    };
+    label(0); label(p.high); label(p.low);
+    for (double v = first; v > p.low; v -= p.step) label(v);
+}
+} // namespace
+// The graphs (Both: gain above, phase below; Gain or Phase: over the whole height), each on its own scale.
 void BodeView::plot(lv_layer_t *layer) const {
     const auto &d = data_;
     const int y0 = Top;
-    char a[24];
-    // Fit the gain to the measured span. Keep small passband changes visible on the same 58 px panel.
-    double low = 0, high = 0; bool any = false;
-    for (unsigned i = 0; i < d.measured && d.points; ++i)
-        if (d.points[i].valid()) {
-            const double g = d.points[i].gainDb;
-            low = any ? std::min(low, g) : g; high = any ? std::max(high, g) : g; any = true;
-        }
-    const double span = high - low;
-    int step = 10;
-    if (any) {
-        for (int spacing : {1, 2, 5, 10, 20, 50}) {
-            step = spacing;
-            if (span <= 3 * spacing) break;
-        }
+    const bool gain = showsGain(d.graphs), phase = showsPhase(d.graphs), both = gain && phase;
+    // The measured spans: the gain of the valid points, the phase of those with one.
+    double gLow = 0, gHigh = 0, pLow = 0, pHigh = 0; bool gAny = false, pAny = false;
+    for (unsigned i = 0; i < d.measured && d.points; ++i) {
+        const auto &p = d.points[i];
+        if (!p.valid()) continue;
+        gLow = gAny ? std::min(gLow, double(p.gainDb)) : p.gainDb; gHigh = gAny ? std::max(gHigh, double(p.gainDb)) : p.gainDb; gAny = true;
+        if (!p.phased()) continue;
+        pLow = pAny ? std::min(pLow, double(p.phaseDeg)) : p.phaseDeg; pHigh = pAny ? std::max(pHigh, double(p.phaseDeg)) : p.phaseDeg; pAny = true;
     }
-    const double top = any ? std::ceil(high / step) * step : 10;
-    const double bottom = any ? std::min(std::floor(low / step) * step, top - 2 * step) : -30;
-    const auto gy = [&](double g) { return y0 + GainTop + int(std::lround((top - g) / (top - bottom) * (GainBottom - GainTop))); };
-    const auto py = [&](double p) { return y0 + PhaseTop + int(std::lround((180 - p) / 360 * (PhaseBottom - PhaseTop))); };
+    // Small passband changes stay visible on a half-height graph (3 steps); the whole height holds 6.
+    static constexpr int GainSteps[] = {1, 2, 5, 10, 20, 50}, PhaseSteps[] = {5, 10, 15, 30, 45, 90};
+    const unsigned intervals = both ? 3 : 6;
+    Panel g, ph;
+    g.top = y0 + GainTop; g.bottom = y0 + (both ? GainBottom : PhaseBottom); g.high = 10; g.low = -30; g.step = 10;
+    ph.top = y0 + (both ? PhaseTop : GainTop); ph.bottom = y0 + PhaseBottom; ph.high = 180; ph.low = -180; ph.step = 90;
+    g = fit(g, GainSteps, 6, gAny, gLow, gHigh, intervals, false);
+    ph = fit(ph, PhaseSteps, 6, pAny, pLow, pHigh, intervals, true);
     const auto fx = [&](double hz) { return x(hz, d.startHz, d.stopHz); };
-    // Frames; the gain's steps (0 dB stronger) and the phase's quarters (0 stronger).
-    line(layer, Left, y0 + GainTop, Right, y0 + GainTop, top == 0 ? muted_ : grid_);
-    line(layer, Left, y0 + GainBottom, Right, y0 + GainBottom, bottom == 0 ? muted_ : grid_);
-    for (int yy : {PhaseTop, PhaseBottom}) line(layer, Left, y0 + yy, Right, y0 + yy, grid_);
-    const double first = std::floor((top - 1) / step) * step; // The first step under the top.
-    for (double g = first; g > bottom; g -= step) line(layer, Left, gy(g), Right, gy(g), g == 0 ? muted_ : grid_);
-    for (int p : {90, 0, -90}) line(layer, Left, py(p), Right, py(p), p ? grid_ : muted_);
-    // The gain's labels centred on their lines: 0 dB first, then the ends, then the steps, none over another
-    // (the markers' row starts at the axis: the top label beside it).
-    const int labelWidth = Left - 3;
-    int taken[8]; unsigned labels = 0; // Their centres.
-    const auto label = [&](double g) {
-        if (g > top || g < bottom || labels == 8) return;
-        const int yy = gy(g);
-        for (unsigned i = 0; i < labels; ++i) if (std::abs(taken[i] - yy) < Line) return;
-        taken[labels++] = yy;
-        std::snprintf(a, sizeof a, "%d", int(g)); // Whole steps: integers (newlib-nano prints no %f).
-        text(layer, a, 0, yy - 7, labelWidth, gain_, LV_TEXT_ALIGN_RIGHT);
-    };
-    label(0); label(top); label(bottom);
-    for (double g = first; g > bottom; g -= step) label(g);
-    text(layer, "180", 0, y0 + PhaseTop + 1, labelWidth, phase_, LV_TEXT_ALIGN_RIGHT);
-    text(layer, "0", 0, py(0) - 7, labelWidth, phase_, LV_TEXT_ALIGN_RIGHT);
-    text(layer, "-180", 0, y0 + PhaseBottom - 13, labelWidth, phase_, LV_TEXT_ALIGN_RIGHT);
-    // Decades, their labels under the phase; the sweep's ends where no decade label is near.
-    const int labelY = y0 + PhaseBottom + 1;
+    // A label's top: the upper graph's top label is centred on its line (the difference row starts at the
+    // axis, beside it); the lower graph's stays under its top; the plot's bottom label over the decades' row.
+    const int plotTop = y0 + GainTop, plotBottom = y0 + PhaseBottom;
+    if (gain) scale(layer, g, gain_, grid_, muted_, plotTop - 7, both ? g.bottom - 7 : plotBottom - 13);
+    if (phase) scale(layer, ph, phase_, grid_, muted_, both ? ph.top + 1 : plotTop - 7, plotBottom - 13);
+    // Decades in each graph, their labels under the plot; the sweep's ends where no decade label is near.
+    char a[24];
+    const int labelY = plotBottom + 1;
     bool startNear = false, stopNear = false;
     for (double decade = std::pow(10, std::floor(std::log10(d.startHz))); decade <= d.stopHz * 1.0001; decade *= 10) {
         if (decade < d.startHz * .9999) continue;
         const int xx = fx(decade);
-        line(layer, xx, y0 + GainTop, xx, y0 + GainBottom, grid_);
-        line(layer, xx, y0 + PhaseTop, xx, y0 + PhaseBottom, grid_);
+        if (gain) line(layer, xx, g.top, xx, g.bottom, grid_);
+        if (phase) line(layer, xx, ph.top, xx, ph.bottom, grid_);
         frequency(decade, a, sizeof a);
         const int left = std::clamp(xx - 24, 0, Width - 48); // Whole on the screen at either end.
         text(layer, a, left, labelY, 48, muted_, xx - 24 == left ? LV_TEXT_ALIGN_CENTER : xx < Width / 2 ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT);
@@ -280,35 +312,35 @@ void BodeView::plot(lv_layer_t *layer) const {
         const auto &p = d.points[i];
         if (!p.valid()) { previous = before = d.count; continue; }
         const int xx = fx(p.frequencyHz);
-        if (previous < d.count) {
+        if (gain && previous < d.count) {
             const auto &q = d.points[previous];
-            line(layer, fx(q.frequencyHz), gy(q.gainDb), xx, gy(p.gainDb), gain_, 2);
-        } else box(layer, xx - 1, gy(p.gainDb) - 1, xx + 1, gy(p.gainDb) + 1, gain_);
-        if (p.phased() && before < d.count && std::fabs(p.phaseDeg - d.points[before].phaseDeg) < 180) {
+            line(layer, fx(q.frequencyHz), g.y(q.gainDb), xx, g.y(p.gainDb), gain_, 2);
+        } else if (gain) box(layer, xx - 1, g.y(p.gainDb) - 1, xx + 1, g.y(p.gainDb) + 1, gain_);
+        if (phase && p.phased() && before < d.count && std::fabs(p.phaseDeg - d.points[before].phaseDeg) < 180) {
             const auto &q = d.points[before];
-            line(layer, fx(q.frequencyHz), py(q.phaseDeg), xx, py(p.phaseDeg), phase_, 2);
-        } else if (p.phased()) box(layer, xx - 1, py(p.phaseDeg) - 1, xx + 1, py(p.phaseDeg) + 1, phase_);
+            line(layer, fx(q.frequencyHz), ph.y(q.phaseDeg), xx, ph.y(p.phaseDeg), phase_, 2);
+        } else if (phase && p.phased()) box(layer, xx - 1, ph.y(p.phaseDeg) - 1, xx + 1, ph.y(p.phaseDeg) + 1, phase_);
         previous = i;
         before = p.phased() ? i : d.count;
     }
-    // The cursors (the other dashed, the active solid over it, each lettered), then the markers on their
-    // traces (the one Up/Down went to ringed).
+    // The cursors over the whole plot (the other dashed, the active solid over it, each lettered), then the
+    // markers of the graphs shown on their traces (the one Up/Down went to ringed).
     const auto cursorLine = [&](unsigned point, bool active) {
         if (!d.points || point >= d.measured) return;
         const int xx = fx(d.points[point].frequencyHz);
-        if (active) line(layer, xx, y0 + GainTop, xx, y0 + PhaseBottom, foreground_);
-        else dashed(layer, xx, y0 + GainTop, y0 + PhaseBottom, muted_);
+        if (active) line(layer, xx, plotTop, xx, plotBottom, foreground_);
+        else dashed(layer, xx, plotTop, plotBottom, muted_);
         const bool b = active == d.second;
-        text(layer, b ? "B" : "A", xx + 10 > Right ? xx - 9 : xx + 2, y0 + GainTop + 1, 9, active ? accent_ : muted_);
+        text(layer, b ? "B" : "A", xx + 10 > Right ? xx - 9 : xx + 2, plotTop + 1, 9, active ? accent_ : muted_);
     };
     cursorLine(d.other, false);
     cursorLine(d.cursor.point, true);
     for (unsigned k = Markers::Peak; k <= Markers::Phase180; ++k) {
         const unsigned i = d.markers.at(Markers::Name(k));
-        const bool phase = k >= Markers::Phase0;
-        if (i >= d.measured || !d.points || (phase ? !d.points[i].phased() : !d.points[i].valid())) continue;
+        const bool onPhase = k >= Markers::Phase0;
+        if (i >= d.measured || !d.points || (onPhase ? !phase || !d.points[i].phased() : !gain || !d.points[i].valid())) continue;
         const auto &p = d.points[i];
-        const int xx = fx(p.frequencyHz), yy = phase ? py(p.phaseDeg) : gy(p.gainDb);
+        const int xx = fx(p.frequencyHz), yy = onPhase ? ph.y(p.phaseDeg) : g.y(p.gainDb);
         if (k == d.cursor.marker) box(layer, xx - 4, yy - 4, xx + 4, yy + 4, foreground_);
         box(layer, xx - 2, yy - 2, xx + 2, yy + 2, accent_);
     }
@@ -318,7 +350,8 @@ void BodeView::table(lv_layer_t *layer) const {
     const int y0 = Top;
     // Columns: index, frequency, gain, phase (right-aligned numbers), a note.
     struct Column { int x, width; lv_text_align_t align; };
-    static constexpr Column Letter{1, 9, LV_TEXT_ALIGN_LEFT}, Index{10, 20, LV_TEXT_ALIGN_RIGHT}, Frequency{32, 76, LV_TEXT_ALIGN_RIGHT},
+    // The index holds three digits (MaximumPoints 256, GitHub #75): its column is as wide as "888" and more.
+    static constexpr Column Letter{1, 9, LV_TEXT_ALIGN_LEFT}, Index{10, IndexWidth, LV_TEXT_ALIGN_RIGHT}, Frequency{36, 72, LV_TEXT_ALIGN_RIGHT},
         Gain{112, 62, LV_TEXT_ALIGN_RIGHT}, Phase{178, 58, LV_TEXT_ALIGN_RIGHT}, Note{246, 70, LV_TEXT_ALIGN_LEFT};
     const auto cell = [&](const Column &c, const char *s, int y, uint32_t color) { text(layer, s, c.x, y, c.width, color, c.align); };
     char a[24], b[32];

@@ -58,8 +58,9 @@ struct BodeSession {
     bool generatorOn = false, touched = false;
     scope::BodeCursor cursor;  // The active cursor's point, the named marker, Plot or Table.
     unsigned other = 0;        // The other cursor's point.
-    bool second = false;       // B active (A otherwise): MENU swaps them.
+    bool second = false;       // B active (A otherwise): MENU swaps them. A sweep starts with B (followB).
     bool results = false;      // The Results page (over Plot/Table).
+    ui::BodeGraphs graphs = ui::BodeGraphs::Both; // The plot's graphs (F3: Both, Gain, Phase, then Table).
     bool setupFromResult = false;
     Drive drive = Drive::FromGen;
     uint16_t customLow = 0, customHigh = 1600; // Custom DAC codes (the Low level's span by default).
@@ -196,6 +197,12 @@ public:
         hz = actual.value();
         return hz > 0 ? Tuning::Ready : Tuning::Failed;
     }
+    BodePort::Drive drive() const override {
+        const auto &output = data_.generator();
+        if (output.onConfirmed()) return BodePort::Drive::Playing;
+        return output.status() == DataStatus::HardwareError && output.snapshot().fault == generator::OutputFault::Underrun
+            ? BodePort::Drive::Underrun : BodePort::Drive::Stopped;
+    }
     bool configure(const ScopeRequest &request) override { s_.touched = true; return data_.configureScope(request); }
     uint64_t nowUs() const override { return data_.nowUs(); }
     bool frame(scope::FrameLease &lease) override { return data_.acquireScope(lease); }
@@ -325,7 +332,9 @@ bool restore(DataAccess &data, BodeSession &s, uint32_t now) {
     bool refused = false;
     if (!s.asked) {
         if (!s.generatorOn) {
-            if (output.enabled()) output.disable(); // Not when off: disable() would end the calibration reference.
+            // An interrupted DAC holds the jack quiet until OFF. Release that hold when
+            // restoring the original OFF output so the Scope reference can run again.
+            if (output.enabled() || (Drives::NeedsClock && output.status() == DataStatus::HardwareError)) output.disable();
             s.asked = !output.enabled() && output.configure(s.generator);
         } else s.asked = output.configure(s.generator) && output.enable();
         if (s.asked) s.askedAt = now;
@@ -359,8 +368,41 @@ void ended(BodeSession &s, const char *word) {
     if (s.measured == s.sweep.count()) std::snprintf(s.status, sizeof s.status, "%s: %u/%u valid", word, valid, s.measured);
     else std::snprintf(s.status, sizeof s.status, "%s %u/%u, %u valid", word, s.measured, s.sweep.count(), valid);
 }
+// GitHub #79: A stays where it is (the sweep's first point, until moved); B follows the newest point while it
+// is on it, whichever cursor is active: moved elsewhere, or put on a named marker, it stays there.
+void followB(BodeSession &s, unsigned before) {
+    scope::BodeCursor b = s.cursor;
+    if (!s.second) { b.point = s.other; b.marker = scope::BodeMarkers::None; }
+    if (b.marker != scope::BodeMarkers::None) return;
+    b.follow(before, s.measured);
+    (s.second ? s.cursor.point : s.other) = b.point;
+}
+// Up/Down on the plot: the next named marker the graphs shown can show (the gain's Peak and -3 dB, the
+// phase's crossings); false (nothing changed) when there is none.
+bool jumpShown(scope::BodeCursor &cursor, bool up, const BodeSession &s) {
+    auto at = cursor;
+    for (unsigned k = 0; k < 4; ++k) {
+        if (!at.jump(up, s.points, s.measured)) return false;
+        const bool phase = at.marker >= scope::BodeMarkers::Phase0;
+        if (phase ? ui::showsPhase(s.graphs) : ui::showsGain(s.graphs)) { cursor = at; return true; }
+    }
+    return false;
+}
+// F3 on the result: Results back to the plot; the plot's graphs Both, Gain, Phase, then the table, then the plot.
+void nextView(BodeSession &s) {
+    auto &cursor = s.cursor;
+    if (s.results) { s.results = false; cursor.table = false; return; }
+    if (cursor.table) { cursor.table = false; s.graphs = ui::BodeGraphs::Both; return; }
+    if (s.graphs == ui::BodeGraphs::Phase) { cursor.table = true; return; } // The same points in the other form.
+    s.graphs = s.graphs == ui::BodeGraphs::Both ? ui::BodeGraphs::Gain : ui::BodeGraphs::Phase;
+    // A marker the new graph does not show is no longer where Up/Down went.
+    const bool phase = cursor.marker >= scope::BodeMarkers::Phase0;
+    if (cursor.marker != scope::BodeMarkers::None && !(phase ? ui::showsPhase(s.graphs) : ui::showsGain(s.graphs)))
+        cursor.marker = scope::BodeMarkers::None;
+}
 const char *failure(Sweep::Failure f) {
     return f == Sweep::Failure::Generator ? "Bode stopped: generator refused the frequency"
+        : f == Sweep::Failure::Underrun ? "Bode stopped: repeated DAC underrun"
         : f == Sweep::Failure::Unconfirmed ? "Bode stopped: generator did not confirm the frequency" : "Bode stopped: capture refused";
 }
 } // namespace
@@ -399,7 +441,7 @@ void ApplicationController::showBode(bool plot) {
     }
     ui::BodeViewData d;
     d.points = s.points; d.count = s.sweep.count(); d.measured = s.measured;
-    d.cursor = s.cursor; d.other = s.other; d.second = s.second; d.results = s.results;
+    d.cursor = s.cursor; d.other = s.other; d.second = s.second; d.results = s.results; d.graphs = s.graphs;
     d.running = s.sweep.running();
     d.markers = scope::BodeMarkers::of(s.points, s.measured);
     d.analysis = &s.analysis; d.run = &s.run; d.excitation = &s.excitation; d.drive = s.runDrive;
@@ -440,7 +482,8 @@ void ApplicationController::startBodeSweep(uint32_t now) {
     if (!s.sweep.start(s.settings, grid, s.original, s.points)) { view_.notify("Bode: cannot start", now); return; }
     s.run = s.settings; s.excitation = excitation; s.runDrive = s.drive; // The run as it runs.
     s.analysis = {};
-    s.measured = 0; s.cursor.point = 0; s.other = 0; s.second = false; s.cursor.marker = scope::BodeMarkers::None;
+    // A and B at the first point, B active: B follows the sweep, B - A from its start (GitHub #79).
+    s.measured = 0; s.cursor.point = 0; s.other = 0; s.second = true; s.cursor.marker = scope::BodeMarkers::None;
     std::snprintf(s.status, sizeof s.status, "Sweep 0/%u", grid.count);
     showBode(true);
 }
@@ -466,6 +509,9 @@ void ApplicationController::saveBodeCsv(uint32_t now) {
 void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uint32_t now) {
     auto &s = session();
     if (events.shortPress & Keypad::Mode) { finishBode(now, "Bode closed, Scope restored"); return; }
+    // HOLD/SAVE held: the screenshot, as on every screen (GitHub #76), from the setup, plot, table or results;
+    // the sweep goes on (its CSV waits while the image is written). A short HOLD stays as it was: nothing here.
+    if (events.longPress & Keypad::HoldSave) { startScreenshot(now); return; }
     if (!view_.bode().visible()) { // SETUP rows.
         Rows rows(s, data_.generator().settings());
         using Outcome = ui::PropertyNavigator::Outcome;
@@ -485,8 +531,8 @@ void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uin
         view_.properties(shown, navigator_);
         return;
     }
-    // The result: F1 Run/Stop, F2 setup, F3 Plot/Table (Results: back to the plot), F4 exit; MENU swaps the
-    // active cursor (A/B); Left/Right move it one point; Up/Down the named markers (Plot) or a page (Table).
+    // The result: F1 Run/Stop, F2 setup, F3 the view (nextView), F4 exit; MENU swaps the active cursor (A/B);
+    // Left/Right move it one point; Up/Down the named markers of the graphs shown (Plot) or a page (Table).
     if (keys & Keypad::F4) { finishBode(now, "Bode closed, Scope restored"); return; }
     if (keys & Keypad::F1) {
         if (bodeRunning()) {
@@ -501,17 +547,14 @@ void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uin
     }
     auto &cursor = s.cursor;
     if (keys & Keypad::Menu) { std::swap(cursor.point, s.other); s.second = !s.second; cursor.marker = scope::BodeMarkers::None; }
-    if (keys & Keypad::F3) {
-        if (s.results) { s.results = false; cursor.table = false; }
-        else cursor.table = !cursor.table; // The same points in the other form.
-    }
+    if (keys & Keypad::F3) nextView(s);
     if (!s.results) {
         if (keys & Keypad::Left) cursor.step(-1, s.measured);
         if (keys & Keypad::Right) cursor.step(1, s.measured);
         if (keys & (Keypad::Up | Keypad::Down)) {
             const bool up = keys & Keypad::Up;
             if (cursor.table) cursor.page(up ? -1 : 1, s.measured);
-            else if (!cursor.jump(up, s.points, s.measured)) view_.notify("No markers in this sweep yet", now);
+            else if (!jumpShown(cursor, up, s)) view_.notify("No markers in this sweep yet", now);
         }
     }
     showBode(true);
@@ -519,7 +562,7 @@ void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uin
 void ApplicationController::serviceBode(uint32_t now) {
     // The CSV's writer: a bounded step a pass, whatever is on show; its outcome said once.
     auto &csv = bodeCsvFile();
-    csv.service();
+    if (!shots_.busy()) csv.service(); // A screenshot's file first: one writer at a time, as the decoder's CSV.
     if (!built) return;
     auto &s = session();
     if (s.saving && !csv.busy()) {
@@ -553,7 +596,7 @@ void ApplicationController::serviceBode(uint32_t now) {
     if (s.sweep.index() != s.measured) {
         const unsigned before = s.measured;
         s.measured = s.sweep.index();
-        s.cursor.follow(before, s.measured); // On the newest point: the next one; placed elsewhere: stays.
+        followB(s, before); // B on the newest point: the next one; A, or B placed elsewhere: stays.
         s.analysis = scope::BodeResults::of(s.points, s.measured);
         std::snprintf(s.status, sizeof s.status, "Sweep %u/%u", s.measured, s.sweep.count());
         if (view_.bode().visible()) showBode(true);

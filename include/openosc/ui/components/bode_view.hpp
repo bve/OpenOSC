@@ -7,11 +7,14 @@
 
 namespace openosc::ui {
 // The Bode result (GitHub #72) between the status bar and the soft keys, in two forms over one cursor:
-// - Plot: the gain in dB above (scaled to the measured span in 1-2-5 steps, its 0 dB line marked and
-//   labelled first, the labels centred on their lines), the phase in degrees below (-180..180, its 0 line
-//   marked), on one log frequency axis with its decades and, where no decade label is near, the sweep's
-//   ends; lines join neighbouring points (an invalid point is a gap in both, a weak CH2 a gap in the
-//   phase); the two cursors (the active one solid, the other dashed, each with its letter), the markers.
+// - Plot (GitHub #77): the gain in dB above and the phase in degrees below (Both), or either alone over
+//   the whole height (Gain, Phase). Each graph has its own vertical scale fitted to its measured values:
+//   the gain in 1-2-5 dB steps, the phase in 5, 10, 15, 30, 45 or 90 degree steps inside -180..180 (the
+//   whole -180..180 when it wraps or nothing is measured); its 0 line marked and labelled first, the labels
+//   on their lines, none over another or out of its graph. One log frequency axis with its decades and,
+//   where no decade label is near, the sweep's ends; lines join neighbouring points (an invalid point is a
+//   gap in both, a weak CH2 a gap in the phase, a phase wrap is not joined); the two cursors (the active
+//   one solid, the other dashed, each with its letter), the markers of the graphs shown.
 // - Table: PageRows points a page, the active cursor's row highlighted, the other's shaded, each with its
 //   letter: index, frequency, gain, phase and a note (why a point is invalid, a weak CH2, fewer averages
 //   than asked, the markers on it); below, the active point's stimulus and output (CH1/CH2 Vpp), V/div.
@@ -22,6 +25,9 @@ namespace openosc::ui {
 // cursors' difference B - A in Hz, dB and degrees ("--" where either point has no such value), with MENU
 // named as the key that swaps the active cursor.
 enum class BodeDrive : uint8_t { FromGen, Dedicated, Low, High, Custom }; // What the sweep plays (setup).
+enum class BodeGraphs : uint8_t { Both, Gain, Phase }; // The plot's graphs (F3 steps through them, then the table).
+inline bool showsGain(BodeGraphs g) { return g != BodeGraphs::Phase; }
+inline bool showsPhase(BodeGraphs g) { return g != BodeGraphs::Gain; }
 struct BodeViewData {
     const scope::BodePoint *points = nullptr;
     unsigned count = 0, measured = 0;
@@ -29,6 +35,7 @@ struct BodeViewData {
     unsigned other = 0;            // The other cursor's point.
     bool second = false;           // The active cursor is B.
     bool results = false;          // The Results page.
+    BodeGraphs graphs = BodeGraphs::Both; // The plot's graphs.
     scope::BodeMarkers markers{0, 0, 0, 0, 0};
     const scope::BodeResults *analysis = nullptr;     // The run's results,
     const scope::BodeSettings *run = nullptr;         // its settings
@@ -46,6 +53,7 @@ public:
     static constexpr int RowA = 1, Progress = 15, RowB = 17, RowC = 31;
     static constexpr int GainTop = 46, GainBottom = 104, PhaseTop = 112, PhaseBottom = 170;
     static constexpr int TableTop = 31, FooterA = 160, FooterB = 174;
+    static constexpr int IndexWidth = 24; // The table's index column: three digits (GitHub #75).
     static constexpr unsigned PageRows = scope::BodeCursor::PageRows;
     static_assert(PhaseBottom + 1 + Line <= Height, "Decade labels inside the plot's height");
     static_assert(RowC + Line <= GainTop, "The difference's row above the gain panel");

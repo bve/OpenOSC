@@ -146,7 +146,7 @@ bool BodeSweep::start(const BodeSettings &settings, const BodeGrid &grid, const 
     request_.recordPoints = RecordBudget::Default;
     settings_.averages = std::clamp<uint32_t>(settings_.averages, 1, BodeSettings::MaximumAverages);
     index_ = adjustments_ = 0;
-    records_ = 0; mean_ = {}; taken_ = false;
+    records_ = 0; mean_ = {}; taken_ = retriedDrive_ = false;
     failure_ = Failure::None;
     lease_.release();
     state_ = State::Tune;
@@ -160,7 +160,7 @@ void BodeSweep::finishPoint(const BodePoint &point) {
     points_[index_] = point;
     points_[index_].range[0] = uint8_t(request_.frontend.range[0]);
     points_[index_].range[1] = uint8_t(request_.frontend.range[1]);
-    ++index_; adjustments_ = 0; records_ = 0; mean_ = {};
+    ++index_; adjustments_ = 0; records_ = 0; mean_ = {}; retriedDrive_ = false;
     state_ = index_ < grid_.count ? State::Tune : State::Done;
 }
 bool BodeSweep::arm(BodePort &port) {
@@ -169,6 +169,20 @@ bool BodeSweep::arm(BodePort &port) {
     settledUs_ = port.nowUs() + uint64_t(settings_.settleMs) * 1000;
     deadlineUs_ = settledUs_ + recordWaitUs();
     state_ = State::Wait;
+    return true;
+}
+bool BodeSweep::restartPoint(BodePort::Drive drive) {
+    if (drive != BodePort::Drive::Underrun || retriedDrive_) {
+        fail(drive == BodePort::Drive::Underrun ? Failure::Underrun : Failure::Unconfirmed);
+        return false;
+    }
+    // The fault can fall inside the current record. Discard this point's entire average and
+    // start the same frequency with a fresh settle. A persistent fault ends the sweep.
+    lease_.release();
+    retriedDrive_ = true;
+    adjustments_ = records_ = 0;
+    mean_ = {};
+    state_ = State::Tune;
     return true;
 }
 uint64_t BodeSweep::recordWaitUs() const {
@@ -197,6 +211,10 @@ BodePoint BodeSweep::Mean::of(const BodePoint &last, unsigned wanted) const {
     return p;
 }
 bool BodeSweep::step(BodePort &port) {
+    if (state_ == State::Wait || state_ == State::Measure) {
+        const auto drive = port.drive();
+        if (drive != BodePort::Drive::Playing) return restartPoint(drive);
+    }
     switch (state_) {
     case State::Tune:
         if (adjustments_) return arm(port); // The same frequency, confirmed: only the capture again.

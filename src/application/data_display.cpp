@@ -63,8 +63,11 @@ void ApplicationController::refreshSoftKeys() {
         // Run waits for a restore still unconfirmed (a ZT706S acknowledge): no sweep over it.
         keys.keys[0] = bodeRunning() ? ui::SoftKey{"Stop", "Sweep", true} : ui::SoftKey{"Run", "Sweep", !bodeRestoring()};
         keys.keys[1] = {"Setup", "", !bodeRunning()};
-        const auto &shown = view_.bode().data(); // Results and Table go back to the plot; the plot to the table.
-        keys.keys[2] = shown.results || shown.cursor.table ? ui::SoftKey{"Plot", "View", true} : ui::SoftKey{"Table", "View", true};
+        // F3 names the view it goes to: Results and Table back to the plot; the plot's graphs, then the table.
+        const auto &shown = view_.bode().data();
+        const char *next = shown.results || shown.cursor.table ? "Plot" : shown.graphs == ui::BodeGraphs::Both ? "Gain"
+            : shown.graphs == ui::BodeGraphs::Gain ? "Phase" : "Table";
+        keys.keys[2] = ui::SoftKey{next, "View", true};
         keys.keys[3] = {"Exit", "Bode", true};
     }
     else if (panel_ == Panel::Images) keys = imageSoftKeys();

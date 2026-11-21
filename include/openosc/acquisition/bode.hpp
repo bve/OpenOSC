@@ -90,12 +90,15 @@ private:
 class BodePort {
 public:
     enum class Tuning : uint8_t { Pending, Ready, Failed };
+    enum class Drive : uint8_t { Playing, Underrun, Stopped };
     // Asks for the generator's sine at `millihertz` with its output on; false: refused (nothing pending).
     virtual bool tune(uint64_t millihertz) = 0;
     // That request's state: Ready once the generator confirms exactly it playing (ON), with the frequency
     // it actually plays (Hz); Failed once it reports it will not (no acknowledge after its own bounded
     // retries, a fault, another setting in force); Pending meanwhile. Sends nothing.
     virtual Tuning tuned(double &actualHz) = 0;
+    // The confirmed drive can still stop while a point is settling or collecting records.
+    virtual Drive drive() const = 0;
     virtual bool configure(const ScopeRequest &request) = 0; // The capture for a point.
     virtual uint64_t nowUs() const = 0;
     virtual bool frame(FrameLease &lease) = 0;               // The newest frame, if any.
@@ -117,7 +120,7 @@ class BodeSweep {
 public:
     enum class State : uint8_t { Idle, Tune, Tuning, Wait, Measure, Done, Cancelled, Failed };
     // Generator: the request refused; Unconfirmed: asked, but never confirmed (Failed, or the time ran out).
-    enum class Failure : uint8_t { None, Generator, Capture, Unconfirmed };
+    enum class Failure : uint8_t { None, Generator, Capture, Unconfirmed, Underrun };
     static constexpr unsigned MaximumAdjustments = 4;        // V/div changes for one point.
     // A point's confirmation at most: above the ZT706S module's own bound (4 exchanges of 5.3 s with
     // 3 recovery delays of 1 s: 24.2 s), a backstop that never lets a sweep wait for ever.
@@ -160,11 +163,12 @@ private:
     uint32_t takenSequence_ = 0;
     unsigned index_ = 0, adjustments_ = 0;
     uint8_t records_ = 0;
-    bool taken_ = false;
+    bool taken_ = false, retriedDrive_ = false;
     State state_ = State::Idle;
     Failure failure_ = Failure::None;
     void finishPoint(const BodePoint &point);
     bool arm(BodePort &port); // The capture for the point at actualHz_, the settle from now.
+    bool restartPoint(BodePort::Drive drive);
     uint64_t recordWaitUs() const; // One record's deadline after the settle (or the last record).
     void fail(Failure failure) { failure_ = failure; state_ = State::Failed; lease_.release(); }
 };

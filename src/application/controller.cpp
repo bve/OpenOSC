@@ -294,7 +294,10 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     if (panel_ == Panel::InterleaveMatch) { interleaveMatchKeys(keys, now); return; }
 #endif
     if (panel_ == Panel::Bode) { bodeKeys(events, keys, now); return; } // MODE leaves it (restored); Remote ends it in serviceBode.
-    if (bodeRestoring()) return; // Closing Bode can leave its generator ACK pending; the restore still owns Scope.
+    if (bodeRestoring()) { // Closing Bode can leave its generator ACK pending; the restore still owns Scope.
+        if ((events.longPress & Keypad::HoldSave) && !remote_ && uiReady_) startScreenshot(now); // Only the image (#76).
+        return;
+    }
     if (remote_ || !uiReady_) { // Locked: Remote, or no UI to operate (headless).
         if (events.longPress & Keypad::Menu) setRemote(false, "USB Remote off");
         return;
