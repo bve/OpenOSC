@@ -31,8 +31,9 @@ constexpr const char *triggerModes[] = {"auto", "normal", "single"};
 constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact", "mkr"}; // FactoryRecordPolicy.
 constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
 constexpr const char *faces[] = {"ibm", "mono", "segment"}, *palettes[] = {"dark", "amber", "paper"};
+constexpr const char *presets[] = {"custom", "hybrid"}; // meter.appearance_preset (MeterPreferences::preset).
 static_assert(sizeof displays / sizeof *displays == MeterPreferences::Displays && sizeof faces / sizeof *faces == MeterPreferences::Faces &&
-              sizeof palettes / sizeof *palettes == MeterPreferences::Palettes);
+              sizeof palettes / sizeof *palettes == MeterPreferences::Palettes && sizeof presets / sizeof *presets == MeterPreferences::Presets);
 // A colour's file text: a named colour by its static key (not copied), Custom as "#rrggbb" (copied
 // into the document), Inherit not written.
 void color(JsonObject object, const ColorValue &value) {
@@ -230,8 +231,17 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         !choice(meter, "display", output.meter.display, displays) ||
         !boolean(meter, "statistics", output.meter.statistics) || !boolean(meter, "bar_graph", output.meter.bar) || !boolean(meter,"auto",output.meter.automatic) ||
         !number(meter,"range_index",output.meter.range) || !choice(meter, "face", output.meter.face, faces) ||
-        !choice(meter, "palette", output.meter.palette, palettes)) return false;
+        !choice(meter, "palette", output.meter.palette, palettes) || !choice(meter, "appearance_preset", output.meter.preset, presets)) return false;
     if (meter["appearance"].is<JsonObjectConst>()) appearance(meter["appearance"].as<JsonObjectConst>(), output.meter.appearance);
+    // Files before the preset (GitHub #68): choosing Hybrid wrote its look over the Custom one. That exact
+    // look is Hybrid, its Custom the base (the one before it is gone); any other look stays the Custom.
+    // Only here: a file with the key keeps a Custom equal to Hybrid as Custom.
+    auto &look = output.meter;
+    if (!meter.containsKey("appearance_preset") && look.palette == MeterAppearanceCatalog::HybridPalette &&
+        look.face == MeterAppearanceCatalog::HybridFace && look.appearance == MeterAppearanceCatalog::hybrid()) {
+        look.preset = MeterPreferences::HybridPreset;
+        look.appearance = MeterAppearance();
+    }
     if (meter["hold"].is<JsonObjectConst>()) hold(meter["hold"].as<JsonObjectConst>(), output.meter.hold);
     if (const auto temperature = meter["temperature"].as<JsonObjectConst>(); !temperature.isNull()) {
         dmm::TemperatureSettings settings;
@@ -330,6 +340,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     meter["display"] = displays[values.meter.display]; meter["statistics"] = bool(values.meter.statistics); meter["bar_graph"] = bool(values.meter.bar);
     meter["auto"] = bool(values.meter.automatic); meter["range_index"] = values.meter.range;
     meter["face"] = faces[values.meter.face]; meter["palette"] = palettes[values.meter.palette];
+    meter["appearance_preset"] = presets[values.meter.preset]; // Always: without it a Custom equal to Hybrid would migrate.
     arrangement(meter, "arrangement_digital", values.meter.digitalArrangement);
     arrangement(meter, "arrangement_analog", values.meter.analogArrangement);
     if (values.meter.rangeFunction < MeterFunctionCount) meter["range_function"] = MeterFunctions[values.meter.rangeFunction].key;
