@@ -57,7 +57,7 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">Interleave offset calibration</td>
   </tr>
   <tr>
-    <td><img src=".github/images/bode.png" width="320" alt="Bode analyzer: gain and phase of a filter from 100 Hz to 100 kHz"></td>
+    <td><img src=".github/images/bode.png" width="320" alt="Bode analyzer: gain and phase of an RC filter from 100 Hz to 200 kHz"></td>
     <td><img src=".github/images/multimeter-type-k.png" width="320" alt="Multimeter: Type K thermocouple reading 22.5 °C"></td>
   </tr>
   <tr>
