@@ -47,8 +47,8 @@ void ApplicationController::settingsKeys(uint32_t keys, uint32_t now) {
         navigator_.reset(settingsMenu_.selected());
         return true;
     };
-    if (settingsMenu_.information()) { // About, Storage: any of MENU, F4 or Left returns.
-        if ((keys & (Keypad::F4 | Keypad::Menu | (navigator_.repeating(Keypad::Left) ? 0U : uint32_t(Keypad::Left)))) && back()) showSettings();
+    if (settingsMenu_.information()) { // About, Storage: MENU, F4 (or Left as Back) returns.
+        if ((keys & (Keypad::F4 | Keypad::Menu | (prefs_.menuLeftBack && !navigator_.repeating(Keypad::Left) ? uint32_t(Keypad::Left) : 0U))) && back()) showSettings();
         return;
     }
     auto rows = settingsRows();
@@ -114,7 +114,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.idle = chosen.idle;
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
-    prefs_.generatorInRotation = chosen.generatorInRotation;
+    prefs_.menuLeftBack = chosen.menuLeftBack; prefs_.generatorInRotation = chosen.generatorInRotation;
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();

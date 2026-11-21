@@ -11,7 +11,7 @@ enum class SettingsAction : uint8_t {
     GainChannel,GainRange,GainReference,GainReferenceStep,GainProbe,GainSpan,GainInForce,CalibrateGain,FactoryGain,
     InterleaveOffset,InterleaveInForce,InterleaveSaved,SaveInterleave,CancelInterleave,ResetInterleave,
     GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch, ClockIndicator,
-    OpenGenerator, GeneratorRotation
+    OpenGenerator, GeneratorRotation, MenuLeftKey
 };
 struct SettingsEntry {
     const char *name;

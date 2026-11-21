@@ -39,7 +39,7 @@ void ApplicationController::zeroKeys(uint32_t keys,uint32_t now) {
     if (data_.gainRunning() && (phase==Phase::Applying || phase==Phase::Collecting)) { gainKeys(keys,now); return; }
     if (keys&(Keypad::F4|Keypad::Mode|Keypad::Menu)) data_.cancelZero(now);
 }
-// The gain's own rows: Up/Down choose, MENU acts (Reference applied, Save, Cancel); F4, Left and
+// The gain's own rows: Up/Down choose, MENU acts (Reference applied, Save, Cancel); F4 (Left as Back) and
 // MODE cancel. Only Save keeps a result.
 void ApplicationController::gainKeys(uint32_t keys,uint32_t now) {
     if (!keys) return;

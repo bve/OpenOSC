@@ -17,6 +17,7 @@ struct Preferences {
     uint32_t useBuiltinTheme = 0;
     uint32_t showFps = 1, batteryDisplay = 0; // showFps: 0 off, 1 FPS, 2 sample rate (scope). batteryDisplay: 0 icon, 1 volts, 2 percent.
     uint32_t panReverse = 0;                  // Left/Right pan: 0 moves the view, 1 the waveform.
+    uint32_t menuLeftBack = 1;                // Left in menus: 1 Back (as F4), 0 steps a choice back.
     uint32_t generatorInRotation = 1;         // MODE: 1 Scope, DMM, GEN; 0 Scope, DMM (Settings opens GEN).
     uint32_t clockIndicator = 0;              // Scope top bar L/M/H run profile glyph: 0 off (older files), 1 on.
     uint32_t holdTime = 2;                    // REL power-off hold: HoldTimes index.
@@ -42,7 +43,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 2 && batteryDisplay < 3 && panReverse < 2 && clockIndicator <= 1 && generatorInRotation < 2 && holdTime < 3 && usbController <= 1 &&
+               useBuiltinTheme <= 1 && showFps <= 2 && batteryDisplay < 3 && panReverse < 2 && clockIndicator <= 1 && menuLeftBack < 2 && generatorInRotation < 2 && holdTime < 3 && usbController <= 1 &&
                generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&

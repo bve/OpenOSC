@@ -18,6 +18,7 @@ constexpr SettingsEntry display[] = {
     {"Battery", Action::BatteryDisplay},
     {"Clock indicator", Action::ClockIndicator}, // The Scope top bar's L/M/H run profile glyph (GitHub #47).
     {"Pan direction", Action::PanDirection},
+    {"Left key in menus", Action::MenuLeftKey},
     {"Appearance", Action::None, Page::Appearance},
     {"Back", Action::Back},
 };
