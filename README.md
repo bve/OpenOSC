@@ -55,6 +55,14 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">Interleave offset calibration</td>
   </tr>
   <tr>
+    <td><img src=".github/images/bode.png" width="320" alt="Bode analyzer: gain and phase of a filter from 100 Hz to 100 kHz"></td>
+    <td><img src=".github/images/multimeter-type-k.png" width="320" alt="Multimeter: Type K thermocouple reading 22.5 °C"></td>
+  </tr>
+  <tr>
+    <td align="center">Bode analyzer (ZT703S)</td>
+    <td align="center">Type K temperature</td>
+  </tr>
+  <tr>
     <td><img src=".github/images/decoder-split.png" width="320" alt="Protocol decoder, split view: SPI waveform above, decoded table below"></td>
     <td><img src=".github/images/decoder-can.png" width="320" alt="Protocol decoder: CAN frames table with IDs, data and status"></td>
   </tr>
