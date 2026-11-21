@@ -52,7 +52,7 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
         }
         if (keys & Keypad::Up) draft_ = (draft_ + options - 1) % options;
         else if (keys & Keypad::Down) draft_ = (draft_ + 1) % options;
-        else if (keys & Keypad::Left) { if (draft_) --draft_; } // As Step: no wrap.
+        else if ((keys & Keypad::Left) && !leftBack_) { if (draft_) --draft_; } // As Step: no wrap (as Back, a repeat does nothing).
         else if ((keys & Keypad::Right) && !leftBack_ && draft_ + 1 < options) ++draft_; // Undoes Left.
         return Outcome::None;
     }
