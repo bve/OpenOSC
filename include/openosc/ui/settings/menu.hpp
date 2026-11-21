@@ -3,14 +3,15 @@
 #include <cstdint>
 
 namespace openosc::ui {
-enum class SettingsPage : uint8_t { Root, Display, Appearance, Files, Device, About, Storage, Performance, Power, Calibration, Gain, Interleave, Count };
+enum class SettingsPage : uint8_t { Root, Display, Appearance, Files, Device, About, Storage, Performance, Power, Calibration, Gain, Interleave, Generator, Count };
 enum class SettingsAction : uint8_t {
     None, Close, Back, Brightness, ReloadPreferences, ReloadTheme, BuiltinTheme, About, Storage, Recovery, UsbRemote,
     RunProfile, Restart, BacklightTimeout, BacklightIdleLevel, PowerOffTimeout, RestoreSettings, Images, ClearImages,
     CalibrateZero,ReloadZero,FactoryZero,ShowFps,BatteryDisplay,BufferSize,CalibrateHardwareZero,
     GainChannel,GainRange,GainReference,GainReferenceStep,GainProbe,GainSpan,GainInForce,CalibrateGain,FactoryGain,
     InterleaveOffset,InterleaveInForce,InterleaveSaved,SaveInterleave,CancelInterleave,ResetInterleave,
-    GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch, ClockIndicator
+    GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch, ClockIndicator,
+    OpenGenerator, GeneratorRotation
 };
 struct SettingsEntry {
     const char *name;

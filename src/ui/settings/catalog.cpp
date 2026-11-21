@@ -9,6 +9,7 @@ constexpr SettingsEntry root[] = {
     {"Display", Action::None, Page::Display},
     {"Files & USB", Action::None, Page::Files},
     {"Device", Action::None, Page::Device},
+    {"Generator", Action::None, Page::Generator},
     {"Back", Action::Back},
 };
 constexpr SettingsEntry display[] = {
@@ -17,7 +18,6 @@ constexpr SettingsEntry display[] = {
     {"Battery", Action::BatteryDisplay},
     {"Clock indicator", Action::ClockIndicator}, // The Scope top bar's L/M/H run profile glyph (GitHub #47).
     {"Pan direction", Action::PanDirection},
-    {"Generator layout", Action::GeneratorLayout},
     {"Appearance", Action::None, Page::Appearance},
     {"Back", Action::Back},
 };
@@ -63,7 +63,6 @@ constexpr SettingsEntry power[] = {
     {"Idle backlight",Action::BacklightIdleLevel},
     {"Auto power off",Action::PowerOffTimeout},
     {"Power-off hold",Action::HoldTime},
-    {"Generator at startup",Action::GeneratorStartup},
     {"Back",Action::Back},
 };
 constexpr SettingsEntry calibration[] = {
@@ -107,6 +106,13 @@ constexpr SettingsEntry interleave[] = {
     {"Reset to factory",Action::ResetInterleave},
     {"Back",Action::Back},
 };
+constexpr SettingsEntry generator[] = {
+    {"Open generator",Action::OpenGenerator},
+    {"In MODE rotation",Action::GeneratorRotation},
+    {"Layout",Action::GeneratorLayout},
+    {"Output at startup",Action::GeneratorStartup},
+    {"Back",Action::Back},
+};
 template <size_t N>
 constexpr SettingsPageDefinition page(const char *title, const char *path, Page parent,
                                       const SettingsEntry (&entries)[N]) {
@@ -129,6 +135,7 @@ constexpr SettingsPageDefinition pages[] = {
         : page("SCOPE CALIBRATION","Settings / Device / Scope calibration",Page::Device,calibration),
     page("GAIN","Settings / Device / Scope calibration / Gain",Page::Calibration,gain),
     page("INTERLEAVE OFFSET","Settings / Device / Scope calibration / Interleave",Page::Calibration,interleave),
+    page("GENERATOR","Settings / Generator",Page::Root,generator),
 };
 static_assert(sizeof pages / sizeof *pages == unsigned(Page::Count));
 }

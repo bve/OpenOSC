@@ -235,9 +235,10 @@ private:
     // and saved at once and only restyles the screen (applyLooks); the capture, HOLD, the record,
     // the DMM statistics and the measurement settings are untouched. Back: the parent panel.
     void scopeLayoutKeys(uint32_t keys, uint32_t now);
-    // GENERATOR LAYOUT, one editor from Settings / Display and from GEN Parameters (F3); Back returns
+    // GENERATOR LAYOUT, one editor from Settings / Generator and from GEN Parameters (F3); Back returns
     // to where it opened. A committed order is saved and placed at once, or when GEN shows next.
     void openGeneratorLayout(bool fromSettings);
+    void openGenerator(uint32_t now); // Settings > Generator > Open generator (also out of the MODE rotation).
     void generatorLayoutKeys(uint32_t keys, uint32_t now);
     void scopeColorsKeys(uint32_t keys, uint32_t now);
     void meterLayoutKeys(uint32_t keys, uint32_t now);

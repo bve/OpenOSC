@@ -147,6 +147,10 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         !number(generator,"minimum_code",candidate.generatorMinimumCode) ||
         !number(generator,"maximum_code",candidate.generatorMaximumCode))
         return false;
+    if (generator.containsKey("in_mode_rotation")) {
+        if (!generator["in_mode_rotation"].is<bool>()) return false;
+        candidate.generatorInRotation = generator["in_mode_rotation"].as<bool>();
+    }
     if (generator.containsKey("level")) {
         if (!generator["level"].is<const char *>()) return false;
         unsigned index=0;
@@ -220,6 +224,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["multimeter"]["function"] = MeterFunctions[values.meterFunction].key;
     InstrumentJson::encode(document["scope"], document["multimeter"], values);
     document["generator"]["shape"] = generatorShapes[values.generatorShape];
+    document["generator"]["in_mode_rotation"] = values.generatorInRotation == 1;
     document["generator"]["frequency_millihz"] = values.generatorMillihertz;
     document["generator"]["duty_permille"] = values.generatorDutyPermille;
     document["generator"]["amplitude_mv"] = values.generatorAmplitudeMillivolts;
