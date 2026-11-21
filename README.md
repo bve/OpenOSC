@@ -13,8 +13,6 @@ instrument, the SCPI reference, troubleshooting and pages for contributors.
 > **ZT706S:** I don't have one. Users run it, but many features are untested on that model.
 > **Clones of the ZT703S and ZT706S** should work too: install the files for the model they are based on.
 > If something does not work on a clone, please [open an issue](https://github.com/bve/OpenOSC/issues/new/choose).
-> **Releases come out often,** and you do not need to install every one: see
-> [Why are there so many releases?](https://github.com/bve/OpenOSC/wiki/FAQ) in the FAQ.
 
 > [!WARNING]
 > **This firmware is for enthusiasts only.** If you are generally happy with the stock firmware,
@@ -383,3 +381,8 @@ If OpenOSC is useful to you, you can support its development:
 
 - [Ko-fi](https://ko-fi.com/val23)
 - [Liberapay](https://liberapay.com/Val23)
+
+## Releases
+
+Releases come out often, and you do not need to install every one: see
+[Why are there so many releases?](https://github.com/bve/OpenOSC/wiki/FAQ) in the FAQ.
