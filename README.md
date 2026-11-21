@@ -61,7 +61,7 @@ Captured on a ZT703S running OpenOSC.
     <td><img src=".github/images/multimeter-type-k.png" width="320" alt="Multimeter: Type K thermocouple reading 22.5 °C"></td>
   </tr>
   <tr>
-    <td align="center">Bode analyzer (ZT703S)</td>
+    <td align="center">Bode analyzer</td>
     <td align="center">Type K temperature</td>
   </tr>
   <tr>
@@ -144,7 +144,7 @@ Captured on a ZT703S running OpenOSC.
 - FFT up to 2048 points with four window functions, dBFS or linear scale
 - Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view, event detail; decoded data saved as CSV
-- Bode analyzer (**Analyze → Bode (FRA)**, ZT703S): gain and phase of a circuit against frequency with the
+- Bode analyzer (**Analyze → Bode (FRA)**): gain and phase of a circuit against frequency with the
   built-in generator, cursors, −3 dB points, bandwidth, gain and phase margins, CSV export
 - Zero and gain calibration of both channels, stored as files and never written to the factory calibration
 - Selectable performance profiles: 200/100, 280/140 and 360/90 (core MHz / MS/s per channel),
