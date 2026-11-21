@@ -133,6 +133,18 @@ private:
     void finishInterleaveMatch(uint32_t now, const char *notice, bool returnToSettings = true);
     void showInterleaveMatch();
     calibration::InterleaveMatchWizard interleaveMatch_;
+    // Frequency response (GitHub #72, bode.cpp): its session lives in ITCM (BodeSession), none here.
+    void openBode(uint32_t now);
+    void startBodeSweep(uint32_t now);
+    void saveBodeCsv(uint32_t now); // Setup's Save CSV: the last run as it ran (BodeCsvFile).
+    void bodeKeys(const KeyEvents &events, uint32_t keys, uint32_t now);
+    void serviceBode(uint32_t now);
+    void finishBode(uint32_t now, const char *notice); // Cancel, restore the instrument, close the panel.
+    void showBode(bool plot);
+    bool bodeRunning() const;
+    bool bodeOwns() const; // The sweep's settings in force: running, or their restore pending (SCPI refused).
+#else
+    bool bodeOwns() const { return false; }
 #endif
     // The loop pass's overlay pause of full-rate capture (DataAccess::pauseCapture).
     void pauseHiddenCapture(uint32_t now, bool enumerating);
@@ -303,7 +315,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch, Bode };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;

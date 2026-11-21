@@ -7,7 +7,7 @@ namespace openosc::ui {
 //         runs an Action or opens a Page; Right opens a Page, and takes the next option of a Choice
 //         (the first after the last) or switches a Toggle, once per press (not on its auto-repeat);
 //         on a Number, Action or Info row Right does nothing; F4 and Left go back.
-// Choice: Up/Down move the draft in the list; MENU takes it; F4 and Left cancel.
+// Choice: one move a key event: Up/Down in the list; MENU takes it, over any move; F4 and Left cancel.
 // Number: Left/Right and Up/Down step the value; MENU keeps it; F4 restores it.
 // One field at a time is committed: a Choice taken, a Toggle switched, a Number finished with MENU
 // (Changed). A Number's steps (Stepped) and its F4 restore (Restored) are the edit in progress: an
@@ -31,6 +31,7 @@ public:
     // Of the keys the next keys() call gets, those that are a held arrow's auto-repeat (KeyEvents::repeat);
     // that call alone uses them. Never set: every key is a press.
     void repeats(uint32_t keys) { repeated_ = keys; }
+    bool repeating(uint32_t key) const { return repeated_ & key; } // Before keys() takes them.
     // Leaves a list or number edit as if F4 were pressed (MODE, Remote, power off while a list is
     // open); true if a number was restored, which its owner then applies.
     bool cancel(PropertyList &list);

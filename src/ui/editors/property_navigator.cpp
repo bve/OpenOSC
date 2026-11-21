@@ -4,7 +4,8 @@
 namespace openosc::ui {
 void PropertyNavigator::restore(PropertyList &list) const { list.cancelEdit(row_, saved_); }
 bool PropertyNavigator::cancel(PropertyList &list) {
-    const bool number = mode_ == Mode::Number;
+    // A row gone or no longer a Number keeps its value: the restore never lands on another row.
+    const bool number = mode_ == Mode::Number && row_ < list.count() && list.kind(row_) == PropertyKind::Number;
     if (number) restore(list);
     mode_ = Mode::Browse;
     return number;
@@ -24,20 +25,29 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     const uint32_t repeated = repeated_;
     repeated_ = 0; // This call's only.
     const unsigned count = list.count();
-    if (!keys || !count) return Outcome::None;
-    if (row_ >= count) row_ = count - 1;
+    if (!keys) return Outcome::None;
+    if (!count) { mode_ = Mode::Browse; return Outcome::None; } // Emptied: an open list or edit closes, no row to read.
+    const bool gone = row_ >= count;
+    if (gone) row_ = count - 1;
     const auto kind = list.kind(row_);
+    const uint32_t backKeys = Keypad::F4 | (repeated & Keypad::Left ? 0U : uint32_t(Keypad::Left)); // Left on its press only.
+    // An open list or edit whose row is gone (or now another kind): the key only closes it.
+    if ((mode_ == Mode::Choice && (gone || kind != PropertyKind::Choice)) || (mode_ == Mode::Number && (gone || kind != PropertyKind::Number))) {
+        mode_ = Mode::Browse; return Outcome::None;
+    }
     switch (mode_) {
     case Mode::Choice: {
         const unsigned options = list.options(row_);
-        if (keys & (Keypad::F4 | Keypad::Left)) { mode_ = Mode::Browse; return Outcome::None; }
-        if ((keys & Keypad::Up) && options) draft_ = (draft_ + options - 1) % options;
-        if ((keys & Keypad::Down) && options) draft_ = (draft_ + 1) % options;
-        if (keys & Keypad::Menu) {
+        if (!options) { mode_ = Mode::Browse; return Outcome::None; } // The list emptied while open.
+        if (keys & backKeys) { mode_ = Mode::Browse; return Outcome::None; }
+        if (draft_ >= options) { draft_ = 0; return Outcome::None; } // It shrank: the key shows its first option, takes none.
+        if (keys & Keypad::Menu) { // Wins over a move pressed with it.
             mode_ = Mode::Browse;
             if (draft_ == list.option(row_)) return Outcome::None;
             return list.choose(row_, draft_) ? Outcome::Changed : Outcome::Refused;
         }
+        if (keys & Keypad::Up) draft_ = (draft_ + options - 1) % options;
+        else if (keys & Keypad::Down) draft_ = (draft_ + 1) % options;
         return Outcome::None;
     }
     case Mode::Number:
@@ -50,7 +60,7 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
         return Outcome::None;
     case Mode::Browse: break;
     }
-    if (keys & (Keypad::F4 | Keypad::Left)) return Outcome::Back;
+    if (keys & backKeys) return Outcome::Back;
     if (keys & Keypad::Up) { row_ = (row_ + count - 1) % count; return Outcome::None; }
     if (keys & Keypad::Down) { row_ = (row_ + 1) % count; return Outcome::None; }
     if ((keys & Keypad::Right) && kind == PropertyKind::Page) return Outcome::Open;

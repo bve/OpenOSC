@@ -705,6 +705,7 @@ FrameView FrameView::withPretrigger(uint32_t point) const {
 }
 FrameView FrameView::withShiftedTrigger(uint32_t index, int32_t shift, TriggerEdge edge) const {
     FrameView view = *this;
+    view.metadata_.clearTrigger();
     view.metadata_.triggered = true;
     view.metadata_.triggerIndex = index;
     view.metadata_.triggerShift = shift;

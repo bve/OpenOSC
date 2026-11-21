@@ -22,6 +22,10 @@ void ApplicationView::build(const Theme &theme) {
     if (channelTag_) lv_obj_delete(channelTag_);
     channelTag_ = nullptr;
     if (clock_) lv_obj_delete(clock_);
+#if OPENOSC_BOARD == 703
+    bode_.clear();
+    bodeHeader_ = false;
+#endif
     clock_ = nullptr; clockInk_ = 0; clockLayout_ = 0; // The icons and the overview below are created at their usual places.
     channelTagChannel_ = NoTriggerChannel;
     overview_.clear();
@@ -73,6 +77,9 @@ void ApplicationView::build(const Theme &theme) {
     lv_obj_set_pos(clock_, Layout::ClockBesideIcon.x, Layout::ClockYIcon); // Placed by placeClock().
     lv_obj_add_event_cb(clock_, drawClock, LV_EVENT_DRAW_MAIN, this);
     lv_obj_set_hidden(clock_, true);
+#if OPENOSC_BOARD == 703
+    bode_.create(screen, theme); // Over the plot, under the toast (raised when shown).
+#endif
     trigger_ = label(screen,"",Layout::level(Layout::Trigger).x+plot::PlotFrame::TagWidth+1,4);
     lv_obj_set_size(trigger_,Layout::LevelWidth-plot::PlotFrame::TagWidth-1,14);
     lv_obj_set_style_text_font(trigger_,ui::Elements::font(12),0);
@@ -96,7 +103,11 @@ void ApplicationView::refreshIndicators() {
     // right side (overview, USB, GEN) lies past the widest state and never gives way.
     using Layout = ui::StatusBarLayout;
     statusRight_ = host_.statusRight();
-    const bool scope = mode_ == MeasurementMode::Oscilloscope;
+    const bool scope = mode_ == MeasurementMode::Oscilloscope
+#if OPENOSC_BOARD == 703
+        && !bodeHeader_
+#endif
+        ;
     overview_.visible(scope);
     const bool trigger = scope && trigger_ && edge_ && Layout::trigger(statusRight_);
     if (trigger_) lv_obj_set_hidden(trigger_, !trigger);
@@ -166,7 +177,11 @@ void ApplicationView::drawClock(lv_event_t *event) {
 void ApplicationView::placeFps(bool force) {
     using Layout = ui::StatusBarLayout;
     if (!fps_ || !trigger_) return; // Not built yet.
-    const bool visible = fpsWanted_ && Layout::clear(statusRight_, Layout::Fps);
+    const bool visible = fpsWanted_ && Layout::clear(statusRight_, Layout::Fps)
+#if OPENOSC_BOARD == 703
+        && !bodeHeader_
+#endif
+        ;
     if (!force && visible == fpsVisible_) return;
     fpsVisible_ = visible;
     lv_obj_set_hidden(fps_, !visible);
@@ -258,6 +273,9 @@ void ApplicationView::paintShell() {
     lv_obj_set_style_text_color(fps_, lv_color_hex(t.muted), 0);
     refreshTriggerColors(channelTagChannel_);
     overview_.palette(t);
+#if OPENOSC_BOARD == 703
+    bode_.colors(t);
+#endif
     paintClock();
 }
 // The Scope's theme: the base theme under the appearance's look (ScopeStyles); the host repaints the
@@ -271,12 +289,29 @@ void ApplicationView::measurement(const ApplicationState &state) {
     if (unsigned(state.mode) >= InstrumentModeCount) return;
     mode_ = state.mode;
     lv_obj_set_hidden(menu_, true);
+#if OPENOSC_BOARD == 703
+    bode_.hide();
+    bodeHeader_ = false;
+#endif
     host_.activate(state.mode);
     paintShell(); // The Scope's appearance or the base theme, by the screen in front.
     ui::InstrumentScreen *screens[] = {&scope_, &meter_, &generator_};
     screens[unsigned(state.mode)]->activate(state);
     refreshIndicators();
 }
+#if OPENOSC_BOARD == 703
+void ApplicationView::bodePlot(const ui::BodeViewData &data) {
+    host_.overlay(true);
+    lv_obj_set_hidden(menu_, true);
+    if (!bodeHeader_) {
+        bodeHeader_ = true;
+        host_.status("BODE", ui::StatusTone::Neutral);
+        refreshIndicators();
+    }
+    bode_.show(data);
+    if (toastActive_) lv_obj_move_foreground(toast_); // A notice stays over the plot.
+}
+#endif
 void ApplicationView::generatorActive(bool enabled) {
     if (generatorOn_ == enabled) return;
     generatorOn_ = enabled;

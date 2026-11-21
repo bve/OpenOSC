@@ -11,6 +11,17 @@ constexpr NamedColor swatches[ColorCatalog::Swatches] = {
     {"Red", "red", 0xf87171},       {"Green", "green", 0x4ade80},   {"Cyan", "cyan", 0x22d3ee},
     {"Sky", "sky", 0x38bdf8},       {"Blue", "blue", 0x3b82f6},     {"Violet", "violet", 0xa78bfa},
     {"Paper", "paper", 0xe9e3d3}};
+constexpr bool same(const char *a, const char *b) { return *a == *b && (!*a || same(a + 1, b + 1)); }
+// ColorCatalog::Named follows the table: a look built from it names the colours its keys say.
+static_assert(same(swatches[ColorCatalog::White].key, "white") && same(swatches[ColorCatalog::Silver].key, "silver") &&
+              same(swatches[ColorCatalog::Gray].key, "gray") && same(swatches[ColorCatalog::Graphite].key, "graphite") &&
+              same(swatches[ColorCatalog::Black].key, "black") && same(swatches[ColorCatalog::Navy].key, "navy") &&
+              same(swatches[ColorCatalog::Amber].key, "amber") && same(swatches[ColorCatalog::Orange].key, "orange") &&
+              same(swatches[ColorCatalog::Yellow].key, "yellow") && same(swatches[ColorCatalog::Red].key, "red") &&
+              same(swatches[ColorCatalog::Green].key, "green") && same(swatches[ColorCatalog::Cyan].key, "cyan") &&
+              same(swatches[ColorCatalog::Sky].key, "sky") && same(swatches[ColorCatalog::Blue].key, "blue") &&
+              same(swatches[ColorCatalog::Violet].key, "violet") && same(swatches[ColorCatalog::Paper].key, "paper"),
+              "ColorCatalog::Named follows the swatch table");
 int hex(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
