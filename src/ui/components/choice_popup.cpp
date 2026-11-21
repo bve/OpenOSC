@@ -5,6 +5,7 @@
 namespace openosc::ui {
 void ChoicePopup::show(lv_obj_t *menu, int top, const PropertyList &list, unsigned row, unsigned draft, const Theme &theme, uint32_t accent) {
     constexpr int RowHeight = 24, Width = 200;
+    if (row >= list.count() || list.kind(row) != PropertyKind::Choice || !list.options(row)) { hide(); return; } // Gone, changed or emptied: the navigator closes it at the next key.
     if (!box_) {
         box_ = lv_obj_create(menu);
         lv_obj_remove_style_all(box_);
@@ -12,6 +13,7 @@ void ChoicePopup::show(lv_obj_t *menu, int top, const PropertyList &list, unsign
         counter_ = Elements::label(box_, "", 0, 2);
     }
     const unsigned options = list.options(row), current = list.option(row);
+    if (draft >= options) draft = 0; // The list shrank while open (the navigator clamps at the next key).
     const unsigned first = draft / Visible * Visible, shown = options - first < Visible ? options - first : Visible;
     // Within the menu: a list near its bottom opens upwards as far as it needs.
     const int height = 22 + int(shown) * RowHeight, room = lv_obj_get_height(menu) - 4;

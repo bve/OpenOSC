@@ -42,7 +42,7 @@ void ApplicationController::settingsKeys(uint32_t keys, uint32_t now) {
         return true;
     };
     if (settingsMenu_.information()) { // About, Storage: any of MENU, F4 or Left returns.
-        if ((keys & (Keypad::F4 | Keypad::Left | Keypad::Menu)) && back()) showSettings();
+        if ((keys & (Keypad::F4 | Keypad::Menu | (navigator_.repeating(Keypad::Left) ? 0U : uint32_t(Keypad::Left)))) && back()) showSettings();
         return;
     }
     auto rows = settingsRows();

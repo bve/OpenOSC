@@ -103,9 +103,9 @@ public:
     // The GUI heap, read now (a pool walk); false while there is none to read.
     virtual bool memory(MemorySnapshot &) const { return false; }
     // SYST:STALl?: long main-loop passes and Auto frame gaps (StallLog::text).
-    virtual size_t stalls(char *, size_t) const { return 0; }
+    virtual size_t stalls(char *out, size_t size) const { if (size) *out = 0; return 0; }
     static constexpr size_t BootTextBytes = 256; // SYST:BOOT?'s reply buffer.
-    virtual size_t bootTimes(char *, size_t) const { return 0; } // SYST:BOOT? (BootTiming).
+    virtual size_t bootTimes(char *out, size_t size) const { if (size) *out = 0; return 0; } // SYST:BOOT? (BootTiming).
     virtual size_t meterPacket(const uint8_t *&data) const { data = nullptr; return 0; } // SYST:DMM:PACK?
     // DISP:DATA?: the screen copied now into the preview buffer, leased under a ticket (0: refused, no
     // display or the buffer in use). screenRead answers 0 for a ticket that is no longer the lease

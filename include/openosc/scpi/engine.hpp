@@ -61,7 +61,7 @@ private:
     Completion completion_ = Completion::None;
     bool waitingOperation_ = false, waitingReading_ = false, secondary_ = false;
     bool waitingWaveform_ = false, waitingGenerator_ = false;
-    const char *pendingWave_ = "DATA"; // The WAV query waiting for its frame: PRE, DATA, SEQ, TIM, KEY or EVEN.
+    const char *pendingWave_ = "DATA"; // The WAV query waiting for its frame: PRE, DATA, SEQ, TIM, KEY, EVEN, STAR or STOP.
     void waitFrame(const char *query); // Up to 1 s (deadline_), then -230; the dispatcher is never blocked.
     uint32_t generatorDeadline_ = 0;
     uint32_t readingSequence_ = 0, deadline_ = 0, now_ = 0, inputAt_ = 0, frameAt_ = 0, outputAt_ = 0;

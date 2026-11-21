@@ -25,19 +25,27 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     repeated_ = 0; // This call's only.
     const unsigned count = list.count();
     if (!keys || !count) return Outcome::None;
-    if (row_ >= count) row_ = count - 1;
+    const bool gone = row_ >= count;
+    if (gone) row_ = count - 1;
     const auto kind = list.kind(row_);
+    const uint32_t backKeys = Keypad::F4 | (repeated & Keypad::Left ? 0U : uint32_t(Keypad::Left)); // Left on its press only.
+    // An open list or edit whose row is gone (or now another kind): the key only closes it.
+    if ((mode_ == Mode::Choice && (gone || kind != PropertyKind::Choice)) || (mode_ == Mode::Number && (gone || kind != PropertyKind::Number))) {
+        mode_ = Mode::Browse; return Outcome::None;
+    }
     switch (mode_) {
     case Mode::Choice: {
         const unsigned options = list.options(row_);
-        if (keys & (Keypad::F4 | Keypad::Left)) { mode_ = Mode::Browse; return Outcome::None; }
-        if ((keys & Keypad::Up) && options) draft_ = (draft_ + options - 1) % options;
-        if ((keys & Keypad::Down) && options) draft_ = (draft_ + 1) % options;
-        if (keys & Keypad::Menu) {
+        if (!options) { mode_ = Mode::Browse; return Outcome::None; } // The list emptied while open.
+        if (draft_ >= options) draft_ = 0; // It shrank: its first option.
+        if (keys & backKeys) { mode_ = Mode::Browse; return Outcome::None; }
+        if (keys & Keypad::Menu) { // Wins over a move pressed with it.
             mode_ = Mode::Browse;
             if (draft_ == list.option(row_)) return Outcome::None;
             return list.choose(row_, draft_) ? Outcome::Changed : Outcome::Refused;
         }
+        if (keys & Keypad::Up) draft_ = (draft_ + options - 1) % options;
+        else if (keys & Keypad::Down) draft_ = (draft_ + 1) % options;
         return Outcome::None;
     }
     case Mode::Number:
@@ -50,7 +58,7 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
         return Outcome::None;
     case Mode::Browse: break;
     }
-    if (keys & (Keypad::F4 | Keypad::Left)) return Outcome::Back;
+    if (keys & backKeys) return Outcome::Back;
     if (keys & Keypad::Up) { row_ = (row_ + count - 1) % count; return Outcome::None; }
     if (keys & Keypad::Down) { row_ = (row_ + 1) % count; return Outcome::None; }
     if ((keys & Keypad::Right) && kind == PropertyKind::Page) return Outcome::Open;
