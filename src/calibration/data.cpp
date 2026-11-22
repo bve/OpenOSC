@@ -20,7 +20,8 @@ bool CalibrationData::load(const uint8_t *bytes, size_t length, FactoryRecordPol
     bool tailZero = true;
     for (unsigned i = OffsetBytes + 2; i < RecordBytes; ++i) tailZero = tailZero && !bytes[i];
     const uint16_t prefixWord = Binary::readLe(bytes + OffsetBytes, 2);
-    const bool compactValid = tailZero && Crc16::compute(bytes, OffsetBytes) == prefixWord; // Implies longValid.
+    const bool prefixValid = Crc16::compute(bytes, OffsetBytes) == prefixWord; // The offsets' own CRC at +336.
+    const bool compactValid = tailZero && prefixValid; // Zero-padded: implies longValid.
     const uint16_t secondWord = Binary::readLe(bytes + OffsetBytes + 2, 2), mkrCrc = Binary::readLe(bytes + MkrDataBytes, 2);
     const bool mkrValid = Crc16::compute(bytes, MkrDataBytes) == mkrCrc;
     // What Auto takes as MKR: its CRC, both gains written and in the factory's band, every node a compare.
@@ -33,14 +34,16 @@ bool CalibrationData::load(const uint8_t *bytes, size_t length, FactoryRecordPol
         if (compactValid) candidate.format_ = plausibleGain(prefixWord) ? FactoryRecordFormat::Ambiguous : FactoryRecordFormat::Compact;
         else if (longValid) candidate.format_ = mkrPlausible && padding ? FactoryRecordFormat::Ambiguous : FactoryRecordFormat::Long;
         else if (mkrPlausible) candidate.format_ = FactoryRecordFormat::Mkr;
+        // Last: the offsets' CRC followed by other bytes (issue #84), only with every node a compare.
+        else if (prefixValid && plausibleNodes(bytes)) candidate.format_ = FactoryRecordFormat::Compact;
         else return false;
         break;
     case FactoryRecordPolicy::Long:
         if (!longValid) return false;
         candidate.format_ = FactoryRecordFormat::Long;
         break;
-    case FactoryRecordPolicy::Compact:
-        if (!compactValid) return false;
+    case FactoryRecordPolicy::Compact: // Outside evidence: the CRC at +336 alone, whatever follows it.
+        if (!prefixValid) return false;
         candidate.format_ = FactoryRecordFormat::Compact;
         break;
     case FactoryRecordPolicy::Mkr: // Outside evidence: its CRC alone (gains outside the band give no scale).
@@ -55,7 +58,7 @@ bool CalibrationData::load(const uint8_t *bytes, size_t length, FactoryRecordPol
                 candidate.offsets_[c][row][column] =
                     Binary::readLe(bytes + 2 * ((c * 12 + row) * 7 + column), 2);
     if (candidate.format_ == FactoryRecordFormat::Compact) {
-        candidate.crc_ = prefixWord; // No gain words (0: the default) and no correction.
+        candidate.crc_ = prefixWord; // No gain words (0: the default), no correction; bytes past the CRC are not read.
     } else if (candidate.format_ == FactoryRecordFormat::Mkr) {
         candidate.gains_[0] = prefixWord; candidate.gains_[1] = secondWord;
         candidate.crc_ = mkrCrc; // Its identity; no correction (0). Bytes past the CRC are not read.

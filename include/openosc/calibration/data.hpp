@@ -9,12 +9,15 @@ namespace openosc {
 bool interpolateCompare(const uint16_t (&row)[7], int position, uint16_t &compare);
 // The factory record at 0x0801C000 comes in three layouts. Long (the factory UI writer 0803D548): 168
 // offset words, gain words at +336/+338 (gain x 100, 0: never written), the interleave correction
-// float at +340 and the CRC-16 of bytes 0..343 at +344. Compact (seen on a ZT703S): the offsets, their
-// CRC-16 at +336, zeros to the end. The CRC (0x8408, init 0xFFFF, no final XOR) leaves a zero
-// residue, so a compact record also passes the long check, with CRC 0 and its own CRC read as CH1's
-// gain. When that CRC could itself be a gain word (100..199), the bytes do not tell the two apart:
-// Ambiguous, read as before (long, identity 0); only an explicit boot policy (scope
-// factory_record_format, docs/ZERO_CALIBRATION.md) decides it, on outside evidence.
+// float at +340 and the CRC-16 of bytes 0..343 at +344. Compact (seen on ZT703S units): the offsets
+// and their CRC-16 at +336; bytes 338..345 are not fields. Most units hold zeros there. The CRC
+// (0x8408, init 0xFFFF, no final XOR) leaves a zero residue, so a zero-padded compact record also
+// passes the long check, with CRC 0 and its own CRC read as CH1's gain. When that CRC could itself be
+// a gain word (100..199), the bytes do not tell the two apart: Ambiguous, read as before (long,
+// identity 0); only an explicit boot policy (scope factory_record_format, docs/ZERO_CALIBRATION.md)
+// decides it, on outside evidence. Other bytes after the CRC (issue #84: the words 0202 0002 0000 ...):
+// Auto takes such a record as compact only when neither the long nor the MKR layout is valid and
+// every compare node is <= 9999; the explicit policy compact needs the CRC at +336 alone.
 // MKR (seen in an MKR-MK02 factory boot image): the offsets, two gain words at +336/+338, the CRC-16
 // of bytes 0..339 at +340; no correction (0); bytes 342..345 are not fields (that image holds
 // 02 00 00 02 there). Its identity is that CRC. Auto takes it only when no older layout is valid,
