@@ -42,6 +42,7 @@
 #include "openosc/ui/editors/property_navigator.hpp"
 #include "openosc/ui/scope/display_properties.hpp"
 #include "openosc/platform/battery_monitor.hpp"
+#include "openosc/platform/mcu_temperature.hpp"
 #include "openosc/application/stall_log.hpp"
 #include "openosc/application/screen_lease.hpp"
 #include "openosc/ui/scope/counter_text.hpp"
@@ -52,9 +53,10 @@ class InstrumentUsb;
 class ApplicationController {
 public:
     ApplicationController(LvglDisplay &display, NorFlash &nor, Filesystem &fs, PreferencesFile &preferences,
-                          ThemeStore &themes, ScreenshotWriter &shots, DataAccess &data)
-        : display_(display), nor_(nor), fs_(fs), preferences_(preferences), themes_(themes), shots_(shots),
-          data_(data), images_(fs),imageReader_(fs) {}
+                          ThemeStore &themes, ScreenshotWriter &shots, DataAccess &data,
+                          BatteryMonitor &battery, McuTemperature &mcuTemperature)
+        : battery_(battery), mcuTemperature_(mcuTemperature), display_(display), nor_(nor), fs_(fs),
+          preferences_(preferences), themes_(themes), shots_(shots), data_(data), images_(fs), imageReader_(fs) {}
     // The 360 MHz guard and what the boot made of it (main.cpp, before run()).
     void bootGuard(BootGuard &guard, const BootGuard::Start &start) { guard_ = &guard; bootStart_ = start; }
     [[noreturn]] void run();
@@ -168,7 +170,8 @@ private:
     void serviceShutdown(uint32_t now);
     bool servicePower(uint32_t keys,uint32_t now);
     IdlePolicy idle_;
-    BatteryMonitor battery_;
+    BatteryMonitor &battery_;
+    McuTemperature &mcuTemperature_;
     power::LowBatteryPolicy lowBattery_;
     bool dimmed_=false;
     using Shutdown = ShutdownAction;
@@ -247,6 +250,7 @@ private:
     // cycle ends, none starts); the same ones change nothing.
     bool meterHoldSettings(const dmm::HoldSettings &settings, uint32_t now);
     bool meterTemperatureSettings(dmm::TemperatureSettings settings, uint32_t now);
+    void serviceMcuTemperature(uint32_t now);
     // The HOLD key in the DMM by the mode (docs/DMM_AUTO_HOLD.md): a manual or the DMM's own HOLD
     // released first; Manual: HOLD now; the others: the cycle armed, or (armed) cancelled.
     void meterHoldKey(uint32_t now);

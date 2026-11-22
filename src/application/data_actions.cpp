@@ -11,8 +11,7 @@
 namespace openosc {
 bool ApplicationController::meterTemperatureSettings(dmm::TemperatureSettings settings, uint32_t now) {
     if (!settings.valid()) return false;
-    const auto previous = prefs_.meter.temperature;
-    if (settings.junctionDeciC == previous.junctionDeciC && settings.fahrenheit == previous.fahrenheit) return true;
+    if (settings == prefs_.meter.temperature) return true;
     prefs_.meter.temperature = settings;
     data_.meter().configureTemperature(settings, data_.nowUs());
     changed(now);

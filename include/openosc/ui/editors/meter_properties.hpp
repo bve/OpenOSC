@@ -6,13 +6,14 @@
 #include "openosc/measurement/dmm/temperature.hpp"
 #include "openosc/ui/format/meter.hpp"
 #include "openosc/settings/theme.hpp"
+#include <optional>
 
 namespace openosc::ui {
 class MeterProperties final : public PropertyList {
 public:
     // Hold: its own list (MeterHoldProperties), the mode as its value.
     enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, BarGraph, Relative, Hold, ResetStatistics,
-               Logging, ColdJunction, TemperatureUnit, SerialOutput, Count };
+               Logging, JunctionSource, ColdJunction, TemperatureUnit, SerialOutput, Count };
     static constexpr unsigned VisibleRows = board::Current::Features.dmmSerialOutput ? Count : SerialOutput;
     explicit MeterProperties(const dmm::Result &result, unsigned display = 0, bool statistics = true,
                              bool relative = false, bool logging = false, bool serial=false, bool jackBusy=false,
@@ -32,6 +33,7 @@ public:
     bool serial() const { return serial_; }
     dmm::TemperatureSettings temperature() const { return temperature_; }
     MeterProperties &temperature(dmm::TemperatureSettings settings) { temperature_ = settings; return *this; }
+    MeterProperties &mcuJunction(std::optional<int16_t> reading) { mcuJunction_ = reading; return *this; }
     const char *notice() const override { return MeterText::function(result_); }
     const char *title() const override { return "MEASUREMENT"; }
     unsigned count() const override { return VisibleRows; }
@@ -59,5 +61,6 @@ private:
     const Theme *theme_;
     dmm::HoldMode hold_;
     dmm::TemperatureSettings temperature_;
+    std::optional<int16_t> mcuJunction_;
 };
 } // namespace openosc::ui

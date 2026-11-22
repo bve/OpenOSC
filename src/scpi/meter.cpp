@@ -91,10 +91,11 @@ bool Engine::meterCommand(const Command &c) {
     if (match("SYSTem:DMM:TEMPerature:CJUNction")) {
         auto settings = backend_.meterTemperature();
         if (c.query) {
-            if (settings.configured()) number(settings.junctionCelsius());
+            if (settings.manualConfigured()) number(settings.junctionCelsius());
             else error(-230, true);
         } else if (Header::word(c.argument, "NONE")) {
             settings.junctionDeciC = dmm::TemperatureSettings::Unset;
+            settings.source = dmm::JunctionSource::Manual;
             if (!backend_.meterTemperature(settings)) error(-221);
         } else {
             double value;
@@ -104,6 +105,7 @@ bool Engine::meterCommand(const Command &c) {
                     std::fabs(value * 10 - deciC) > 1e-8) error(-222);
                 else {
                     settings.junctionDeciC = int32_t(deciC);
+                    settings.source = dmm::JunctionSource::Manual;
                     if (!backend_.meterTemperature(settings)) error(-221);
                 }
             }

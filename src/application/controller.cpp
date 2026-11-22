@@ -24,10 +24,20 @@
 #include <cstdio>
 
 namespace openosc {
+void ApplicationController::serviceMcuTemperature(uint32_t now) {
+    auto &meter = data_.meter();
+    const bool enabled = data_.measurementMode() == MeasurementMode::Multimeter &&
+                         prefs_.meter.temperature.source == dmm::JunctionSource::McuLive;
+    const auto reading = mcuTemperature_.poll(now, enabled);
+    if (meter.liveJunction(reading) && enabled && panel_ == Panel::Meter) {
+        meterEditor_.mcuJunction(reading);
+        view_.properties(meterEditor_, navigator_);
+    }
+}
+
 [[noreturn]] void ApplicationController::run() {
     prefs_ = preferences_.values();
     applyPreferences();
-    battery_.initialize();
     // The factory record's reading is the settings' choice at boot only (Reload settings keeps it).
     const bool backend = data_.initialize(state_.mode, FactoryRecordPolicy(prefs_.scope.factoryRecordFormat));
     const auto applied = applyDataPreferences();
@@ -122,6 +132,7 @@ namespace openosc {
         StackGuard::check();   // A stack that reached .bss resets (recorded) instead of running on (issue #8).
         Board::service();
         const uint32_t now = Board::milliseconds();
+        serviceMcuTemperature(now);
         data_.poll(now);
         serviceShutdown(now);
         serviceBootGuard(now);

@@ -36,7 +36,7 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
         if (current == F::MillivoltsDc) next = F::MillivoltsAc;
         if (current == F::MillivoltsAc && !needsJunction) next = F::Temperature;
         if (!meterCommand(data_.selectDmmFunction(next))) view_.notify("Measurement command busy", now);
-        else if (needsJunction) view_.notify("Type K: set Cold junction in MENU", now);
+        else if (needsJunction) view_.notify("Type K: set Manual junction in MENU", now);
         return;
     }
     dmm::CommandGroup group = dmm::CommandGroup::Voltage;
@@ -85,7 +85,7 @@ ui::MeterProperties ApplicationController::meterProperties() const {
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
         prefs_.meter.shownFace(), prefs_.meter.shownPalette(), &themes_.theme(), prefs_.meter.hold.mode)
-        .barGraph(prefs_.meter.bar).temperature(prefs_.meter.temperature);
+        .barGraph(prefs_.meter.bar).temperature(prefs_.meter.temperature).mcuJunction(meter.mcuJunction());
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
 void ApplicationController::refreshMeterPanel() {
@@ -190,7 +190,7 @@ void ApplicationController::meterChanged(unsigned row, uint32_t now) {
     case Row::Colors:
         if (meterEditor_.palette() == prefs_.meter.shownPalette()) return;
         prefs_.meter.custom(); prefs_.meter.palette=meterEditor_.palette(); break;
-    case Row::ColdJunction: case Row::TemperatureUnit:
+    case Row::JunctionSource: case Row::ColdJunction: case Row::TemperatureUnit:
         meterTemperatureSettings(meterEditor_.temperature(), now);
         meterEditor_ = meterProperties();
         return;

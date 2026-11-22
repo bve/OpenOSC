@@ -3,6 +3,7 @@
 #include "openosc/measurement/dmm/result.hpp"
 #include "openosc/measurement/dmm/relative.hpp"
 #include "openosc/measurement/dmm/temperature.hpp"
+#include <optional>
 #include <cstddef>
 #include <cstring>
 
@@ -87,6 +88,19 @@ public:
     const Result &live() const { return shown_; }
     const TemperatureSettings &temperatureSettings() const { return temperatureSettings_; }
     bool typeK() const { return typeK_; }
+    void startupJunction(std::optional<int16_t> reading) { startupJunction_ = reading; }
+    bool liveJunction(std::optional<int16_t> reading) {
+        if (liveJunction_ == reading) return false;
+        liveJunction_ = reading;
+        return true;
+    }
+    std::optional<int16_t> mcuJunction() const {
+        switch (temperatureSettings_.source) {
+        case JunctionSource::McuStartup: return startupJunction_;
+        case JunctionSource::McuLive: return liveJunction_;
+        default: return {};
+        }
+    }
     void configureTemperature(TemperatureSettings settings, uint64_t nowUs);
     void typeK(bool enabled, uint64_t nowUs);
     // The newest packet that decoded, as received (SYST:DMM:PACK?); 0 bytes before the first.
@@ -154,6 +168,7 @@ private:
     History history_;
     RelativeReading relative_;
     TemperatureSettings temperatureSettings_;
+    std::optional<int16_t> startupJunction_, liveJunction_;
     // The context of the accumulated period: the last reading taken outside HOLD.
     unsigned function_ = ~0U;        // Its decoded Function (~0: none yet).
     bool functionCurrent_ = false, contextPeerRelative_ = false, contextKnown_ = false;

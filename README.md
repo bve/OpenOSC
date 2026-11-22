@@ -156,7 +156,7 @@ Captured on a ZT703S running OpenOSC.
 **Multimeter**
 
 - DC/AC voltage, millivolts, DC/AC current and milliamps, resistance, continuity, diode, capacitance
-- Type K thermocouple temperature in °C or °F, with cold-junction compensation
+- Type K thermocouple temperature in °C or °F. In **Measurement → Junction source**, choose **Manual** (25 °C by default), **MCU at startup**, or **MCU live**. The startup option holds the die temperature captured when the firmware launches. The live option updates it about once a second. As the instrument warms up, die temperature can diverge from the temperature at the thermocouple terminals.
 - Auto and manual ranges (the AUTO/RANGE key works as in the stock firmware) and REL
 - HOLD modes (**MENU → Measurement → Hold**): Manual, Delayed (after a countdown), Stable (waits
   for a stable reading) and Auto (holds every new stable reading)

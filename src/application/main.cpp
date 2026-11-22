@@ -34,6 +34,10 @@ int main() {
     const bool bootFrame = Display::takeBootFrame(&bootStyle);
     if (!Board::initialize(bootFrame)) Watchdog::fatal(boot_diagnostics.error);
     BootTiming::mark(BootTiming::Start);
+    BatteryMonitor battery;
+    battery.initialize(); // Also configures the shared ADC12 clock.
+    McuTemperature mcuTemperature;
+    const auto startupTemperature = mcuTemperature.captureStartup();
     LvglDisplay display;
     const bool bootDisplayReady = display.showBootSplash(bootFrame, bootStyle);
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
@@ -79,7 +83,8 @@ int main() {
     // and capture buffers are separate), so it lives in DTCM and AXI keeps room for the arena.
     alignas(DataAccess) static uint8_t dataStorage[sizeof(DataAccess)];
     DataAccess& data = *new (dataStorage) DataAccess(fs);
-    ApplicationController controller(display, nor, fs, preferences, themes, screenshots,data);
+    data.meter().startupJunction(startupTemperature);
+    ApplicationController controller(display, nor, fs, preferences, themes, screenshots, data, battery, mcuTemperature);
     controller.bootGuard(guard, start);
     controller.run();
 }

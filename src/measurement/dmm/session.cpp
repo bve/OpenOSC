@@ -6,7 +6,8 @@
 
 namespace openosc::dmm {
 namespace {
-Result asTemperature(const Result &packet, const TemperatureSettings &settings, bool typeK) {
+Result asTemperature(const Result &packet, const TemperatureSettings &settings, bool typeK,
+                     std::optional<int16_t> mcuJunction) {
     Result result;
     result.sequence = packet.sequence;
     result.timestampUs = packet.timestampUs;
@@ -23,9 +24,17 @@ Result asTemperature(const Result &packet, const TemperatureSettings &settings, 
     result.primary.status = packet.primary.status;
     if (!packet.primary.valid()) return result;
     double celsius = packet.primary.si;
-    if (typeK && !TypeK::convert(packet.primary.si, settings.junctionCelsius(), celsius)) {
-        result.primary.status = DataStatus::Overload;
-        return result;
+    if (typeK) {
+        const bool manual = settings.source == JunctionSource::Manual;
+        if (!manual && !mcuJunction) {
+            result.primary.status = DataStatus::NoReading;
+            return result;
+        }
+        const double junction = manual ? settings.junctionCelsius() : *mcuJunction / 10.0;
+        if (!TypeK::convert(packet.primary.si, junction, celsius)) {
+            result.primary.status = DataStatus::Overload;
+            return result;
+        }
     }
     result.decimals = 1;
     result.primary.si = celsius;
@@ -42,13 +51,14 @@ void Session::resetTemperatureReading(uint64_t nowUs) {
     reselect();
     expire(nowUs);
     shown_ = (typeK_ || latest_.primary.quantity == Quantity::Temperature)
-                 ? asTemperature(Result{}, temperatureSettings_, true) : Result{};
+                 ? asTemperature(Result{}, temperatureSettings_, true, mcuJunction()) : Result{};
     shown_.primary.status = DataStatus::NoData;
 }
 void Session::configureTemperature(TemperatureSettings settings, uint64_t nowUs) {
     if (!settings.valid()) return;
-    const bool changed = settings.fahrenheit != temperatureSettings_.fahrenheit ||
-                         (typeK_ && settings.junctionDeciC != temperatureSettings_.junctionDeciC);
+    const bool compensationChanged = settings.source != temperatureSettings_.source ||
+        (settings.source == JunctionSource::Manual && settings.junctionDeciC != temperatureSettings_.junctionDeciC);
+    const bool changed = settings.fahrenheit != temperatureSettings_.fahrenheit || (typeK_ && compensationChanged);
     temperatureSettings_ = settings;
     if (typeK_ && !settings.configured()) typeK(false, nowUs);
     else if (changed && (typeK_ || shown_.primary.quantity == Quantity::Temperature)) resetTemperatureReading(nowUs);
@@ -98,7 +108,7 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     // Keep the wire result for DMM command confirmation. The rest of the session works in the
     // displayed quantity, so HOLD, REL, statistics and history see temperature, not millivolts.
     if (typeK_ || candidate.primary.quantity == Quantity::Temperature)
-        candidate = asTemperature(candidate, temperatureSettings_, typeK_);
+        candidate = asTemperature(candidate, temperatureSettings_, typeK_, mcuJunction());
     // The hold mode sees the packet in the context it settles (before HOLD's stop: a mode's cycle never
     // freezes with the display): a packet ending the wait for a selected function counts, a local REL
     // this packet's function change clears does not apply to it.

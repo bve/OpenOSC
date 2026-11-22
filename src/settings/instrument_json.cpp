@@ -28,6 +28,7 @@ template<size_t N> bool choice(JsonObjectConst object, const char *name, uint32_
 }
 constexpr const char *couplings[] = {"dc", "ac"}, *edges[] = {"rising", "falling"};
 constexpr const char *triggerModes[] = {"auto", "normal", "single"};
+constexpr const char *junctionSources[] = {"manual", "startup", "live"};
 constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact", "mkr"}; // FactoryRecordPolicy.
 constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
 constexpr const char *faces[] = {"ibm", "mono", "segment"}, *palettes[] = {"dark", "amber", "paper"};
@@ -245,10 +246,15 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
     if (meter["hold"].is<JsonObjectConst>()) hold(meter["hold"].as<JsonObjectConst>(), output.meter.hold);
     if (const auto temperature = meter["temperature"].as<JsonObjectConst>(); !temperature.isNull()) {
         dmm::TemperatureSettings settings;
-        uint32_t fahrenheit = 0;
+        uint32_t fahrenheit = 0, mcuSensor = 0;
         if (number(temperature, "junction_deci_c", settings.junctionDeciC) &&
             boolean(temperature, "fahrenheit", fahrenheit) && settings.valid()) {
+            boolean(temperature, "mcu_sensor", mcuSensor);
+            // The old MCU option followed the sensor live. A named source takes precedence.
+            uint32_t source = unsigned(mcuSensor ? dmm::JunctionSource::McuLive : dmm::JunctionSource::Manual);
+            choice(temperature, "source", source, junctionSources);
             settings.fahrenheit = fahrenheit != 0;
+            settings.source = dmm::JunctionSource(source);
             output.meter.temperature = settings;
         }
     }
@@ -347,10 +353,12 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     appearance(meter, values.meter.appearance);
     hold(meter, values.meter.hold);
     const auto &temperature = values.meter.temperature;
-    if (temperature.junctionDeciC != dmm::TemperatureSettings::DefaultJunction || temperature.fahrenheit) {
+    if (!(temperature == dmm::TemperatureSettings{})) {
         auto object = meter.createNestedObject("temperature");
         object["junction_deci_c"] = temperature.junctionDeciC;
         object["fahrenheit"] = temperature.fahrenheit;
+        if (temperature.source != dmm::JunctionSource::Manual)
+            object["source"] = junctionSources[unsigned(temperature.source)];
     }
 }
 } // namespace openosc

@@ -4,13 +4,22 @@
 #include <cstring>
 
 namespace openosc::dmm {
+enum class JunctionSource : uint8_t { Manual, McuStartup, McuLive, Count };
+
 struct TemperatureSettings {
     static constexpr int32_t Minimum = -500, Maximum = 1000, Unset = Minimum - 1;
     static constexpr int32_t DefaultJunction = 250;
     int32_t junctionDeciC = DefaultJunction;
     bool fahrenheit = false;
-    constexpr bool configured() const { return junctionDeciC >= Minimum && junctionDeciC <= Maximum; }
-    constexpr bool valid() const { return configured() || junctionDeciC == Unset; }
+    JunctionSource source = JunctionSource::Manual;
+    constexpr bool manualConfigured() const { return junctionDeciC >= Minimum && junctionDeciC <= Maximum; }
+    constexpr bool configured() const { return source != JunctionSource::Manual || manualConfigured(); }
+    constexpr bool valid() const {
+        return source < JunctionSource::Count && (manualConfigured() || junctionDeciC == Unset);
+    }
+    constexpr bool operator==(const TemperatureSettings &other) const {
+        return junctionDeciC == other.junctionDeciC && fahrenheit == other.fahrenheit && source == other.source;
+    }
     constexpr double junctionCelsius() const { return junctionDeciC / 10.0; }
 };
 

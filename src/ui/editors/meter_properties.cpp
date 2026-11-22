@@ -11,7 +11,7 @@ namespace openosc::ui {
 PropertyKind MeterProperties::kind(unsigned row) const {
     if (row == Range && !ranged()) return PropertyKind::Info; // Diode, continuity: nothing to choose.
     switch (row) {
-    case Range: case Display: case Colors: case Digits: case TemperatureUnit: return PropertyKind::Choice;
+    case Range: case Display: case Colors: case Digits: case JunctionSource: case TemperatureUnit: return PropertyKind::Choice;
     case ColdJunction: return PropertyKind::Number;
     case ResetStatistics: return PropertyKind::Action;
     case Appearance: case Layout: case Hold: return PropertyKind::Page; // Own lists (MeterAppearance/MeterHold/ArrangementProperties).
@@ -20,12 +20,13 @@ PropertyKind MeterProperties::kind(unsigned row) const {
 }
 void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
     static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Bar graph", "Relative",
-                                            "Hold", "Reset statistics", "CSV logging", "Cold junction", "Temp units", "Serial 115200"};
+                                            "Hold", "Reset statistics", "CSV logging", "Junction source", "Manual junction", "Temp units", "Serial 115200"};
     std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
 }
 unsigned MeterProperties::options(unsigned row) const {
     switch (row) {
     case Range: case TemperatureUnit: return 2;
+    case JunctionSource: return unsigned(dmm::JunctionSource::Count);
     case Display: return MeterPreferences::Displays;
     case Colors: return MeterPreferences::Palettes;
     case Digits: return MeterPreferences::Faces;
@@ -43,6 +44,7 @@ unsigned MeterProperties::option(unsigned row) const {
     case Relative: return relative_;
     case Logging: return logging_;
     case SerialOutput: return serial_;
+    case JunctionSource: return unsigned(temperature_.source);
     case TemperatureUnit: return temperature_.fahrenheit;
     default: return 0;
     }
@@ -54,6 +56,11 @@ void MeterProperties::optionName(unsigned row, unsigned index, char *output, siz
     case Display: std::snprintf(output, capacity, "%s", displays[index < MeterPreferences::Displays ? index : 0]); break;
     case Colors: std::snprintf(output, capacity, "%s", MeterStyles::paletteName(index)); break;
     case Digits: std::snprintf(output, capacity, "%s", MeterStyles::faceName(index)); break;
+    case JunctionSource: {
+        static constexpr const char *sources[] = {"Manual", "MCU at startup", "MCU live"};
+        std::snprintf(output, capacity, "%s", index < options(row) ? sources[index] : "");
+        break;
+    }
     case TemperatureUnit: std::snprintf(output, capacity, "%s", index ? "°F" : "°C"); break;
     default: PropertyList::optionName(row, index, output, capacity); break;
     }
@@ -63,9 +70,16 @@ void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
     else if (row == Range && result_.range == dmm::RangeMode::Unknown) std::snprintf(output, capacity, "Unknown");
     else if (row == SerialOutput && jackBusy_) std::snprintf(output, capacity, "GEN on");
     else if (row == Hold) std::snprintf(output, capacity, "%s", dmm::HoldSettings::name(hold_));
+    else if (row == JunctionSource && temperature_.source != dmm::JunctionSource::Manual) {
+        const char *source = temperature_.source == dmm::JunctionSource::McuStartup ? "Startup" : "Live";
+        char value[16];
+        if (mcuJunction_ && Decimal::fixed(*mcuJunction_ / 10.0, 1, value, sizeof value))
+            std::snprintf(output, capacity, "%s %s °C", source, value);
+        else std::snprintf(output, capacity, "%s --", source);
+    }
     else if (row == ColdJunction) {
         char value[16]{};
-        if (temperature_.configured() && Decimal::fixed(temperature_.junctionCelsius(), 1, value, sizeof value))
+        if (temperature_.manualConfigured() && Decimal::fixed(temperature_.junctionCelsius(), 1, value, sizeof value))
             std::snprintf(output, capacity, "%s °C", value);
         else std::snprintf(output, capacity, "Set °C");
     }
@@ -86,6 +100,7 @@ bool MeterProperties::choose(unsigned row, unsigned index) {
     case Relative: relative_ = index; break;
     case Logging: logging_ = index; break;
     case SerialOutput: serial_ = index; break;
+    case JunctionSource: temperature_.source = dmm::JunctionSource(index); break;
     case TemperatureUnit: temperature_.fahrenheit = index != 0; break;
     default: return false;
     }
@@ -98,7 +113,7 @@ void MeterProperties::setNumber(unsigned row, int32_t value) {
     if (row == ColdJunction) temperature_.junctionDeciC = value;
 }
 void MeterProperties::beginEdit(unsigned row) {
-    if (row == ColdJunction && !temperature_.configured()) setNumber(row, dmm::TemperatureSettings::DefaultJunction);
+    if (row == ColdJunction && !temperature_.manualConfigured()) setNumber(row, dmm::TemperatureSettings::DefaultJunction);
 }
 void MeterProperties::adjust(unsigned row, int step) {
     if (row == ColdJunction)
