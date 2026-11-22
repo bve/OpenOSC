@@ -63,7 +63,7 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
     if (!choice(object, "mode", o.mode, modes) || !choice(object, "style", o.style, styles) ||
         !choice(object, "grid", o.grid, grids) || !choice(object, "math", o.math, math) ||
         !choice(object,"reduction",o.reduction,reductions) || !choice(object,"interpolation",o.interpolation,interpolations) ||
-        !integer(object, "zoom", o.zoom) || !pan(object, o.panPpb) ||
+        !integer(object, "zoom", o.zoom) || !integer(object, "zoom_out", o.zoomOut) || !pan(object, o.panPpb) ||
         !legacyTriggerPosition(object) ||
         !integer(object, "persistence_ms", o.persistenceMs) || !integer(object, "averaging", o.averaging) ||
         !flag(object, "lock_trigger", o.lockTrigger) || !flag(object, "show_trigger", o.showTrigger) ||

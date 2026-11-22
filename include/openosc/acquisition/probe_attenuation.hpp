@@ -2,10 +2,13 @@
 #include <cstdint>
 
 namespace openosc::scope {
-// Probe presets shared by the channel editor and SCPI. Stored ratios remain numeric.
+// Probe presets shared by the channel editor and SCPI. Stored ratios remain numeric. 10000:1 is
+// for high-voltage probes such as the Hantek HT25 (issue #97): it scales the readings only.
 class ProbeAttenuation {
 public:
-    static constexpr uint32_t Values[] = {1, 10, 50, 100, 500, 1000};
+    static constexpr uint32_t Values[] = {1, 10, 50, 100, 500, 1000, 10000};
+    // The largest numerator a saved ratio may have (the denominator keeps its own 1000 limit).
+    static constexpr uint32_t MaximumNumerator = 10000;
     static constexpr unsigned Count = sizeof Values / sizeof Values[0];
     static constexpr bool contains(double factor) {
         for (auto value : Values) if (value == factor) return true;

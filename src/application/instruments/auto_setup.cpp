@@ -12,7 +12,7 @@ void ApplicationController::startAuto(uint32_t now) {
         if (uiReady_) view_.notify("Cannot retain HOLD frame: release USB waveform",now);
         return;
     }
-    autoCancelled_=false;
+    autoCancelled_=false; autoStep_ = 0;
     data_.scopeTrials(true);
     data_.holdScope(false);
     autoSetup_.begin(data_.scopeRequest(), selectedChannel_, now);
@@ -33,6 +33,8 @@ bool ApplicationController::cancelAuto(uint32_t now,bool hold) {
         return false; // Keep the original request/record until its reader releases.
     }
     data_.releaseRetained(); autoSetup_.reset(); dataRefresh_ = true;
+    if (uiReady_) view_.notify("Auto cancelled", now);
+    finishAutoStep(now); // A Scale arrow that cancelled it: its step, now that the restore succeeded.
     return true;
 }
 void ApplicationController::serviceAuto(uint32_t now) {
@@ -62,5 +64,6 @@ void ApplicationController::serviceAuto(uint32_t now) {
         result == State::Uncalibrated ? "Auto needs factory calibration" : "Auto: cannot apply acquisition";
     if (uiReady_) view_.notify(message, now);
     data_.releaseRetained(); autoSetup_.reset(); dataRefresh_ = true;
+    finishAutoStep(now); // A Scale arrow that cancelled it: its step, now that the restore succeeded.
 }
 } // namespace openosc

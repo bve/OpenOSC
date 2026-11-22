@@ -15,6 +15,7 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     constexpr const char *interpolations[]={"linear","sinc","spline"};
     root["interpolation"]=interpolations[unsigned(o.interpolation)];
     root["zoom"] = o.zoom;
+    root["zoom_out"] = o.zoomOut; // Zoom & Pan below 1x; older firmware ignores it.
     root["pan_ppb"] = o.panPpb;
     root["pan_permille"] = (o.panPpb + (o.panPpb < 0 ? -500000 : 500000)) / 1000000; // For older firmware.
     root["persistence_ms"] = o.persistenceMs;

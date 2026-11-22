@@ -90,8 +90,9 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
     case Glow:
         options.glow = !options.glow;
         break;
-    case Zoom:
-        cycle(options.zoom, direction, zooms);
+    case Zoom: // From a Zoom & Pan factor below 1x: 1x first, then the list.
+        if (options.zoomOut > 1) { options.zoomOut = 1; options.zoom = 1; }
+        else cycle(options.zoom, direction, zooms);
         break;
     case Visible:
         c.visible = !c.visible;

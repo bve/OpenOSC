@@ -1,4 +1,5 @@
 #include "openosc/ui/scope/controls.hpp"
+#include "openosc/ui/scope/view_zoom.hpp"
 #include <algorithm>
 #include <cstdio>
 
@@ -82,7 +83,7 @@ unsigned Controls::choice(unsigned row) const {
     case GridStyle: return unsigned(o.grid);
     case Persistence: return indexOf(o.persistenceMs, Persistences);
     case Average: return indexOf(o.averaging, Averages);
-    case Zoom: return indexOf(o.zoom, Zooms);
+    case Zoom: return o.zoomOut > 1 ? choices(row) : indexOf(o.zoom, Zooms); // Below 1x: none of the list.
     case MathTrace: return unsigned(o.math);
     case SampleReduction: return unsigned(o.reduction);
     case TraceInterpolation: return unsigned(o.interpolation);
@@ -127,7 +128,10 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
         else std::snprintf(text, capacity, "%u ms", i < choices(row) ? Persistences[i] : options.persistenceMs);
         break;
     case Average: std::snprintf(text, capacity, "%u", i < choices(row) ? Averages[i] : options.averaging); break;
-    case Zoom: std::snprintf(text, capacity, "%ux", i < choices(row) ? Zooms[i] : options.zoom); break;
+    case Zoom:
+        if (i < choices(row)) std::snprintf(text, capacity, "%ux", Zooms[i]);
+        else ViewZoom::factor(options, text, capacity); // Zoom & Pan's own factor (below 1x).
+        break;
     default:
         if (kind(row) == Kind::Toggle) std::snprintf(text, capacity, "%s", i ? "On" : "Off");
         else if (capacity) text[0] = 0;

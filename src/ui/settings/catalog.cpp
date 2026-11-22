@@ -17,8 +17,16 @@ constexpr SettingsEntry display[] = {
     {"Battery", Action::BatteryDisplay},
     {"Clock indicator", Action::ClockIndicator}, // The Scope top bar's L/M/H run profile glyph (GitHub #47).
     {"Pan direction", Action::PanDirection},
+    {"Scope shortcuts", Action::None, Page::ScopeKeys},
     {"Generator layout", Action::GeneratorLayout},
     {"Appearance", Action::None, Page::Appearance},
+    {"Back", Action::Back},
+};
+// AUTO and the F2/F4 holds on the Scope waveform screen (ScopeKeys, issue #96).
+constexpr SettingsEntry scopeKeys[] = {
+    {"AUTO key", Action::AutoKey},
+    {"F2 hold", Action::ResetHold},
+    {"F4 hold", Action::ShortcutHold},
     {"Back", Action::Back},
 };
 constexpr SettingsEntry appearance[] = {
@@ -131,6 +139,7 @@ constexpr SettingsPageDefinition pages[] = {
         : page("SCOPE CALIBRATION","Settings / Device / Scope calibration",Page::Device,calibration),
     page("GAIN","Settings / Device / Scope calibration / Gain",Page::Calibration,gain),
     page("INTERLEAVE OFFSET","Settings / Device / Scope calibration / Interleave",Page::Calibration,interleave),
+    page("SCOPE SHORTCUTS", "Settings / Display / Scope shortcuts", Page::Display, scopeKeys),
 };
 static_assert(sizeof pages / sizeof *pages == unsigned(Page::Count));
 }

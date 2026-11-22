@@ -5,6 +5,20 @@ void SettingsMenu::open() {
     page_ = SettingsPage::Root;
     for (auto &selected : selected_) selected = 0;
 }
+void SettingsMenu::open(SettingsPage page, SettingsAction action) {
+    open();
+    // Each parent's selection is the row that leads down, so Back returns along the same path.
+    for (auto child = page; child != SettingsPage::Root && child < SettingsPage::Count;) {
+        const auto parent = definition(child).parent;
+        const auto &above = definition(parent);
+        for (unsigned i = 0; i < above.count; ++i)
+            if (above.entries[i].child == child) selected_[unsigned(parent)] = i;
+        child = parent;
+    }
+    page_ = page < SettingsPage::Count ? page : SettingsPage::Root;
+    for (unsigned i = 0; i < count(); ++i)
+        if (entry(i).action == action) selected_[unsigned(page_)] = i;
+}
 bool SettingsMenu::back() {
     if (page_ == SettingsPage::Root) return false;
     page_ = definition().parent;

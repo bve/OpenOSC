@@ -33,6 +33,25 @@ constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact", "mkr"
 constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
 constexpr const char *faces[] = {"ibm", "mono", "segment"}, *palettes[] = {"dark", "amber", "paper"};
 constexpr const char *presets[] = {"custom", "hybrid"}; // meter.appearance_preset (MeterPreferences::preset).
+// scope.keys (ScopeKeys): AUTO and the F2/F4 holds, in the order of their enums.
+constexpr const char *autoKeys[] = {"quick", "classic"}, *resetHolds[] = {"home_view", "reset_zoom_pan"};
+constexpr const char *shortcuts[] = {"cursor_settings", "measurements", "acquisition", "record_memory", "interleave_ch1"};
+static_assert(sizeof autoKeys / sizeof *autoKeys == unsigned(ScopeKeys::Auto::Count) &&
+              sizeof resetHolds / sizeof *resetHolds == unsigned(ScopeKeys::Reset::Count) &&
+              sizeof shortcuts / sizeof *shortcuts == unsigned(ScopeKeys::Shortcut::Count));
+// Each field stands alone: an unknown name or type, or a destination this board does not offer,
+// keeps that field's default, never the reason to drop the rest of the file.
+template<class E, size_t N> void option(JsonObjectConst object, const char *name, E &output, const char *const (&names)[N]) {
+    uint32_t value = uint32_t(output);
+    if (choice(object, name, value, names)) output = E(value);
+}
+void keys(JsonObjectConst object, ScopeKeys &output) {
+    option(object, "auto", output.automatic, autoKeys);
+    option(object, "f2_hold", output.reset, resetHolds);
+    auto shortcut = output.shortcut;
+    option(object, "f4_hold", shortcut, shortcuts);
+    if (ScopeKeys::available(shortcut)) output.shortcut = shortcut;
+}
 static_assert(sizeof displays / sizeof *displays == MeterPreferences::Displays && sizeof faces / sizeof *faces == MeterPreferences::Faces &&
               sizeof palettes / sizeof *palettes == MeterPreferences::Palettes && sizeof presets / sizeof *presets == MeterPreferences::Presets);
 // A colour's file text: a named colour by its static key (not copied), Custom as "#rrggbb" (copied
@@ -263,6 +282,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
     arrangement(scope, "arrangement", s.arrangement);
     if (scope["appearance"].is<JsonObjectConst>()) ScopeAppearanceJson::parse(scope["appearance"].as<JsonObjectConst>(), s.appearance);
     if (scope["decoder"].is<JsonObjectConst>()) decoder(scope["decoder"].as<JsonObjectConst>(), s.decoder);
+    if (scope["keys"].is<JsonObjectConst>()) keys(scope["keys"].as<JsonObjectConst>(), s.keys);
     if (meter.containsKey("range_function")) { // The owner of range_index; absent: unknown.
         if (!meter["range_function"].is<const char *>()) return false;
         unsigned f = 0;
@@ -343,6 +363,9 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     arrangement(scope, "arrangement", s.arrangement);
     ScopeAppearanceJson::encode(scope, s.appearance);
     encodeDecoder(scope, s.decoder);
+    auto keys = scope.createNestedObject("keys");
+    keys["auto"] = autoKeys[unsigned(s.keys.automatic)]; keys["f2_hold"] = resetHolds[unsigned(s.keys.reset)];
+    keys["f4_hold"] = shortcuts[unsigned(s.keys.destination())];
     meter["display"] = displays[values.meter.display]; meter["statistics"] = bool(values.meter.statistics); meter["bar_graph"] = bool(values.meter.bar);
     meter["auto"] = bool(values.meter.automatic); meter["range_index"] = values.meter.range;
     meter["face"] = faces[values.meter.face]; meter["palette"] = palettes[values.meter.palette];

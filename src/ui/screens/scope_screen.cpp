@@ -2,6 +2,7 @@
 #include "openosc/ui/screens/screen_layout.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include "openosc/ui/scope/display_scale.hpp"
+#include "openosc/ui/scope/view_zoom.hpp"
 #include "openosc/acquisition/readouts.hpp"
 #include <cstdio>
 #include <cstring>
@@ -32,11 +33,12 @@ void ScopeScreen::settings(const scope::FrameMetadata &next, unsigned channel) {
     select(channel);
     cards();
 }
-void ScopeScreen::context(unsigned channel, plot::Focus focus) {
+void ScopeScreen::context(unsigned channel, plot::Focus focus, bool panReverse) {
     if (channel_ != channel) valid_ = false;
     select(channel);
-    focus_ = focus;
+    focus_ = focus; panReverse_ = panReverse;
     cards();
+    if (focus_ == plot::Focus::Zoom) zoomNote();
 }
 void ScopeScreen::select(unsigned channel) {
     channel_ = channel < 2 ? channel : 0;
@@ -45,6 +47,7 @@ void ScopeScreen::select(unsigned channel) {
 // The generator running beside the capture; while its DAC stream loads the bus, ", ADC max /2": the
 // next captures' maximum sample rate is halved (a held record stays as it was captured).
 void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved) {
+    if (focus_ == plot::Focus::Zoom) { zoomNote(); return; }
     char text[64] = "", frequency[24];
     if (output.enabled && output.applied.actualHz.valid() && plot::Format::quantity(output.applied.actualHz.value(), "Hz", frequency, sizeof frequency, 3)) {
         const unsigned shape = unsigned(output.requested.shape);
@@ -52,6 +55,14 @@ void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalve
                       captureHalved ? ", ADC max /2" : "");
     }
     host_.waveform().note(text, host_.theme().generator);
+}
+// Zoom & Pan (issue #96): its factor and what the arrows do, in place of the GEN note.
+void ScopeScreen::zoomNote() {
+    auto &widget = host_.waveform();
+    char factor[16], text[64];
+    plot::ViewZoom::factor(widget.options(), factor, sizeof factor);
+    std::snprintf(text, sizeof text, "ZOOM %s  Up/Dn zoom  L/R %s", factor, panReverse_ ? "later/earlier" : "earlier/later");
+    widget.note(text, host_.theme().cursor);
 }
 void ScopeScreen::cards() {
     auto &bar = host_.parameters();
@@ -102,12 +113,18 @@ void ScopeScreen::cards() {
     }
     bar.item(0, title, value, *next, true);
     // F2 Position: the channel it moves, with its coupling and probe.
-    std::snprintf(value, sizeof value, "CH%u %s %s", channel_ + 1, plot::DisplayScale::coupling(selected), probe);
+    const char *compactProbe = std::strcmp(probe, "x10000") == 0 ? "X10K" : probe;
+    std::snprintf(value, sizeof value, "CH%u %s %s", channel_ + 1, plot::DisplayScale::coupling(selected), compactProbe);
     bar.item(1, "Position", value);
     static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
     std::snprintf(value, sizeof value, "CH%u %s", unsigned(model.triggerChannel()) + 1, modes[unsigned(triggerMode_) % 3]);
     bar.item(2, "Trigger", value);
-    if (focus_ == plot::Focus::Cursor && model.cursorFocus() != plot::CursorLine::None)
+    if (focus_ == plot::Focus::Zoom) { // Zoom & Pan: F4 goes back to the card it came from.
+        char factor[16];
+        plot::ViewZoom::factor(widget.options(), factor, sizeof factor);
+        std::snprintf(value, sizeof value, "Zoom %s", factor);
+        bar.item(3, "Back", value);
+    } else if (focus_ == plot::Focus::Cursor && model.cursorFocus() != plot::CursorLine::None)
         bar.item(3, "Cursor", plot::CursorControl::lineName(model.cursorFocus(), spectrum));
     else
         bar.item(3, "Analyze", widget.options().mode == plot::Mode::XY ? "XY" : spectrum ? "FFT" : widget.options().mode == plot::Mode::SpectrumOverlay ? "Y-T+FFT" : "Display");
@@ -119,7 +136,7 @@ void ScopeScreen::cards() {
     bar.tint(1, channelTint(channel_));
     bar.tint(2, channelTint(unsigned(model.triggerChannel())));
     bar.tint(3, Tint::Neutral);
-    if (!host_.overlayActive()) bar.select(unsigned(focus_));
+    if (!host_.overlayActive()) bar.select(focus_ == plot::Focus::Zoom ? 3U : unsigned(focus_));
     host_.elements().text(ElementId::Details, details);
 }
 void ScopeScreen::update(const scope::FrameView &frame, bool held, unsigned selected, DataStatus health) {

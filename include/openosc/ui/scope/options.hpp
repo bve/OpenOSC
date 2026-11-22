@@ -14,7 +14,8 @@ enum class Math : uint8_t { Off, Add, Subtract };
 // Mean when its columns hold only noise around a slower signal, else Peak: Model::effectiveMean).
 enum class Reduction : uint8_t { Peak, Mean, Adaptive };
 enum class Interpolation : uint8_t { Linear, Sinc, Spline };
-enum class Focus : uint8_t { Scale, Position, Trigger, Cursor }; // What the arrows act on: F1..F4.
+// What the arrows act on: F1..F4, and Zoom & Pan (issue #96: Up/Down zoom, Left/Right pan; F4 Back).
+enum class Focus : uint8_t { Scale, Position, Trigger, Cursor, Zoom };
 enum class CursorLine : uint8_t { None, TimeA, TimeB, LevelA, LevelB };
 // Density grading (GitHub #85): a channel drawn by how often its recent fresh records crossed each
 // pixel (Persistence keeps the levels), in heat colours or one colour's intensity.
@@ -59,7 +60,10 @@ struct Options {
     uint16_t zoom = 1, persistenceMs = 0;
     int32_t panPpb = 0; // Parts per billion of the record (PanFull: all of it).
     static constexpr int32_t PanFull = 1000000000;
-    uint8_t averaging = 1, zoomOut = 1; // zoomOut views more than one screen of a longer record.
+    // zoomOut views more than one screen of a longer record. Zoom & Pan keeps one of zoom/zoomOut at 1 (ViewZoom).
+    uint8_t averaging = 1, zoomOut = 1;
+    static constexpr uint16_t MaximumZoom = 256;
+    static constexpr uint8_t MaximumZoomOut = 64;
     bool lockTrigger = true, showTrigger = true, showZero = true, glow = false, peakHold = false,
          showScale = true;
     // The time/div a held record is shown at: the next capture's, chosen in HOLD (issue #7), so the

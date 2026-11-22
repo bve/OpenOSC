@@ -15,7 +15,8 @@ public:
     void update(const scope::FrameView &frame, bool held, unsigned channel, DataStatus status);
     void status(DataStatus status, bool held);
     void settings(const scope::FrameMetadata &next, unsigned channel);
-    void context(unsigned channel, plot::Focus focus);
+    // panReverse: Settings > Display > Pan direction, for Zoom & Pan's Left/Right hint.
+    void context(unsigned channel, plot::Focus focus, bool panReverse = false);
     void generator(const generator::Snapshot &output, bool captureHalved);
     void counters(const scope::CounterSnapshot &snapshot);
     // False when nothing was painted (no frame shown yet, or a panel over the scope).
@@ -41,6 +42,8 @@ private:
     unsigned channel_ = 0;
     bool held_ = false, valid_ = false;
     plot::Focus focus_ = plot::Focus::Scale;
+    bool panReverse_ = false;
+    void zoomNote(); // Zoom & Pan's factor and arrows in the plot's note (the GEN note returns on the next pass).
     const char *status_ = nullptr;
     scope::TriggerMode triggerMode_ = scope::TriggerMode::Auto;
     DataStatus health_ = DataStatus::NoData;

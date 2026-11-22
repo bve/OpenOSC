@@ -110,6 +110,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
+    prefs_.scope.keys = chosen.scope.keys; // Read by the next AUTO, F2 or F4 stroke.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();
     changed(now);

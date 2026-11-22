@@ -18,6 +18,29 @@ constexpr unsigned OffCount = sizeof IdleSettings::OffChoices / sizeof *IdleSett
 constexpr const char *Batteries[] = {"Icon", "Volts", "Percent"};
 // Preferences::usbController (the index). The data link only runs on ClockPolicy's profile.
 constexpr const char *UsbControllers[] = {"Disabled", "Enabled"};
+// Settings > Display > Scope shortcuts (ScopeKeys), in the order of their enums.
+constexpr const char *AutoKeys[] = {"Quick: tap setup", "Classic: hold setup"};
+constexpr const char *ResetHolds[] = {"Home view", "Reset zoom & pan"};
+constexpr const char *Shortcuts[] = {"Cursor settings", "Measurements", "Acquisition", "Record memory", "Interleave CH1"};
+static_assert(sizeof AutoKeys / sizeof *AutoKeys == unsigned(ScopeKeys::Auto::Count) &&
+              sizeof ResetHolds / sizeof *ResetHolds == unsigned(ScopeKeys::Reset::Count) &&
+              sizeof Shortcuts / sizeof *Shortcuts == unsigned(ScopeKeys::Shortcut::Count));
+// The F4 hold's options are the destinations this board offers, in their order (Interleave last).
+unsigned shortcutCount() {
+    unsigned n = 0;
+    for (unsigned i = 0; i < unsigned(ScopeKeys::Shortcut::Count); ++i) n += ScopeKeys::available(ScopeKeys::Shortcut(i));
+    return n;
+}
+ScopeKeys::Shortcut shortcutAt(unsigned index) {
+    for (unsigned i = 0; i < unsigned(ScopeKeys::Shortcut::Count); ++i)
+        if (ScopeKeys::available(ScopeKeys::Shortcut(i)) && !index--) return ScopeKeys::Shortcut(i);
+    return ScopeKeys::Shortcut::Count;
+}
+unsigned shortcutIndex(ScopeKeys::Shortcut shortcut) {
+    unsigned n = 0;
+    for (unsigned i = 0; i < unsigned(shortcut) && i < unsigned(ScopeKeys::Shortcut::Count); ++i) n += ScopeKeys::available(ScopeKeys::Shortcut(i));
+    return n;
+}
 unsigned long megahertz(uint32_t mode) { return (unsigned long)(RunModes[mode].coreHz / 1000000UL); }
 template <size_t N> unsigned indexOf(uint32_t value, const uint32_t (&choices)[N]) {
     for (unsigned i = 0; i < N; ++i) if (choices[i] == value) return i;
@@ -37,7 +60,8 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     case Action::ShowFps: case Action::ClockIndicator: case Action::PanDirection: case Action::HoldTime:
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
-    case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave: return PropertyKind::Choice;
+    case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave:
+    case Action::AutoKey: case Action::ResetHold: case Action::ShortcutHold: return PropertyKind::Choice;
     default: return PropertyKind::Action;
     }
 }
@@ -59,6 +83,9 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::PowerOffTimeout: return OffCount;
     case Action::GeneratorStartup: case Action::UsbController: return 2;
     case Action::Interleave: return board::Current::Features.adcInterleave ? 3 : 2;
+    case Action::AutoKey: return unsigned(ScopeKeys::Auto::Count);
+    case Action::ResetHold: return unsigned(ScopeKeys::Reset::Count);
+    case Action::ShortcutHold: return shortcutCount();
     default: return 0;
     }
 }
@@ -78,6 +105,9 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::GeneratorStartup: return prefs_.generatorStartup;
     case Action::UsbController: return prefs_.usbController;
     case Action::Interleave: return prefs_.scope.interleave;
+    case Action::AutoKey: return unsigned(prefs_.scope.keys.automatic);
+    case Action::ResetHold: return unsigned(prefs_.scope.keys.reset);
+    case Action::ShortcutHold: return shortcutIndex(prefs_.scope.keys.destination());
     default: return 0;
     }
 }
@@ -111,6 +141,13 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
     case Action::Interleave: // On says when it runs.
         std::snprintf(output, capacity, "%s", index == 2 ? "Auto: factory rules" : index ? "On: CH1 alone" : "Off");
         break;
+    case Action::AutoKey: std::snprintf(output, capacity, "%s", AutoKeys[index % unsigned(ScopeKeys::Auto::Count)]); break;
+    case Action::ResetHold: std::snprintf(output, capacity, "%s", ResetHolds[index % unsigned(ScopeKeys::Reset::Count)]); break;
+    case Action::ShortcutHold: {
+        const auto shortcut = shortcutAt(index);
+        std::snprintf(output, capacity, "%s", shortcut < ScopeKeys::Shortcut::Count ? Shortcuts[unsigned(shortcut)] : "");
+        break;
+    }
     case Action::UsbController: // Enabled says where it runs.
         if (index) std::snprintf(output, capacity, "Enabled (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
         else std::snprintf(output, capacity, "Disabled");
@@ -193,6 +230,9 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::GeneratorStartup: prefs_.generatorStartup = index; break;
     case Action::UsbController: prefs_.usbController = index; break;
     case Action::Interleave: prefs_.scope.interleave = index; break;
+    case Action::AutoKey: prefs_.scope.keys.automatic = ScopeKeys::Auto(index); break;
+    case Action::ResetHold: prefs_.scope.keys.reset = ScopeKeys::Reset(index); break;
+    case Action::ShortcutHold: prefs_.scope.keys.shortcut = shortcutAt(index); break;
     default: return false;
     }
     return true;

@@ -8,6 +8,7 @@
 #include "openosc/settings/meter_appearance.hpp"
 #include "openosc/settings/scope_appearance.hpp"
 #include "openosc/settings/screen_arrangement.hpp"
+#include "openosc/settings/scope_keys.hpp"
 #include "openosc/decode/settings.hpp"
 #include "openosc/board/current.hpp"
 
@@ -36,6 +37,7 @@ struct ScopePreferences {
     // The protocol decoder (docs/SCOPE_PROTOCOL_DECODERS_PLAN.md): off by default; files before it, or
     // an unreadable "decoder" object: the defaults, the rest of the file as it is.
     decoding::Settings decoder;
+    ScopeKeys keys; // AUTO and the F2/F4 holds on the waveform screen (Settings > Display > Scope shortcuts).
     bool valid() const;
 };
 struct MeterPreferences {

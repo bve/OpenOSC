@@ -5,6 +5,7 @@
 #include "openosc/acquisition/ranges.hpp"
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
+#include "openosc/ui/scope/view_zoom.hpp"
 #include <algorithm>
 
 namespace openosc {
@@ -21,7 +22,7 @@ void stepTimebase(ScopeRequest &request, uint32_t keys) {
 void ApplicationController::setScopeFocus(plot::Focus focus) {
     focus_ = focus;
     view_.waveform().cursorFocus(focus == plot::Focus::Cursor ? cursors_.line() : plot::CursorLine::None);
-    view_.scopeContext(selectedChannel_, focus_);
+    view_.scopeContext(selectedChannel_, focus_, prefs_.panReverse != 0);
 }
 // The active line has to be one that is drawn: follow every change of the cursor mode or view.
 void ApplicationController::syncCursorFocus() {
@@ -156,7 +157,7 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
         view_.notify("No record to move", now);
         horizontal = 0;
     }
-    const auto change = focus_ == plot::Focus::Trigger
+    const auto change = focus_ == plot::Focus::Trigger || focus_ == plot::Focus::Zoom // Pan only: no channel moves.
         ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &model, false)}
         : plot::TraceMove::apply(request, options, selectedChannel_, held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
                                  &model);
@@ -173,40 +174,47 @@ bool ApplicationController::holdKeys(uint32_t keys, uint32_t now) {
     return true;
 }
 void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
+    keys &= ~uint32_t(Keypad::AutoRange); // AUTO has strokes of its own (scopeAutoKeys).
+    if (!keys) return;
     followShownChannel(); // Before any key acts on the selection.
-    if (keys & Keypad::AutoRange) { // Held: auto setup (autoHold). Short: cancel it, or back to the trigger point.
-        if (!autoFired_) { if (autoBusy()) cancelAuto(now); else if (!autoShown_) resetPan(now); } // Shown: a cancelled hold.
-        autoFired_ = autoShown_ = false;
-        return;
-    }
+    constexpr uint32_t Arrows = Keypad::Up | Keypad::Down | Keypad::Left | Keypad::Right;
     if (autoBusy()) {
-        if (keys & (Keypad::F4 | Keypad::HoldSave)) {
-            cancelAuto(now,keys&Keypad::HoldSave);
+        // F4 cancels Auto Setup, HOLD cancels it back to a held record; a Scale arrow cancels it and its
+        // V/div or time/div step follows once the starting acquisition is back (finishAutoStep).
+        if (keys & (Keypad::F4 | Keypad::HoldSave)) cancelAuto(now, keys & Keypad::HoldSave);
+        else if (focus_ == plot::Focus::Scale && (keys & Arrows)) {
+            autoStep_ = uint16_t(keys & Arrows); // The latest request; applied once (cancelAuto or serviceAuto).
+            cancelAuto(now);
         }
         return;
     }
     syncCursorFocus();
+    syncZoomFocus();
     const auto openTrigger=[&] {
         triggerEditor_.begin(data_.scopeRequest().trigger);
         triggerEditor_.sources(data_.scopeRequest().frontend.enabled[0], data_.scopeRequest().frontend.enabled[1]);
         triggerEditor_.calibration(data_.scopeMetadata());
         openPanel(Panel::Trigger, triggerEditor_);
     };
-    if (keys & Keypad::F3) { // Each press: the trigger focus and the next mode (plan S01); the source is in its menu.
+    // F3 (issue #95): from another card only the Trigger card; on it each tap the next mode, Auto,
+    // Normal, Single (held: staged for the next RUN). The source is in its menu.
+    if (keys & Keypad::F3) {
         if (focus_ != plot::Focus::Trigger) setScopeFocus(plot::Focus::Trigger);
-        triggerModeStep(now);
+        else triggerModeStep(now);
         return;
     }
-    if (keys & Keypad::Menu) {
-        if (focus_ == plot::Focus::Trigger) { openTrigger(); return; }
-        if (focus_ == plot::Focus::Cursor) { openAnalyze(ui::ScopeActions::Cursors); return; }
+    if (keys & Keypad::Menu) { // Zoom & Pan: the menu of the card it came from.
+        const auto card = focus_ == plot::Focus::Zoom ? zoomReturn_ : focus_;
+        if (card == plot::Focus::Trigger) { openTrigger(); return; }
+        if (card == plot::Focus::Cursor) { openAnalyze(ui::ScopeActions::Cursors); return; }
         channelEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
         openPanel(Panel::Channel, channelEditor_);
         return;
     }
     if (keys & Keypad::F4) {
         const auto &cursors = view_.waveform().options().cursors;
-        if (focus_ == plot::Focus::Cursor) { // Next line, as on the factory firmware.
+        if (focus_ == plot::Focus::Zoom) leaveZoom(); // Back, the view as zoomed and panned.
+        else if (focus_ == plot::Focus::Cursor) { // Next line, as on the factory firmware.
             cursors_.next(cursors);
             setScopeFocus(plot::Focus::Cursor);
         } else if (plot::CursorControl::available(view_.waveform().options())) enterCursors(now);
@@ -225,8 +233,9 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         focus_ = plot::Focus::Position;
     }
     setScopeFocus(focus_);
-    const uint32_t arrows = keys & (Keypad::Up | Keypad::Down | Keypad::Left | Keypad::Right);
+    const uint32_t arrows = keys & Arrows;
     if (!arrows) return;
+    if (focus_ == plot::Focus::Zoom) { zoomKeys(arrows, now, fine); return; }
     if (focus_ == plot::Focus::Cursor) { moveCursor(arrows, now, fine); return; }
     if (focus_ == plot::Focus::Trigger && (arrows & (Keypad::Up | Keypad::Down))) {
         const int direction = axis(arrows, Keypad::Down, Keypad::Up);
@@ -247,16 +256,20 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         moveTrace(arrows, now, fine);
         return;
     }
-    // F1: Up/Down the selected channel's V/div, Left/Right the time/div, one standard step each, in RUN
-    // and HOLD alike. A held record cannot be re-acquired: they stage the next capture (no relay
-    // switches, no new arm; RUN applies them) and the record is shown at them (followNextCapture,
-    // issues #7, #93). A held FFT's Left/Right zoom its bins instead.
+    scaleKeys(arrows, now);
+}
+// F1: Up/Down the selected channel's V/div, Left/Right the time/div, one standard step each, in RUN
+// and HOLD alike. A held record cannot be re-acquired: they stage the next capture (no relay
+// switches, no new arm; RUN applies them) and the record is shown at them (followNextCapture,
+// issues #7, #93). A held FFT's Left/Right zoom its bins instead.
+void ApplicationController::scaleKeys(uint32_t keys, uint32_t now) {
     const bool held = data_.scopeHeld();
     uint32_t steps = keys;
     if (held && view_.waveform().options().mode == plot::Mode::Spectrum && (keys & (Keypad::Left | Keypad::Right))) {
         beginHeldView();
         auto view = view_.waveform().options();
-        if (keys & Keypad::Right) view.zoom = std::min<uint16_t>(256, view.zoom * 2);
+        view.zoomOut = 1; // Zooming FFT bins uses its own 1x base.
+        if (keys & Keypad::Right) view.zoom = std::min<uint16_t>(plot::Options::MaximumZoom, view.zoom * 2);
         if ((keys & Keypad::Left) && view.zoom > 1) view.zoom /= 2;
         view_.waveform().configure(view);
         steps &= ~uint32_t(Keypad::Left | Keypad::Right);
@@ -276,5 +289,137 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         return;
     }
     if (held) followNextCapture();
+}
+void ApplicationController::finishAutoStep(uint32_t now) {
+    const uint32_t keys = autoStep_;
+    autoStep_ = 0; // Once, whatever it does.
+    if (keys && uiReady_ && !remote_ && state_.mode == MeasurementMode::Oscilloscope && !autoBusy()) scaleKeys(keys, now);
+}
+bool ApplicationController::scopeScreen() const {
+    return uiReady_ && !remote_ && !recoveryPending_ && shutdown_ == Shutdown::None && state_.mode == MeasurementMode::Oscilloscope &&
+           panel_ == Panel::None && !state_.settingsOpen && !shots_.busy() && !decoderScreen() && !bodeRestoring();
+}
+// AUTO (issue #96). Quick: a tap starts Auto Setup, a 2 s hold enters Zoom & Pan. Classic: a tap
+// resets the pan, a 2 s hold starts Auto Setup. A stroke that began during Auto Setup only cancels
+// it (Cancel: its release before the hold, the countdown hidden); its hold, or its release once the
+// setup has ended, gives nothing, never Zoom & Pan or a new setup.
+void ApplicationController::scopeAutoKeys(const KeyEvents &events, uint32_t now) {
+    using Action = ScopeAutoKey::Action;
+    const auto action = autoKey_.events(events, now, scopeScreen(), autoBusy());
+    if (action == Action::None) return;
+    const bool quick = prefs_.scope.keys.automatic == ScopeKeys::Auto::Quick;
+    if (action == Action::Cancel || autoBusy()) {
+        if (action != Action::Hold) cancelAuto(now); // An idle stroke's hold while a setup runs: nothing.
+    } else if (action == Action::Tap) {
+        if (quick) startAuto(now);
+        else resetPan(now);
+    } else if (quick) enterZoom(now);
+    else startAuto(now);
+    dataRefresh_ = true;
+}
+int ApplicationController::scopeAutoCountdown(uint32_t now, bool powerHeld) {
+    if (powerHeld || !scopeScreen()) autoKey_.cancel(); // REL takes the stroke; a panel or another screen ends it.
+    return autoBusy() ? -1 : autoKey_.percent(now); // During Auto Setup a hold does nothing.
+}
+const char *ApplicationController::scopeAutoHint() const {
+    return prefs_.scope.keys.automatic == ScopeKeys::Auto::Quick ? "Hold for Zoom & Pan" : "Hold for auto setup";
+}
+bool ApplicationController::scopeHoldKeys(uint32_t holds, uint32_t now) {
+    holds &= Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4;
+    if (!holds || !scopeScreen()) return false;
+    if (autoBusy() || data_.zeroBusy()) return true; // Taken: the stroke is spent, nothing happens.
+    followShownChannel();
+    syncCursorFocus();
+    if (holds & Keypad::F1) openProbe(now);
+    else if (holds & Keypad::F2) resetView(now);
+    else if (holds & Keypad::F3) triggerMidpoint(now); // 50 %, as on the factory firmware.
+    else openShortcut(now);
+    dataRefresh_ = true;
+    return true;
+}
+void ApplicationController::openProbe(uint32_t now) {
+    channelEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
+    openPanel(Panel::Channel, channelEditor_, ui::ChannelEditor::Probe);
+    fieldKeys(Keypad::Menu, channelEditor_, now); // Its choices open: Up/Down, MENU takes one, F4 keeps the ratio.
+}
+// The editor of the saved destination, opened for review: nothing is applied until a field is
+// committed there, and Back returns to the waveform.
+void ApplicationController::openShortcut(uint32_t) {
+    using Shortcut = ScopeKeys::Shortcut;
+    analyzeRow_ = ~0U;
+    switch (const auto destination = prefs_.scope.keys.destination()) {
+    case Shortcut::Measurements:
+        measurementEditor_.begin(prefs_.scope.measurements);
+        openPanel(Panel::Measurements, measurementEditor_);
+        return;
+    case Shortcut::Acquisition: case Shortcut::RecordMemory:
+        acquisitionEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
+        acquisitionEditor_.snapshot(view_.waveform().model().metadata());
+        openPanel(Panel::Acquisition, acquisitionEditor_,
+                  destination == Shortcut::RecordMemory ? ui::AcquisitionEditor::Memory : ui::AcquisitionEditor::Timebase);
+        return;
+    case Shortcut::Interleave: // Settings > Device > Performance, where the board has that control.
+        state_.settingsOpen = true;
+        settingsMenu_.open(ui::SettingsPage::Performance, ui::SettingsAction::Interleave);
+        navigator_.reset(settingsMenu_.selected());
+        showSettings();
+        return;
+    default: // Cursor settings: Analyze > Display > Cursors, its section only.
+        for (unsigned c = 0; c < 2; ++c) plotControls_.enabled[c] = channelShown(c);
+        plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
+        plotControls_.options.cursors.channel = selectedChannel_;
+        plotControls_.group = plot::Controls::Group::Cursors; plotControls_.listing = false;
+        sectionDirect_ = true; // Back closes the section (analyzeRow_ none).
+        openPanel(Panel::Display, ui::DisplayProperties(plotControls_));
+        return;
+    }
+}
+// F2 hold, an explicit reset: Home view centres both zero lines too (as Analyze > Center channels);
+// both reset the zoom to 1x and the pan to the trigger reference at the time/div in force. In HOLD it
+// is also the view RUN returns to, unlike exploring the record.
+bool ApplicationController::resetView(uint32_t now) {
+    const bool home = prefs_.scope.keys.reset == ScopeKeys::Reset::Home;
+    const bool held = data_.scopeHeld();
+    if (held) beginHeldView();
+    if (home && !centerChannels(now)) return false;
+    auto options = view_.waveform().options();
+    if (plot::ViewZoom::reset(options)) { view_.waveform().configure(options); queuePlotSave(now); }
+    if (held) { heldView_.zoom = heldView_.zoomOut = 1; heldView_.panPpb = 0; }
+    view_.notify(home ? "Home view" : "Zoom and pan reset", now);
+    dataRefresh_ = true;
+    return true;
+}
+void ApplicationController::enterZoom(uint32_t now) {
+    const auto &model = view_.waveform().model();
+    if (!plot::ViewZoom::available(view_.waveform().options(), model)) {
+        view_.notify(model.hasFrame() && model.metadata().rolling ? "Zoom & Pan: not in Roll" : "Zoom & Pan needs a Y-T record", now);
+        return;
+    }
+    if (focus_ != plot::Focus::Zoom) zoomReturn_ = focus_;
+    setScopeFocus(plot::Focus::Zoom);
+}
+void ApplicationController::leaveZoom() {
+    setScopeFocus(zoomReturn_ == plot::Focus::Zoom ? plot::Focus::Scale : zoomReturn_);
+    syncCursorFocus(); // A cursor line that is no longer drawn: Scale.
+}
+void ApplicationController::syncZoomFocus() {
+    if (focus_ == plot::Focus::Zoom && !plot::ViewZoom::available(view_.waveform().options(), view_.waveform().model())) leaveZoom();
+}
+// Up/Down zoom, Left/Right pan (Settings > Display > Pan direction): the view only. In HOLD they
+// explore the retained record (RUN returns the view from before HOLD); in RUN the view is kept.
+void ApplicationController::zoomKeys(uint32_t arrows, uint32_t now, bool fine) {
+    const int vertical = axis(arrows, Keypad::Down, Keypad::Up);
+    if (!vertical) { moveTrace(arrows, now, fine); return; }
+    const auto &model = view_.waveform().model();
+    if (!model.hasFrame() || !data_.scopeRecordStored()) { view_.notify("No record to zoom", now); return; } // As moveTrace (#89).
+    auto options = view_.waveform().options();
+    const auto step = plot::ViewZoom::step(options, vertical, model);
+    if (step == plot::ViewZoom::Step::Unavailable) { view_.notify("Zoom & Pan needs a Y-T record", now); return; }
+    if (step == plot::ViewZoom::Step::Limit) { view_.notify(vertical > 0 ? "Maximum zoom" : "Minimum zoom", now); return; }
+    const bool held = data_.scopeHeld();
+    if (held) beginHeldView(); // Before the change: what RUN returns to.
+    view_.waveform().configure(options);
+    if (!held) queuePlotSave(now);
+    dataRefresh_ = true;
 }
 } // namespace openosc

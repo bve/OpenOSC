@@ -28,6 +28,7 @@
 #include "openosc/decode/table_text.hpp"
 #include "openosc/application/readout_scheduler.hpp"
 #include "openosc/application/run_mode_switch.hpp"
+#include "openosc/application/scope_auto_key.hpp"
 #include "openosc/ui/editors/measurement_editor.hpp"
 #include "openosc/ui/editors/generator_editor.hpp"
 #include "openosc/acquisition/auto_setup.hpp"
@@ -76,6 +77,8 @@ private:
     plot::CounterText counterText_;
     uint32_t counterEpoch_ = 0; // Each instrument mode change: the counter overlay's mean starts again.
     bool sectionDirect_ = false; // A Display section opened from Analyze (FFT): Back returns there.
+    plot::Focus zoomReturn_ = plot::Focus::Scale; // The card Zoom & Pan returns to (F4) and takes MENU from.
+    uint16_t autoStep_ = 0; // The Scale arrows that cancelled Auto Setup, until its restore succeeds.
     static constexpr unsigned PanDoubling = 8;
     unsigned panRepeats_ = 0;
     int panSign_ = 0; // The direction panRepeats_ counts for.
@@ -217,13 +220,39 @@ private:
     void followNextCapture(); // A held record is shown at the next capture's time/div and V/div (issues #7, #93).
     void moveTrace(uint32_t keys, uint32_t now, bool fine);
     void resetPan(uint32_t now); // In HOLD the explored view only, as moveTrace: RUN restores, nothing saved.
+    // The Scope waveform screen in front with its own keys: no panel, Settings, decoder screen, Remote,
+    // Bode restore, shutdown or Recovery handoff. AUTO and the F1-F4 holds act only there (issue #96).
+    bool scopeScreen() const;
+    // AUTO's strokes there (ScopeAutoKey), by Settings > Display > Scope shortcuts > AUTO key.
+    // Out of line, as the holds below: their frames stay off onKeys' (the deepest run() chain, stack budget).
+    [[gnu::noinline]] void scopeAutoKeys(const KeyEvents &events, uint32_t now);
+    // Each loop pass: the AUTO countdown (PowerHold::percent), -1 without one; REL held or the screen
+    // gone ends the stroke. scopeAutoHint: the countdown's text.
+    [[gnu::noinline]] int scopeAutoCountdown(uint32_t now, bool powerHeld);
+    const char *scopeAutoHint() const;
+    // F1-F4 held to their long press on that screen (issues #95, #96): Probe, the F2 reset, 50 %, the
+    // F4 shortcut. Once a stroke (KeyGestures). True when the screen took the holds.
+    [[gnu::noinline]] bool scopeHoldKeys(uint32_t holds, uint32_t now);
+    void openProbe(uint32_t now);    // F1 hold: the selected channel's Probe choices.
+    void openShortcut(uint32_t now); // F4 hold: the saved destination's editor, nothing changed by opening it.
+    bool resetView(uint32_t now);    // F2 hold: Home view or Reset zoom & pan; explicit, so RUN keeps it.
+    // Zoom & Pan (issue #96, ViewZoom): a focus of its own; F4 returns to the card it came from.
+    void enterZoom(uint32_t now);
+    void leaveZoom();
+    void syncZoomFocus(); // Leaves Zoom & Pan once the view has no Y-T record to zoom.
+    void zoomKeys(uint32_t arrows, uint32_t now, bool fine);
+    // F1's Up/Down V/div and Left/Right time/div step (in HOLD staged for RUN).
+    void scaleKeys(uint32_t keys, uint32_t now);
+    // A Scale arrow during Auto Setup cancels it; its step (autoStep_) is applied once, after the
+    // restore succeeds (at once, or when serviceAuto completes a deferred one).
+    void finishAutoStep(uint32_t now);
     bool centerTrigger(uint32_t now);
     void moveCursor(uint32_t keys, uint32_t now, bool fine);
     bool triggerMidpoint(uint32_t now);
     scope::TriggerLevel::Bounds triggerBounds(const ScopeRequest &request);
     int triggerStep(int direction, bool fine);
     void notifyTriggerLimit(int direction, uint32_t now);
-    bool centerChannels(uint32_t now); // Analyze -> Center channels, F2 hold.
+    bool centerChannels(uint32_t now); // Analyze -> Center channels, and the F2 hold's Home view.
     bool applyGenerator(const generator::Settings &settings, uint32_t now);
     void dataKeys(uint32_t keys, uint32_t now, bool fine);
     void displayData(uint32_t now);
@@ -348,7 +377,7 @@ private:
     // the instrument took (or, refused, what it has).
     void commitScopeEditor(ui::ScopeEditor &editor, uint32_t now);
     void commitTrigger(uint32_t now, bool level); // level: the Level row or 50 % (LevelIntent::Set).
-    void triggerModeStep(uint32_t now); // Each short F3: the trigger focus and Auto, Normal, Single (held: staged).
+    void triggerModeStep(uint32_t now); // A short F3 on the Trigger card: Auto, Normal, Single (held: staged).
     // DISPLAY's committed field (row Count) or its Reference/Clear action row, with every draft;
     // refused, the drafts return to the view in force.
     bool applyDisplay(unsigned row, uint32_t now);
@@ -367,13 +396,9 @@ private:
     bool recordWatched_ = false, loggerWatched_ = false, serialWatched_=false;
     MeterRestore meterRestore_; // The DMM entry's range restore (meter_restore.hpp).
     uint32_t dmmRestarts_ = 0, dmmReselects_ = 0;
-    // REL hold (Preferences::holdMs) and Scope AUTO hold (AutoHoldMs): AUTO fires auto setup; its release then is not a short press.
-    static constexpr uint32_t AutoHoldMs = 2000;
-    uint32_t autoHeldAt_ = 0, autoUpAt_ = 0;
-    bool powerFired_ = false, autoDown_ = false, autoFired_ = false, autoArmed_ = false;
-    bool autoShown_ = false; // The AUTO countdown appeared: its release is a cancelled hold, not a short AUTO.
+    bool powerFired_ = false; // The REL hold (Preferences::holdMs) powered off once this stroke.
+    ScopeAutoKey autoKey_;    // AUTO's open stroke on the Scope waveform screen.
     void powerOff(uint32_t now);
-    int autoHold(uint32_t now, bool powerHeld); // PowerHold::percent of the AUTO hold.
     // An explicit DMM command (keys, SCPI): accepted, it supersedes the entry's pending restore.
     bool meterCommand(bool accepted) { if (accepted) meterRestore_.cancel(); return accepted; }
     // *OPC?'s view of that restore (InstrumentBackend::busy): owed and still able to happen.

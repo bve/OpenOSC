@@ -8,7 +8,7 @@ namespace openosc::plot {
 bool Options::valid() const {
     if (unsigned(mode) > 3 || unsigned(style) > 2 || unsigned(grid) > 3 || unsigned(math) > 2 || !spectrum.valid() || !counter.valid() ||
         unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom || !zoomOut ||
-        zoom > 256 || panPpb < -PanFull || panPpb > PanFull ||
+        zoom > MaximumZoom || panPpb < -PanFull || panPpb > PanFull ||
         (persistenceMs > 10000 && persistenceMs!=InfinitePersistence) ||
         !averaging || averaging > 64 || (averaging & (averaging - 1)) ||
         (heldTimebaseNs && std::find(std::begin(scope::Timebases::Values), std::end(scope::Timebases::Values),

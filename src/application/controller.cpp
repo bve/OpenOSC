@@ -163,9 +163,13 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         }
         const bool activity=InputService::activity();
         const bool wake=servicePower(InputService::keys() || activity,now);
-        if (wake) InputService::wake();
+        if (wake) {
+            InputService::wake();
+            autoKey_.cancel();
+        }
         if (InputService::overflowed()) {
             InputService::suppress();
+            autoKey_.cancel();
             data_.closeDmmRange(); // Its release may be among the lost events.
             if (uiReady_) view_.notify("Input overflow; press again",now);
         }
@@ -175,10 +179,10 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
             if (!down) powerFired_ = false; // Up (debounced): the long press's end is no new hold.
             else if (holding && held >= prefs_.holdMs() && !recoveryPending_) powerOff(now);
             const int power = PowerHold::percent(holding, held, prefs_.holdMs());
-            const int automatic = autoHold(now, power >= 0); // Every pass: its input state must not depend on the drawing.
+            const int automatic = scopeAutoCountdown(now, power >= 0); // Every pass: its input state must not depend on the drawing.
             if (uiReady_) {
                 if (power >= 0) view_.powerHold(power, "Hold to power off");
-                else view_.powerHold(automatic, "Hold for auto setup");
+                else view_.powerHold(automatic, scopeAutoHint());
             }
         }
         TimedKeyEvents input;
@@ -264,29 +268,6 @@ void ApplicationController::powerOff(uint32_t now) {
     if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
     confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
 }
-int ApplicationController::autoHold(uint32_t now, bool powerHeld) {
-    // Armed by the stroke's press event (onKeys): a stroke a wake took never arms. REL held takes the
-    // stroke: its release then does nothing (autoFired_), not a short AUTO.
-    if (powerHeld && autoArmed_ && (InputService::keys() & Keypad::AutoRange)) autoFired_ = true;
-    const bool down = autoArmed_ && !powerHeld && uiReady_ && state_.mode == MeasurementMode::Oscilloscope && panel_ == Panel::None && !state_.settingsOpen &&
-                      !remote_ && !recoveryPending_ && !shots_.busy() && shutdown_ == Shutdown::None && !decoderScreen() &&
-                      (InputService::keys() & Keypad::AutoRange);
-    if (!down) {
-        if (autoDown_) { autoDown_ = false; autoUpAt_ = now; }
-        else if (uint32_t(now - autoUpAt_) >= KeyGestures::DebounceMs) autoArmed_ = false; // Raw samples: a bounce continues.
-        return -1;
-    }
-    autoDown_ = true;
-    const uint32_t elapsed = now - autoHeldAt_;
-    if (autoFired_) return -1;
-    if (elapsed >= PowerHold::ShowMs) autoShown_ = true;
-    if (elapsed >= AutoHoldMs) {
-        autoFired_ = true;
-        if (!autoBusy()) startAuto(now);
-        return -1;
-    }
-    return PowerHold::percent(true, elapsed, AutoHoldMs);
-}
 void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     const uint32_t keys = events.shortPress | events.repeat;
     // A held Right steps a Number but never runs through a Choice (relays, run mode): the navigator
@@ -294,7 +275,7 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     navigator_.repeats(events.repeat & ~events.shortPress);
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
     meterRangeKeys(events, now); // KEY5 in the DMM: its own press, release and hold events.
-    if (events.press & Keypad::AutoRange) { autoArmed_ = true; autoFired_ = autoShown_ = false; autoHeldAt_ = now - KeyGestures::PressQualifyMs; }
+    scopeAutoKeys(events, now);  // KEY5 on the Scope waveform screen: the same events, its own actions.
     if (!(events.shortPress | events.longPress | events.repeat)) return;
     // REL/Power held to the end of its progress (PowerHold): the power-off pipeline at once, from
     // every screen, menu, dialog, Remote or headless; it saves settings and files and stops the
@@ -335,12 +316,8 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
         showSettings();
     } else if (events.longPress & Keypad::HoldSave) {
         startScreenshot(now);
-    } else if ((events.longPress & Keypad::F3) && state_.mode == MeasurementMode::Oscilloscope &&
-               !state_.settingsOpen && panel_ == Panel::None && !autoBusy() && !data_.zeroBusy()) {
-        triggerMidpoint(now); // F3 hold, as on the factory firmware.
-    } else if ((events.longPress & Keypad::F2) && state_.mode == MeasurementMode::Oscilloscope &&
-               !state_.settingsOpen && panel_ == Panel::None && !autoBusy() && !data_.zeroBusy()) {
-        if (centerChannels(now)) view_.notify("Channels centered", now); // F2 hold, as on the factory firmware.
+    } else if (scopeHoldKeys(events.longPress, now)) {
+        // F1-F4 held on the Scope waveform screen; a hold never also gives its tap (KeyGestures).
     } else if (state_.settingsOpen) settingsKeys(keys, now);
     else panelKeys(keys, now, !(events.repeat & (Keypad::Up|Keypad::Down|Keypad::Left|Keypad::Right)));
 }
@@ -367,7 +344,10 @@ void ApplicationController::stopBootGuard() {
 // only after a NOR timeout (5 s), longer together than the watchdog allows without progress.
 bool ApplicationController::SettingsStore::saveTheme() {
     a_.stalls_.mark(StallLog::Theme);
-    const bool saved = a_.themes_.savePlot(a_.view_.waveform().options());
+    auto options = a_.view_.waveform().options();
+    // HOLD inspection belongs to the retained record. Persist the view that RUN will restore.
+    if (a_.heldViewActive_) options.restoreHeldView(a_.heldView_);
+    const bool saved = a_.themes_.savePlot(options);
     Watchdog::progress();
     return saved;
 }
