@@ -196,7 +196,7 @@ void ApplicationController::displayData(uint32_t now) {
             options.restoreHeldView(heldView_);
             view_.waveform().configure(options); heldViewActive_=false; dataRefresh_=true;
         }
-        followNextTimebase(); // Whoever staged it (keys, Timebase menu, a host): one place.
+        followNextCapture(); // Whoever staged it (keys, Timebase or Channel menu, a host): one place.
         options=view_.waveform().options();
         // The next capture's settings do not change what a held record contains.
         if (!channelShown(options.spectrum.channel)) {

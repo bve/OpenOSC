@@ -38,12 +38,13 @@ void Tmc::clear() {
 bool Tmc::header() {
     if (!header_[1] || uint8_t(header_[1] ^ header_[2]) != 255 || header_[3]) return false;
     const uint32_t size = uint32_t(header_[4]) | uint32_t(header_[5]) << 8 | uint32_t(header_[6]) << 16 | uint32_t(header_[7]) << 24;
-    if (size > 1048576) return false;
     if (header_[0] == 1) {
-        if ((header_[8] & ~1U) || header_[9] || header_[10] || header_[11]) return false;
+        if (size > 1048576 || (header_[8] & ~1U) || header_[9] || header_[10] || header_[11]) return false;
         inputTag_ = header_[1]; remaining_ = size; padding_ = (4 - (size & 3)) & 3; outData_ = 0;
         end_ = header_[8] & 1; ending_ = !size && end_;
     } else if (header_[0] == 2) {
+        // TransferSize is the host's 32-bit receive limit (USBTMC 1.0, Table 4).
+        // packet() sends at most the available reply, including for ngscopeclient's large reads.
         // TermChar is ignored when TermCharEnabled is clear; Linux still sends '\n' there.
         if (requested_ || active_ || !size || header_[8] || header_[10] || header_[11]) return false;
         requestTag_ = header_[1]; requested_ = size; inData_ = 0; // NBYTES_TXD of this transfer.

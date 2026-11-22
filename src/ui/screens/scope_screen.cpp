@@ -69,11 +69,11 @@ void ScopeScreen::cards() {
     plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
-    // F1 Scale (issue #90): always the selected channel over the V/div and s/div the plot is drawn at, in
-    // the card's own font. Scales asked for but not yet captured (a held or waiting record) mark the
-    // title and are named on the Details line: only those that really differ from what is plotted.
+    std::snprintf(title, sizeof title, "Scale CH%u", channel_ + 1);
+    // Keep the value row at the plotted scale. A waiting record can still be on screen after its
+    // range changes. Show the next setting in the title until a record at that scale arrives.
     if (framed) {
-        const bool volts = plot::DisplayScale::voltsPending(shown, next_, channel_);
+        const bool volts = plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
         const bool seconds = plot::DisplayScale::timePending(shown, widget.options(), next_);
         char pendingVolts[16] = "", pendingTime[16] = "";
         if (volts) {
@@ -81,9 +81,15 @@ void ScopeScreen::cards() {
             plot::Format::quantity(scaleNext.perDivision, scaleNext.unit, pendingVolts, sizeof pendingVolts, 3);
         }
         if (seconds) plot::Format::quantity(next_.timebaseNs / 1e9, "s", pendingTime, sizeof pendingTime, 3);
-        if (volts || seconds) std::snprintf(next, sizeof next, "Next %s%s%s", pendingVolts, volts && seconds ? " " : "", pendingTime);
+        if (volts || seconds) {
+            std::snprintf(next, sizeof next, "Next %s%s%s", pendingVolts, volts && seconds ? " " : "", pendingTime);
+            const char *first = volts ? pendingVolts : pendingTime;
+            if (Elements::textWidth(next, 12) <= ScreenLayout::ButtonWidth - 8)
+                std::snprintf(title, sizeof title, "%s", next);
+            else
+                std::snprintf(title, sizeof title, "Next %s", first);
+        }
     }
-    std::snprintf(title, sizeof title, "Scale CH%u", channel_ + 1);
     std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", channel_ + 1, plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
     // Keep the font fixed. A wide pair uses two significant digits, then coarser unit prefixes
     // if needed (for example, "500mcnt" becomes "0.5cnt").

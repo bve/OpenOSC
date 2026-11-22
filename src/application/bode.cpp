@@ -13,7 +13,8 @@
 // - ZT706S gating: the module's control-word bit 10 is in every Scope word (frontend 0x1600 and the
 //   channels' words); only the DMM word needs generator::controlBits. Bode runs in the Scope only: no
 //   enable of its own.
-// - The original capture request and generator settings and output state are kept when the sweep starts
+// - The original capture request (its channels' couplings too: the sweep's are AC, GitHub #87) and
+//   generator settings and output state are kept when the sweep starts
 //   and put back when it ends (done, stopped, failed) and whenever the panel goes: Exit/MODE, a mode
 //   change by any path (selectMode), a shutdown (requestShutdown), Remote (setRemote), the Scope taken
 //   over (HOLD, a recording, a calibration, AutoSetup), recovery. An original OFF output is switched off

@@ -106,7 +106,7 @@ protected:
     ~BodePort() = default;
 };
 // The sweep: one point at a time, every step bounded. A point: tune the generator (asked once, then
-// polled until Ready: Failed, or MaximumTuneMs without either, fails the sweep), configure the capture (both channels, Auto on CH1, no Roll, the default 64K record (32768 a channel, all of it read),
+// polled until Ready: Failed, or MaximumTuneMs without either, fails the sweep), configure the capture (both channels AC, Auto on CH1, no Roll, the default 64K record (32768 a channel, all of it read),
 // a timebase showing about ten cycles, the current V/div
 // adjusted when a channel clips or is too small), wait the settle time from the generator's confirmation
 // (a range change: from the new capture), take the first record whose

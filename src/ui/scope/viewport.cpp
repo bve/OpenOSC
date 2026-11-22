@@ -78,20 +78,35 @@ int Viewport::positionX(int64_t positionQ16) const {
     const int64_t value = (positionQ16 - startQ16) * (width - 1) / int64_t(spanQ16);
     return int(std::clamp<int64_t>(value, -4096, 4096));
 }
+namespace {
+double heldMillivolts(const scope::ChannelMetadata &m, const ChannelOptions &o) {
+    return double(o.heldMillivoltsAtTip) * m.probeDenominator / m.probeNumerator;
+}
+bool drawable(double scale) { return std::isfinite(scale) && scale >= 1 && scale <= 16777216; }
+} // namespace
+bool Axis::held(const scope::ChannelMetadata &m, const ChannelOptions &o) {
+    return o.heldMillivoltsAtTip > 0 && m.calibrated && m.probeNumerator && m.probeDenominator &&
+           drawable(heldMillivolts(m, o) * .256 / m.voltsPerCode);
+}
+double Axis::millivolts(const scope::ChannelMetadata &m, const ChannelOptions &o) {
+    return held(m, o) ? heldMillivolts(m, o) : m.millivoltsPerDivision;
+}
 bool Axis::configure(const scope::ChannelMetadata &m, const ChannelOptions &o, unsigned height) {
     zeroQ8 = 0;
     codesPerDivisionQ8 = 8192;
+    double scale = codesPerDivisionQ8;
     if (m.calibrated) {
-        const double scale = m.millivoltsPerDivision * .256 / m.voltsPerCode;
-        if (!std::isfinite(scale) || scale < 1 || scale > 16777216 || std::abs(m.zeroCode) > 32768)
+        scale = millivolts(m, o) * .256 / m.voltsPerCode;
+        if (!drawable(scale) || std::abs(m.zeroCode) > 32768)
             return false;
         codesPerDivisionQ8 = int32_t(std::lround(scale));
         zeroQ8 = int32_t(std::lround(m.zeroCode * 256));
     }
     basePermille = base(m);
     origin = int16_t(int32_t(height - 1) * (basePermille + o.positionPermille - 500) / 1000);
-    // Q16 pixel transform is evaluated only for column extrema, never for every source sample.
-    factor = int32_t(int64_t(height - 1) * 65536 * o.gainPercent / (800 * codesPerDivisionQ8));
+    // The pixel transform is evaluated on projected points and extrema. From the unrounded codes per
+    // division: a held V/div far finer than the record's own (a few Q8 codes a division) keeps its scale.
+    factor = std::llround(double(height - 1) * 4294967296.0 * o.gainPercent / (800 * scale));
     if (o.invert)
         factor = -factor;
     return factor != 0;
@@ -102,8 +117,11 @@ int16_t Axis::base(const scope::ChannelMetadata &m) {
     return m.calibrated ? int16_t(std::clamp<int>(m.analogPosition, 0, 160) * 1000 / 160) : 500;
 }
 int16_t Axis::pixel(int32_t raw) const {
-    const int64_t value = int64_t(origin) - (int64_t(raw) - zeroQ8) * factor / 65536;
+    int64_t offset;
+    if (__builtin_mul_overflow(int64_t(raw) - zeroQ8, factor, &offset)) // Far off the plot either way.
+        return ((int64_t(raw) - zeroQ8 > 0) == (factor > 0)) ? -4096 : 4096;
+    const int64_t value = int64_t(origin) - offset / (int64_t(1) << 32);
     return int16_t(std::clamp<int64_t>(value, -4096, 4096));
 }
-double Axis::code(int y) const { return factor ? zeroQ8 / 256.0 + (origin - y) * 256.0 / factor : 0; }
+double Axis::code(int y) const { return factor ? zeroQ8 / 256.0 + (origin - y) * 16777216.0 / double(factor) : 0; }
 } // namespace openosc::plot

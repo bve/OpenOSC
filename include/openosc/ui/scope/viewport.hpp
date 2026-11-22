@@ -53,8 +53,16 @@ struct Axis {
     int32_t zeroQ8 = 0, codesPerDivisionQ8 = 8192;
     int16_t origin = 0;
     int16_t basePermille = 500; // Where the analog zero of this record puts 0 V, without the digital offset.
-    int32_t factor = 0;
+    // Pixels per Q8 code in Q32: exact to well under a pixel at any V/div a held record is shown at
+    // (issue #93: up to 500 times its own, 20 mV to 10 V; Q16 lost a quarter of the scale there).
+    int64_t factor = 0;
     bool configure(const scope::ChannelMetadata &metadata, const ChannelOptions &options, unsigned height);
+    // Whether a held record is drawn at the next capture's V/div (ChannelOptions::heldMillivoltsAtTip): a
+    // calibrated record whose codes can be drawn at it; otherwise at its own.
+    static bool held(const scope::ChannelMetadata &metadata, const ChannelOptions &options);
+    // The record's millivolts per division (at its input, before its probe) as it is drawn: its own,
+    // or the held V/div at the tip through the record's own probe (its codes stay what they are).
+    static double millivolts(const scope::ChannelMetadata &metadata, const ChannelOptions &options);
     // A record's basePermille: a calibrated record's codes are compensated for its analog zero, so
     // its line is placed here; raw codes already carry it (500). The digital position that centres
     // this record's zero is then 1000 - basePermille.

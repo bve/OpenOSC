@@ -214,7 +214,7 @@ private:
     void enterCursors(uint32_t now);
     void showTrigger(const scope::FrameMetadata *shown);
     void beginHeldView();
-    void followNextTimebase(); // A held record is shown at the next capture's time/div (issue #7).
+    void followNextCapture(); // A held record is shown at the next capture's time/div and V/div (issues #7, #93).
     void moveTrace(uint32_t keys, uint32_t now, bool fine);
     void resetPan(uint32_t now); // In HOLD the explored view only, as moveTrace: RUN restores, nothing saved.
     bool centerTrigger(uint32_t now);
@@ -417,6 +417,7 @@ private:
     // DISP:DATA? streams the screen from the preview buffer under a lease ticket (ScreenLease).
     ScreenLease screenLease_;
     void startScreenshot(uint32_t now);
+    void finishScreenshot(uint32_t now);
     unsigned shotProgress_=0;
     unsigned imageProgress_=0;
     ui::SettingsMenu settingsMenu_;

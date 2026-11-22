@@ -1,6 +1,7 @@
 #include "openosc/ui/scope/options.hpp"
 #include "openosc/acquisition/timebases.hpp"
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 
 namespace openosc::plot {
@@ -15,7 +16,8 @@ bool Options::valid() const {
         return false;
     for (const auto &c : channels)
         if (c.positionPermille < -1000 || c.positionPermille > 2000 || c.gainPercent < 1 ||
-            c.gainPercent > 6400 || c.width < 1 || c.width > 3)
+            c.gainPercent > 6400 || c.width < 1 || c.width > 3 ||
+            !std::isfinite(c.heldMillivoltsAtTip) || c.heldMillivoltsAtTip < 0)
             return false;
     const auto &c = cursors;
     return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2;
@@ -26,6 +28,7 @@ void Options::restoreHeldView(const Options &saved) {
     for (unsigned c = 0; c < 2; ++c) {
         channels[c].gainPercent = saved.channels[c].gainPercent;
         channels[c].positionPermille = saved.channels[c].positionPermille;
+        channels[c].heldMillivoltsAtTip = saved.channels[c].heldMillivoltsAtTip;
     }
 }
 bool Options::sameTransform(const Options &b) const {
@@ -38,7 +41,7 @@ bool Options::sameTransform(const Options &b) const {
         const auto &x = channels[i];
         const auto &y = b.channels[i];
         if (x.positionPermille != y.positionPermille || x.gainPercent != y.gainPercent ||
-            x.invert != y.invert || x.visible != y.visible)
+            x.invert != y.invert || x.visible != y.visible || x.heldMillivoltsAtTip != y.heldMillivoltsAtTip)
             return false;
     }
     return true;

@@ -115,10 +115,12 @@ public:
     void information(const ui::SettingsMenu &menu, const DeviceInfo &info);
     void images(const ui::ImageList &images);
     void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
-    void notify(const char *text, uint32_t now);
+    enum class Notice : uint8_t { None, General, ScreenshotSaved };
+    void notify(const char *text, uint32_t now, Notice kind = Notice::General);
+    void dismissNotice(Notice kind);
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
-    const char *toast() const { return toastActive_ && toast_ ? lv_label_get_text(toast_) : ""; } // On show now.
-    bool toastShowing() const { return toastActive_; } // A notice is on show (store(): none over another).
+    const char *toast() const { return toastShowing() ? lv_label_get_text(toast_) : ""; } // On show now.
+    bool toastShowing() const { return notice_ != Notice::None; } // A notice is on show (store(): none over another).
     // The frequency response plot (GitHub #72), hidden until shown. Shown as a menu is: the
     // host's overlay (no Scope elements drawn under it, the keys' bar at the bottom), the menu box hidden.
     ui::BodeView &bode() { return bode_; }
@@ -182,7 +184,9 @@ private:
     uint8_t clockLayout_ = 0;
     uint32_t clockMode_ = RunModeCount, clockInk_ = 0; // The letter and the ink drawn.
     uint32_t toastUntil_ = 0;
-    bool generatorOn_ = false, toastActive_ = false, usbConnected_ = false;
+    bool generatorOn_ = false;
+    Notice notice_ = Notice::None;
+    bool usbConnected_ = false;
     MeasurementMode mode_ = MeasurementMode::Oscilloscope;
     uint32_t menuAccent_ = 0x38bdf8;
 };

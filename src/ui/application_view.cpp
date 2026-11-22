@@ -29,7 +29,7 @@ void ApplicationView::build(const Theme &theme) {
     overview_.clear();
     powerHold_.theme(theme);
     theme_ = &theme;
-    toastActive_ = false;
+    notice_ = Notice::None;
     auto *screen = lv_screen_active();
     lv_obj_set_style_bg_color(screen, lv_color_hex(theme.background), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
@@ -292,7 +292,7 @@ void ApplicationView::bodePlot(const ui::BodeViewData &data) {
         refreshIndicators();
     }
     bode_.show(data);
-    if (toastActive_) lv_obj_move_foreground(toast_); // A notice stays over the plot.
+    if (toastShowing()) lv_obj_move_foreground(toast_); // A notice stays over the plot.
 }
 void ApplicationView::generatorActive(bool enabled) {
     if (generatorOn_ == enabled) return;
@@ -305,14 +305,19 @@ void ApplicationView::usbConnected(bool connected) {
     usbConnected_ = connected; lv_obj_set_hidden(usbIndicator_,!connected);
     if (connected) lv_obj_move_foreground(usbIndicator_);
 }
-void ApplicationView::notify(const char *text, uint32_t now) {
+void ApplicationView::notify(const char *text, uint32_t now, Notice kind) {
     const uint32_t current=lv_tick_get();
     if (int32_t(current-now)>0) now=current; // A file operation may have outlived the caller's tick.
     lv_label_set_text(toast_, text);
     lv_obj_set_hidden(toast_, false);
     lv_obj_move_foreground(toast_);
     toastUntil_ = now + 3000;
-    toastActive_ = true;
+    notice_ = kind;
+}
+void ApplicationView::dismissNotice(Notice kind) {
+    if (!toastShowing() || notice_ != kind) return;
+    lv_obj_set_hidden(toast_, true);
+    notice_ = Notice::None;
 }
 void ApplicationView::service(uint32_t now) {
     host_.waveform().service(now);
@@ -320,11 +325,8 @@ void ApplicationView::service(uint32_t now) {
     if (mode_ == MeasurementMode::Oscilloscope && !host_.overlayActive()) overview_.update(host_.waveform().model());
     if (statusRight_ != host_.statusRight()) refreshIndicators(); // Also catches states set by the screens.
     // Panels that refresh themselves must not bury a message the user has yet to read.
-    if (toastActive_ && lv_obj_get_index(toast_)+1!=int32_t(lv_obj_get_child_count(lv_obj_get_parent(toast_))))
+    if (toastShowing() && lv_obj_get_index(toast_)+1!=int32_t(lv_obj_get_child_count(lv_obj_get_parent(toast_))))
         lv_obj_move_foreground(toast_);
-    if (toastActive_ && int32_t(now - toastUntil_) >= 0) {
-        lv_obj_set_hidden(toast_, true);
-        toastActive_ = false;
-    }
+    if (toastShowing() && int32_t(now - toastUntil_) >= 0) dismissNotice(notice_);
 }
 } // namespace openosc

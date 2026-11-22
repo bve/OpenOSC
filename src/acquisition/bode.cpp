@@ -137,6 +137,10 @@ bool BodeSweep::start(const BodeSettings &settings, const BodeGrid &grid, const 
     settings_ = settings; grid_ = grid; request_ = base; points_ = points;
     for (unsigned i = 0; i < grid.count; ++i) points[i] = {};
     request_.frontend.enabled[0] = request_.frontend.enabled[1] = true;
+    // GitHub #87: both inputs AC for the whole sweep, set once here so every point's capture (and each
+    // range change) keeps them; a DUT's DC level would otherwise clip a range the tone fits in. The
+    // user's couplings are the original's: restored with it.
+    request_.frontend.coupling[0] = request_.frontend.coupling[1] = Coupling::Ac;
     request_.trigger.mode = TriggerMode::Auto;
     request_.trigger.channel = Channel::Ch1;
     request_.rollAuto = false;

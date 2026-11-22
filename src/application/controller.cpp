@@ -185,10 +185,8 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         if (shots_.busy()) {
             shots_.service();
             boot_diagnostics.progress = shots_.percent();
-            if (!shots_.busy()) {
-                if (imageShowing_) loadImage(now);
-                view_.notify(shots_.succeeded() ? shots_.path() : shots_.error(), now);
-            } else if (shots_.percent()/5 != shotProgress_/5) {
+            if (!shots_.busy()) finishScreenshot(now);
+            else if (shots_.percent()/5 != shotProgress_/5) {
                 shotProgress_=shots_.percent();
                 char progress[40]; std::snprintf(progress,sizeof progress,"Saving screenshot: %u%%",shotProgress_);
                 view_.notify(progress,now);

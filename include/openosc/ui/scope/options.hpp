@@ -21,6 +21,9 @@ struct ChannelOptions {
     uint16_t gainPercent = 100;
     uint8_t width = 1, opacity = 255;
     bool visible = true, invert = false;
+    // The held view's mV/div at the probe tip, or 0 for the recorded scale. This changes only
+    // projection; the held samples, calibration and acquisition metadata retain their values.
+    float heldMillivoltsAtTip = 0;
 };
 struct CursorOptions {
     uint16_t xA = 250, xB = 750, yA = 250, yB = 750;

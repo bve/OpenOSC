@@ -2,7 +2,8 @@
 #include "openosc/platform/input.hpp"
 #include "openosc/ui/editors/scope_actions.hpp"
 #include "openosc/acquisition/timebases.hpp"
-#include "openosc/ui/scope/controls.hpp"
+#include "openosc/acquisition/ranges.hpp"
+#include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
 #include <algorithm>
 
@@ -100,20 +101,37 @@ int ApplicationController::triggerStep(int direction, bool fine) {
 // Issue #7, as on the factory firmware: the time/div is shared by HOLD and RUN. A held record is
 // shown at the next capture's time/div, whoever chose it (Left/Right, the Timebase menu, a host),
 // and RUN keeps it; the record's metadata, lease and capture are untouched. FFT keeps its own axis.
-void ApplicationController::followNextTimebase() {
+// Issue #93: so is each channel's V/div (its range and probe, F1 Up/Down, the Channel menu, a host),
+// for a calibrated record (an uncalibrated one has no volts to rescale: the change stays pending).
+void ApplicationController::followNextCapture() {
     const auto &model = view_.waveform().model();
-    const bool held = data_.scopeHeld() && model.hasFrame() && model.metadata().timebaseNs &&
-                      view_.waveform().options().mode != plot::Mode::Spectrum;
-    const uint64_t next = data_.scopeRequest().timebaseNs;
-    const uint64_t shown = held && next != model.metadata().timebaseNs ? next : 0;
-    if (view_.waveform().options().heldTimebaseNs == shown) return; // Every display pass asks: no copy.
-    auto options = view_.waveform().options();
-    if (held) { // The chosen scale replaces the zoom, here and after RUN.
-        beginHeldView();
+    const auto &m = model.metadata();
+    const auto &request = data_.scopeRequest();
+    const auto &next = data_.scopeMetadata();
+    const auto &current = view_.waveform().options();
+    const bool held = data_.scopeHeld() && model.hasFrame() && current.mode != plot::Mode::Spectrum;
+    if (!held && !current.heldTimebaseNs && !current.channels[0].heldMillivoltsAtTip && !current.channels[1].heldMillivoltsAtTip)
+        return;
+    auto options = current;
+    options.heldTimebaseNs = held && m.timebaseNs && request.timebaseNs != m.timebaseNs ? request.timebaseNs : 0;
+    bool scales = false;
+    for (unsigned c = 0; c < 2; ++c) {
+        const auto &own = m.channels[c];
+        const auto &target = next.channels[c];
+        const bool differs = held && own.enabled && own.calibrated &&
+            (target.millivoltsPerDivision != own.millivoltsPerDivision || target.probeNumerator != own.probeNumerator ||
+             target.probeDenominator != own.probeDenominator);
+        auto &o = options.channels[c];
+        o.heldMillivoltsAtTip = differs ? float(plot::DisplayScale::nominalMillivolts(target)) : 0;
+        scales |= o.heldMillivoltsAtTip != current.channels[c].heldMillivoltsAtTip;
+    }
+    const bool time = options.heldTimebaseNs != current.heldTimebaseNs;
+    if (!time && !scales) return;
+    if (held) beginHeldView();
+    if (held && time) { // The chosen time/div replaces the zoom, here and after RUN.
         options.zoom = options.zoomOut = 1;
         heldView_.zoom = heldView_.zoomOut = 1;
     }
-    options.heldTimebaseNs = shown;
     view_.waveform().configure(options);
     dataRefresh_ = true;
 }
@@ -229,37 +247,34 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         moveTrace(arrows, now, fine);
         return;
     }
-    if (data_.scopeHeld()) { // A held frame cannot be re-acquired: Up/Down scale its view.
+    // F1: Up/Down the selected channel's V/div, Left/Right the time/div, one standard step each, in RUN
+    // and HOLD alike. A held record cannot be re-acquired: they stage the next capture (no relay
+    // switches, no new arm; RUN applies them) and the record is shown at them (followNextCapture,
+    // issues #7, #93). A held FFT's Left/Right zoom its bins instead.
+    const bool held = data_.scopeHeld();
+    uint32_t steps = keys;
+    if (held && view_.waveform().options().mode == plot::Mode::Spectrum && (keys & (Keypad::Left | Keypad::Right))) {
         beginHeldView();
-        plot::Controls controls;
-        controls.options = view_.waveform().options();
-        controls.channel = selectedChannel_;
-        if (keys & (Keypad::Up | Keypad::Down)) controls.adjust(plot::Controls::Gain, keys & Keypad::Up ? -1 : 1); // Up widens V/div.
-        auto &view = controls.options;
-        const bool spectrum = view.mode == plot::Mode::Spectrum;
-        if (spectrum && (keys & Keypad::Right)) view.zoom = std::min<uint16_t>(256, view.zoom * 2); // FFT: its bins.
-        if (spectrum && (keys & Keypad::Left) && view.zoom > 1) view.zoom /= 2;
-        view_.waveform().configure(controls.options);
-        if (spectrum || !(keys & (Keypad::Left | Keypad::Right))) return;
-        // Left/Right stage the next capture's time/div: no capture starts, the record stays held.
-        auto request = data_.scopeRequest();
-        stepTimebase(request, keys);
-        plot::XyMode::constrain(view_.waveform().options(), request);
-        if (request.same(data_.scopeRequest())) return; // At 10 ns, 20 s or X-Y's limit.
-        if (!applyScope(request, now, ScopeApply::StageIfHeld)) { view_.notify("Finish data transfer first", now); return; }
-        followNextTimebase();
-        return;
+        auto view = view_.waveform().options();
+        if (keys & Keypad::Right) view.zoom = std::min<uint16_t>(256, view.zoom * 2);
+        if ((keys & Keypad::Left) && view.zoom > 1) view.zoom /= 2;
+        view_.waveform().configure(view);
+        steps &= ~uint32_t(Keypad::Left | Keypad::Right);
     }
     auto request = data_.scopeRequest();
     auto &range = request.frontend.range[selectedChannel_];
-    if ((keys & Keypad::Up) && range < 10) ++range; // Ranges ascend with V/div; the factory's Up is range + 1.
-    if ((keys & Keypad::Down) && range) --range;
-    stepTimebase(request, keys);
+    if ((steps & Keypad::Up) && range + 1u < scope::VoltageRanges::Count) ++range; // Ranges ascend with V/div; the factory's Up is range + 1.
+    if ((steps & Keypad::Down) && range) --range;
+    stepTimebase(request, steps);
     plot::XyMode::constrain(view_.waveform().options(), request);
+    if (held && request.same(data_.scopeRequest())) return; // At a limit: nothing to stage.
     const unsigned source = unsigned(request.trigger.channel);
     const auto limits = request.frontend.range[source] == data_.scopeRequest().frontend.range[source]
         ? scope::TriggerLevel::Bounds{} : triggerBounds(request);
-    if (!applyFollowing(request, now, ScopeApply::Configure, LevelIntent::Follow, limits))
+    if (!applyFollowing(request, now, held ? ScopeApply::StageIfHeld : ScopeApply::Configure, LevelIntent::Follow, limits)) {
         view_.notify("Finish data transfer first", now);
+        return;
+    }
+    if (held) followNextCapture();
 }
 } // namespace openosc

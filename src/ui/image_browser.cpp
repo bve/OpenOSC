@@ -8,7 +8,7 @@ void ApplicationView::images(const ui::ImageList &images) {
 // The picture keeps its size (256x192 fitted, or 320x240 at 1:1 over everything): no room for the
 // cards, so they hide and the fitted view's header says the keys in a line (`keys`, SoftKeys::line).
 void ApplicationView::imagePreview(const char *name,const uint16_t *pixels, bool fullSize, const char *keys) {
-    lv_obj_set_hidden(toast_,true); toastActive_=false;
+    dismissNotice(notice_);
     menuFrame("IMAGE");
     host_.overlay(false);
     lv_obj_set_pos(menu_,0,fullSize ? 0 : 20);

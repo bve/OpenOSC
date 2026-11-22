@@ -4,17 +4,20 @@
 #include <cstdio>
 
 namespace openosc::plot {
-// What one division of the plot stands for: the shown record's own metadata, through its probe,
-// the digital gain and the zoom. Every label of a plotted trace reads its scale from here.
+// What one division of the plot stands for, including the probe, digital gain and zoom.
 struct ChannelScale {
     double perDivision = 0;
     const char *unit = "V";
 };
 class DisplayScale {
 public:
+    static double nominalMillivolts(const scope::ChannelMetadata &metadata) {
+        return double(metadata.millivoltsPerDivision) * metadata.probeNumerator / metadata.probeDenominator;
+    }
     static ChannelScale channel(const scope::ChannelMetadata &metadata, const ChannelOptions &options) {
-        const double divisions = metadata.calibrated ? metadata.millivoltsPerDivision / 1000.0 * metadata.probeNumerator / metadata.probeDenominator : 32;
-        return {divisions * 100 / options.gainPercent, metadata.calibrated ? "V" : "cnt"};
+        if (!metadata.calibrated) return {3200.0 / options.gainPercent, "cnt"};
+        const double millivolts = Axis::held(metadata, options) ? options.heldMillivoltsAtTip : nominalMillivolts(metadata);
+        return {millivolts / (10.0 * options.gainPercent), "V"};
     }
     static double secondsPerDivision(const Viewport &view, const scope::FrameMetadata &metadata) {
         return view.spanQ16 / 65536.0 / metadata.samplesPerSecond.value() / 10;
@@ -27,9 +30,13 @@ public:
         Decimal::fraction(uint64_t(metadata.probeNumerator) * 1000 / metadata.probeDenominator, 1000, number, sizeof number, 3);
         std::snprintf(output, capacity, "x%s", number);
     }
-    // Whether the next capture's V/div (probe included) differs from the record's own.
-    static bool voltsPending(const scope::FrameMetadata &record, const scope::FrameMetadata &next, unsigned c) {
+    // Whether the next capture's V/div (probe included) differs from the one the record is shown at:
+    // its own, or the held V/div it already follows (issue #93).
+    static bool voltsPending(const scope::FrameMetadata &record, const Options &options, const scope::FrameMetadata &next, unsigned c) {
         const auto &a = record.channels[c], &b = next.channels[c];
+        const auto &o = options.channels[c];
+        if (Axis::held(a, o))
+            return o.heldMillivoltsAtTip != float(nominalMillivolts(b));
         return a.millivoltsPerDivision != b.millivoltsPerDivision || a.probeNumerator != b.probeNumerator ||
                a.probeDenominator != b.probeDenominator;
     }
