@@ -95,6 +95,8 @@ constexpr SettingsEntry gain[] = {
     {"Expected span",Action::GainSpan},
     {"Gain in force",Action::GainInForce},
     {"Start measurement",Action::CalibrateGain},
+    {"Factory gain",Action::GainFactory},       // GitHub #80: each channel's scale from the factory record.
+    {"Match to other channel",Action::MatchGain}, // The Channel above to the other one, on one source.
     {"Use factory gain",Action::FactoryGain},
     {"Back",Action::Back},
 };

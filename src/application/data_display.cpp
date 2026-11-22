@@ -30,6 +30,7 @@ void ApplicationController::pauseHiddenCapture(uint32_t now, bool enumerating) {
 #if OPENOSC_BOARD == 703
         || (panel_ == Panel::InterleaveMatch && interleaveMatch_.step() == calibration::InterleaveMatchWizard::Step::Measuring)
 #endif
+        || panel_ == Panel::GainMatch // Live capture is the wizard's source.
         || bodeRunning() // A sweep takes records behind its own plot.
         ;
     if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !measuring && !autoBusy() &&
@@ -58,7 +59,7 @@ void ApplicationController::refreshSoftKeys() {
     else if (state_.settingsOpen) keys = Keys::list(editing && !settingsMenu_.information());
     else if (panel_ == Panel::Confirmation) keys = Keys::cancel("");
     else if (panel_ == Panel::Zero) keys = editing ? Keys::list(true) : Keys::cancel("Calibration");
-    else if (panel_ == Panel::InterleaveMatch) keys = Keys::cancel("");
+    else if (panel_ == Panel::InterleaveMatch || panel_ == Panel::GainMatch) keys = Keys::cancel("");
     else if (panel_ == Panel::Bode && view_.bode().visible()) {
         // Run waits for a restore still unconfirmed (a ZT706S acknowledge): no sweep over it.
         keys.keys[0] = bodeRunning() ? ui::SoftKey{"Stop", "Sweep", true} : ui::SoftKey{"Run", "Sweep", !bodeRestoring()};
@@ -175,7 +176,8 @@ void ApplicationController::displayData(uint32_t now) {
                               : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
     // Bode (#72): the sweep's own service takes its records; no readouts, no decoder, no trace meanwhile.
-    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::Bode) {
+    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::GainMatch ||
+        panel_==Panel::Bode) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
         dataAt_ = now;
         if (state_.mode == MeasurementMode::Oscilloscope) {

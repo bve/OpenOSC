@@ -18,6 +18,9 @@ struct CalibrationStatus {
     double span = 0, gainInForce = 1;                 // Codes the reference should give; the draft cell's factor.
     float interleaveInForce = 0, interleaveSaved = 0;
     bool interleaveSavedEnabled = false;
+    // Each channel's factory scale gain in hundredths (the record's word, 120 without one; 0: none). In
+    // the struct's tail padding: the Settings frames on the key chain (stack budget) do not grow.
+    uint16_t factoryGainHundredths[2]{};
 };
 // The Settings rows of those pages (SettingsProperties hands them over): Choice channel and range,
 // Number reference (by the Choice of its step: 1/10/100 mV, 1/10 V; 1 mV resolution, either sign)

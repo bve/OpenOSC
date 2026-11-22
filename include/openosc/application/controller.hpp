@@ -126,6 +126,13 @@ private:
     // Interleave CH1 (ZT703S) from the menu or SCPI: applied at once and saved; false when refused.
     bool selectInterleave(scope::InterleaveMode mode, uint32_t now);
     void serviceInterleaveOffsetUi(uint32_t now);
+    // Scope calibration > Gain > Match to other channel (GitHub #80, gain_match.cpp).
+    void openGainMatch(uint32_t now);
+    // Out of line: its rows would grow onKeys' frame on the deepest key chain (stack budget).
+    [[gnu::noinline]] void gainMatchKeys(uint32_t keys, uint32_t now);
+    void serviceGainMatchUi(uint32_t now);
+    void finishGainMatch(uint32_t now, const char *notice, bool returnToSettings = true);
+    void showGainMatch();
 #if OPENOSC_BOARD == 703
     void openInterleaveMatch(uint32_t now);
     void interleaveMatchKeys(uint32_t keys, uint32_t now);
@@ -315,7 +322,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch, Bode };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch, GainMatch, Bode };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;

@@ -18,6 +18,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
             "Cannot load calibration JSON",now);
         break;
     case ui::SettingsAction::CalibrateGain: confirmGain(now); break;
+    case ui::SettingsAction::MatchGain: openGainMatch(now); break;
     case ui::SettingsAction::FactoryGain:
         confirmOperation(ui::Confirmation("USE FACTORY GAIN?","Disable user gain","Saved gain values are kept"),&ApplicationController::disableGain);
         break;

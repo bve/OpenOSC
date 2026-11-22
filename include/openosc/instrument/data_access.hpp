@@ -198,6 +198,25 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     calibration::GainFile &gainFile() { return gainFile_; }
     // The user gain off (its values stay in the file); refused when the file was not read.
     bool factoryGain();
+    // The cell cannot be saved without changing others (GainProfile::cellSavable): the saved profile
+    // is off (Use factory gain) and holds other factors that saving would bring back.
+    bool gainCellBlocked(unsigned channel,unsigned range) const {
+        return gainFile_.loaded() && !gainFile_.values().cellSavable(channel,range);
+    }
+    // ChannelMatch (GitHub #80) on the user's own RUN records: Ok, or Busy (not Scope RUN, HOLD, a
+    // calibration, Auto trials or a recording), Uncalibrated (no factory record, a channel without
+    // scale), IoError (scope_gain.json unread), InvalidArgument (not both channels on at one V/div,
+    // DC, or Roll). Both channels on: no interleave and no range boost, the physical range is the V/div.
+    DataStatus gainMatchReady() const;
+    // One measured cell into scope_gain.json, then in force for new records: every other cell as
+    // saved. InvalidArgument: a factor out of bounds or gainCellBlocked; IoError: not read or not
+    // written (the gain in force stays).
+    DataStatus saveGain(unsigned channel,unsigned range,double factor);
+    // The factory scale gain of a channel (record word / 100, the built-in 1.20 without a record), 0: none.
+    double factoryScaleGain(unsigned channel) const {
+        return scopeCalibration_.nominal() ? calibration::ScopeCalibration::NominalGain
+             : calibration_.factoryScale(channel) ? calibration_.displayGain(channel) : 0;
+    }
     // ZT706S service interleave offset (Unsupported elsewhere, and while a calibration runs):
     // apply: in force for new records, not saved; save: the one in force to scope_interleave.json;
     // cancel: back to the saved one; reset: the factory record's, saved.

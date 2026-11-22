@@ -1,4 +1,5 @@
 #include "openosc/application/controller.hpp"
+#include <cmath>
 #include "openosc/platform/clocks.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/power.hpp"
@@ -12,6 +13,7 @@ ui::SettingsProperties ApplicationController::settingsRows() const {
     status.probeNumerator = request.probeNumerator[d.channel]; status.probeDenominator = request.probeDenominator[d.channel];
     status.spanKnown = data_.gainSpan(d.channel, d.range, d.referenceMillivolts / 1000.0, status.span);
     status.gainInForce = data_.gainInForce(d.channel, d.range);
+    for (unsigned c = 0; c < 2; ++c) status.factoryGainHundredths[c] = uint16_t(std::lround(data_.factoryScaleGain(c) * 100));
     status.interleaveInForce = data_.interleaveOffset();
     status.interleaveSaved = data_.savedInterleave().offset; status.interleaveSavedEnabled = data_.savedInterleave().enabled;
     ui::SettingsProperties rows(settingsMenu_, prefs_, ClockControl::activeMode(), calibrationDraft_, status);

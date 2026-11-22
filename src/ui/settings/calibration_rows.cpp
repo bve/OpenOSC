@@ -19,7 +19,7 @@ void codes(double value, char *output, size_t capacity) { // "-0.3 codes"
 bool CalibrationRows::handles(SettingsAction action) {
     switch (action) {
     case Action::GainChannel: case Action::GainRange: case Action::GainReference: case Action::GainReferenceStep: case Action::GainProbe:
-    case Action::GainSpan: case Action::GainInForce: case Action::InterleaveOffset: case Action::InterleaveInForce:
+    case Action::GainSpan: case Action::GainInForce: case Action::GainFactory: case Action::InterleaveOffset: case Action::InterleaveInForce:
     case Action::InterleaveSaved: return true;
     default: return false;
     }
@@ -63,6 +63,16 @@ void CalibrationRows::value(SettingsAction action, char *output, size_t capacity
         Decimal::fixed(status_.gainInForce, 4, number, sizeof number);
         std::snprintf(output, capacity, "x%s", number);
         break;
+    case Action::GainFactory: { // "x1.23 / x1.20": the record's words (GitHub #80), 1 % steps.
+        char gains[2][12];
+        for (unsigned c = 0; c < 2; ++c) {
+            const unsigned hundredths = status_.factoryGainHundredths[c];
+            if (hundredths) std::snprintf(gains[c], sizeof gains[c], "x%u.%02u", hundredths / 100, hundredths % 100);
+            else std::snprintf(gains[c], sizeof gains[c], "none");
+        }
+        std::snprintf(output, capacity, "%s / %s", gains[0], gains[1]);
+        break;
+    }
     case Action::InterleaveOffset: codes(draft_.interleaveTenths / 10.0, output, capacity); break;
     case Action::InterleaveInForce: codes(status_.interleaveInForce, output, capacity); break;
     case Action::InterleaveSaved:

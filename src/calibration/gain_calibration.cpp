@@ -96,9 +96,8 @@ bool GainCalibration::accept() {
 }
 bool GainCalibration::commit() {
     if (state_ != State::Complete || !file_.loaded()) return false;
-    auto values = file_.values(); // Every other cell as saved (unmeasured ones 1).
-    values.factoryCrc = calibration_.factory().crc(); values.enabled = true;
-    values.gain[channel_][range_] = float(proposed_);
+    // Every other cell as saved (unmeasured ones 1).
+    const auto values = file_.values().withCell(calibration_.factory().crc(), channel_, range_, proposed_);
     if (!file_.save(values)) return false;
     return calibration_.setGain(values);
 }

@@ -19,6 +19,13 @@ struct GainProfile {
     bool valid(const CalibrationData &factory) const;
     // The factor in force for a channel and range: 1 when disabled or out of the table.
     double factor(unsigned channel, unsigned range) const;
+    // Whether one measured cell can be saved (enabled) leaving every other cell in force as it is:
+    // always for an enabled profile; a disabled one (Use factory gain) only with every other cell at
+    // 1, since enabling it would bring its saved factors back (GitHub #80: no other channel or range
+    // changes, no saved value is erased).
+    bool cellSavable(unsigned channel, unsigned range) const;
+    // This profile with one measured cell: enabled, bound to `crc`, every other cell as it is.
+    GainProfile withCell(uint16_t crc, unsigned channel, unsigned range, double factor) const;
 };
 // Where the user gain is kept (GainFile on the calibration disk).
 class GainStore {

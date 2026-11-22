@@ -33,6 +33,28 @@ bool DataAccess::factoryGain() {
     calibrationChanged();
     return true;
 }
+DataStatus DataAccess::gainMatchReady() const {
+    if (zeroBusy() || zeroBlocked_ || internalCapture() || recorder_.busy() || scopeHeld_ || holdPending_ || !active_ || stopping_ ||
+        measurement_!=MeasurementMode::Oscilloscope || interleaveMeasure_.active()) return DataStatus::Busy;
+    if (!calibration_.valid() || !configuration_.channels[0].calibrated || !configuration_.channels[1].calibrated) return DataStatus::Uncalibrated;
+    if (!gainFile_.loaded()) return DataStatus::IoError;
+    const auto &f=request_.frontend;
+    if (!f.enabled[0] || !f.enabled[1] || f.range[0]!=f.range[1] || f.coupling[0]!=scope::Coupling::Dc ||
+        f.coupling[1]!=scope::Coupling::Dc || request_.rolling()) return DataStatus::InvalidArgument;
+    return DataStatus::Ok;
+}
+DataStatus DataAccess::saveGain(unsigned channel,unsigned range,double factor) {
+    if (zeroBusy()) return DataStatus::Busy;
+    if (!calibration_.valid()) return DataStatus::Uncalibrated;
+    if (!gainFile_.loaded()) return DataStatus::IoError;
+    if (channel>=calibration::GainProfile::Channels || range>=calibration::GainProfile::Ranges ||
+        !calibration::GainProfile::allowed(factor) || gainCellBlocked(channel,range)) return DataStatus::InvalidArgument;
+    const auto values=gainFile_.values().withCell(calibration_.crc(),channel,range,factor);
+    if (!gainFile_.save(values)) return DataStatus::IoError; // The gain in force stays.
+    scopeCalibration_.setGain(values);
+    calibrationChanged();
+    return DataStatus::Ok;
+}
 DataStatus DataAccess::interleaveChange() const {
     if (!board::Current::Features.adcInterleave) return DataStatus::Unsupported; // ZT703S: no interleaved capture.
     if (!calibration_.valid()) return DataStatus::Uncalibrated;
