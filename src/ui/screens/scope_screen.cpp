@@ -29,14 +29,18 @@ void ScopeScreen::activate(const ApplicationState &state) {
 }
 void ScopeScreen::settings(const scope::FrameMetadata &next, unsigned channel) {
     next_ = next;
-    channel_ = channel < 2 ? channel : 0;
+    select(channel);
     cards();
 }
 void ScopeScreen::context(unsigned channel, plot::Focus focus) {
     if (channel_ != channel) valid_ = false;
-    channel_ = channel < 2 ? channel : 0;
+    select(channel);
     focus_ = focus;
     cards();
+}
+void ScopeScreen::select(unsigned channel) {
+    channel_ = channel < 2 ? channel : 0;
+    host_.waveform().frontChannel(channel_);
 }
 // The generator running beside the capture; while its DAC stream loads the bus, ", ADC max /2": the
 // next captures' maximum sample rate is halved (a held record stays as it was captured).
@@ -123,7 +127,7 @@ void ScopeScreen::update(const scope::FrameView &frame, bool held, unsigned sele
     if (valid_ && held_ == held && channel_ == selected) return;
     valid_ = true;
     held_ = held;
-    channel_ = selected;
+    select(selected);
     host_.elements().text(ElementId::Measurements,"");
 }
 void ScopeScreen::nextFooterPage() {

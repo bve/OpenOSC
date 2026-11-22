@@ -56,6 +56,10 @@ public:
     bool cursorLines(const CursorOptions &cursors); // Only the overlay changes: nothing is re-projected.
     void cursorFocus(CursorLine line) { cursorFocus_ = line; }
     CursorLine cursorFocus() const { return cursorFocus_; }
+    // The selected channel's trace is drawn over the other's (GitHub #81): a view choice, the
+    // record, its channels and the projection stay as they are.
+    void frontChannel(unsigned channel) { frontChannel_ = channel & 1; }
+    unsigned frontChannel() const { return frontChannel_; }
     bool captureReference(unsigned channel);
     void clearReference() { reference_ = false; }
     void clearHistory();
@@ -114,6 +118,7 @@ private:
     scope::Channel triggerChannel_ = scope::Channel::Ch1;
     double triggerLevel_ = 0;
     CursorLine cursorFocus_ = CursorLine::None;
+    unsigned frontChannel_ = 0; // As the controller's first selection.
     bool valid_ = false, dirty_ = true, reference_ = false;
 };
 Storage &applicationStorage();

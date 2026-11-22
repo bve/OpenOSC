@@ -37,6 +37,7 @@ private:
     scope::CounterSnapshot counters_;
     bool countersValid_=false, readoutsPainted_=false;
     void cards();
+    void select(unsigned channel); // The cards' channel, its trace drawn in front (#81).
     unsigned channel_ = 0;
     bool held_ = false, valid_ = false;
     plot::Focus focus_ = plot::Focus::Scale;

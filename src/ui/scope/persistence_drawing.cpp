@@ -49,7 +49,10 @@ void Painter::persistence() {
     const bool infinite=bitmap.infinite();
     const unsigned wordPixels=infinite ? Persistence::InfinitePixelsPerWord : Persistence::FinitePixelsPerWord;
     const unsigned firstWord=left/wordPixels, endWord=(right+wordPixels-1)/wordPixels;
-    for (unsigned c=0; c<(o.mode==Mode::XY ? 1U : 3U); ++c) {
+    // Back to front as the traces: the other channel, the selected one, math (X-Y: one trail).
+    const unsigned front=model_.frontChannel(), order[3]={front^1,front,2};
+    for (unsigned c : order) {
+        if (o.mode==Mode::XY && c!=0) continue;
         if (c<2 && !o.channels[c].visible) continue;
         if (c==2 && (o.math==Math::Off || !infinite)) continue;
         const auto color=c<2 ? palette_.channels[c] : palette_.math;

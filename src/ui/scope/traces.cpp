@@ -32,11 +32,13 @@ void Painter::traces() {
     }
     if (model_.hasReference())
         trace(s.reference, palette_.reference, 160, 1, Style::Vectors, true);
+    // Each layer back to front: the selected channel last, over the other.
+    const unsigned front = model_.frontChannel(), order[2] = {front ^ 1, front};
     if (o.glow) {
-        glow(0);
-        glow(1);
+        glow(order[0]);
+        glow(order[1]);
     }
-    for (unsigned c = 0; c < 2; ++c) {
+    for (const unsigned c : order) {
         const auto &channel = o.channels[c];
         if (o.peakHold)
             trace(s.peaks[c], palette_.channels[c], 65U * channel.opacity / 255, 1, Style::Envelope);

@@ -29,6 +29,7 @@ public:
     void trigger(scope::Channel channel, double codes);
     bool cursorLines(const plot::CursorOptions &cursors);
     void cursorFocus(plot::CursorLine line);
+    void frontChannel(unsigned channel); // Repaints, a held record included, when it changes.
     // A one-line note in the top right corner of the plot; empty hides it.
     void note(const char *text, uint32_t color);
     // The frequency counter overlay in the top left corner; empty hides it.

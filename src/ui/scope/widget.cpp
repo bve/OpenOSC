@@ -84,6 +84,11 @@ void WaveformWidget::cursorFocus(plot::CursorLine line) {
     model_.cursorFocus(line);
     if (object_) lv_obj_invalidate(object_);
 }
+void WaveformWidget::frontChannel(unsigned channel) {
+    if (model_.frontChannel() == (channel & 1)) return;
+    model_.frontChannel(channel);
+    if (object_) lv_obj_invalidate(object_);
+}
 // A label over the plot on the plot's background; empty hides it.
 static void overlayLabel(lv_obj_t *label, const char *text, uint32_t color, uint32_t background) {
     if (!label) return;
