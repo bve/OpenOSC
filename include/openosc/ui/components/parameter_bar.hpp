@@ -35,7 +35,9 @@ public:
     // selected card's text takes it too (an explicit colour; the frame keeps the highlight); else
     // the selected text stays in the highlight. palette() on the next mode change restores the theme's.
     void text(const lv_font_t *font, uint32_t color, bool selected);
-    void item(unsigned index, const char *title, const char *value, bool marked = false);
+    // `condensed`: the value keeps the condensed 11 px face whatever its text (the Scope's F1 scales,
+    // issue #90: no change of face as they change); the screen layer only, a context fits its own.
+    void item(unsigned index, const char *title, const char *value, bool marked = false, bool condensed = false);
     void select(unsigned index);
     // A context's keys over the screen's: inert keys muted, never accented; the screen's own drawings
     // on the cards (the DMM's function signs) hidden. release(): the screen's cards as last set.
@@ -58,13 +60,13 @@ public:
 
 private:
     static constexpr unsigned TitleBytes = 24, ValueBytes = 40, Decorations = 4;
-    struct Card { char title[TitleBytes] = "", value[ValueBytes] = ""; bool marked = false; };
+    struct Card { char title[TitleBytes] = "", value[ValueBytes] = ""; bool marked = false, condensed = false; };
     static void resized(lv_event_t *event);
     void show(unsigned index, const char *title, const char *value); // Texts on the labels.
     void paint();                         // Borders and colours of the layer on show.
     void decorations(bool visible);       // The screen's own children of the cards.
     void arrange();
-    void fit(unsigned index); // The title's and the value's face: 12, or condensed 11 when 12 does not fit.
+    void fit(unsigned index); // The title's and the value's face: 12, or condensed 11 when 12 does not fit (or Card::condensed).
     lv_obj_t *root_ = nullptr;
     lv_obj_t *cards_[Count]{}, *titles_[Count]{}, *values_[Count]{};
     unsigned selected_ = Count, screenSelected_ = Count;

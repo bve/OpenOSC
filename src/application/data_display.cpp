@@ -247,7 +247,9 @@ void ApplicationController::displayData(uint32_t now) {
             return;
         }
         scope::FrameLease frame;
-        if (scopeFrame(frame)) {
+        // Nothing newer to show while Normal or Single waits: a moved view projects its record again.
+        const auto &shown = view_.waveform().model();
+        if (scopeFrame(frame) || (shown.needsFrame() && shown.hasFrame() && data_.acquireShownScope(frame, shown.metadata()))) {
             const auto sequence = frame.view().metadata().sequence;
             if (dataRefresh_ || lastScopeSequence_ != sequence || lastScopeHold_ != data_.scopeHeld() ||
                 lastScopeStatus_ != data_.status() || view_.waveform().needsFrame()) {

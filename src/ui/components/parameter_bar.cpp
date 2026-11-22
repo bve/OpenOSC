@@ -94,7 +94,8 @@ void ParameterBar::fit(unsigned i) {
     for (auto *label : {titles_[i], values_[i]}) {
         const auto *current = lv_obj_get_style_text_font(label, LV_PART_MAIN);
         if (current != Elements::font(12) && current != Elements::font(11)) continue; // Another theme size: kept.
-        const auto *font = Elements::textWidth(lv_label_get_text(label), 12) <= widths_[i] - 8 ? Elements::font(12) : Elements::font(11);
+        const bool condensed = label == values_[i] && !context_ && screen_[i].condensed;
+        const auto *font = !condensed && Elements::textWidth(lv_label_get_text(label), 12) <= widths_[i] - 8 ? Elements::font(12) : Elements::font(11);
         if (current != font) lv_obj_set_style_text_font(label, font, 0);
     }
 }
@@ -182,15 +183,16 @@ void ParameterBar::show(unsigned index, const char *title, const char *value) {
     if (std::strcmp(lv_label_get_text(titles_[index]), title)) { lv_label_set_text(titles_[index], title); fit(index); }
     if (std::strcmp(lv_label_get_text(values_[index]), value)) { lv_label_set_text(values_[index], value); fit(index); }
 }
-void ParameterBar::item(unsigned index, const char *title, const char *value, bool marked) {
+void ParameterBar::item(unsigned index, const char *title, const char *value, bool marked, bool condensed) {
     if (index >= Count) return;
     auto &card = screen_[index];
     std::snprintf(card.title, sizeof card.title, "%s", title);
     std::snprintf(card.value, sizeof card.value, "%s", value);
-    const bool remark = card.marked != marked;
-    card.marked = marked;
+    const bool remark = card.marked != marked, refit = card.condensed != condensed;
+    card.marked = marked; card.condensed = condensed;
     if (context_) return; // Kept for release().
     show(index, card.title, card.value);
+    if (refit) fit(index);
     if (remark) paint();
 }
 void ParameterBar::decorations(bool visible) {
@@ -227,6 +229,7 @@ void ParameterBar::context(const SoftKeys &keys) {
     for (unsigned i = 0; i < Count; ++i) {
         live_[i] = keys.keys[i].live;
         show(i, keys.keys[i].title, keys.keys[i].value);
+        if (screen_[i].condensed) fit(i);
     }
     selected_ = keys.selected < Count && keys.keys[keys.selected].live ? keys.selected : Count;
     paint();
@@ -237,6 +240,7 @@ void ParameterBar::release() {
     for (unsigned i = 0; i < Count; ++i) {
         live_[i] = true;
         show(i, screen_[i].title, screen_[i].value);
+        if (screen_[i].condensed) fit(i); // The same text as the context's keeps its face otherwise.
     }
     decorations(true);
     selected_ = screenSelected_;

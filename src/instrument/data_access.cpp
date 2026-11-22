@@ -141,8 +141,7 @@ bool DataAccess::acquireScope(scope::FrameLease &lease, bool consume) {
     if (!store_.acquireLatest(lease, consume))
         return false;
     if (lease.view().metadata().rolling) { lease.annotateTrigger(false,0); return true; }
-    if (!scopeHeld_ && request_.trigger.mode == scope::TriggerMode::Single &&
-        int32_t(lease.view().metadata().sequence - armSequence_) < 0) {
+    if (!scopeHeld_ && beforeArm(lease.view().metadata().sequence)) { // Normal too: a retained record is display only.
         lease.release(); return false;
     }
     const uint32_t sequence = lease.view().metadata().sequence;
@@ -162,6 +161,14 @@ bool DataAccess::acquireScope(scope::FrameLease &lease, bool consume) {
         return false;
     }
     return true;
+}
+bool DataAccess::acquireShownScope(scope::FrameLease &lease, const scope::FrameMetadata &shown) {
+    if (zeroBusy() || zeroBlocked_ || shown.rolling || !store_.acquireLatest(lease, false)) return false;
+    if (lease.view().metadata().sequence == shown.sequence &&
+        lease.view().metadata().timestampUs == shown.timestampUs &&
+        lease.annotateTrigger(shown.triggered, shown.triggerIndex, shown.triggerEdge)) return true;
+    lease.release();
+    return false;
 }
 const scope::FrameView *DataAccess::readoutFrame(uint32_t sequence) {
     if (readout_.valid() && readout_.view().metadata().sequence == sequence) return &readout_.view();

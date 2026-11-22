@@ -1,6 +1,7 @@
 #include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/ui/scope/model.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace openosc::plot {
 namespace {
@@ -29,8 +30,30 @@ int32_t TraceMove::panStep(const Model *model, bool fine) {
     const double span = double(view.spanQ16) / 65536 * Options::PanFull / (samples - 1);
     return int32_t(std::clamp(span / (fine ? view.width - 1 : 10) + .5, 1.0, Options::PanFull / 2.0));
 }
+bool TraceMove::panLimits(const Options &options, const Model &model, int32_t &low, int32_t &high) {
+    const auto &m = model.metadata();
+    const auto &shown = model.viewport();
+    if (!model.hasFrame() || m.rolling || m.samples < 2 || (options.mode != Mode::Time && options.mode != Mode::SpectrumOverlay))
+        return false;
+    Options origin = options; origin.panPpb = 0;
+    Viewport view; // The window at pan 0: a pan p moves its start by record * p / PanFull (Viewport::calculate).
+    if (!view.calculate(m, origin, shown.width, shown.height, shown.phaseQ16)) return false;
+    // Half a window past either end of the record, so a press always moves part of it; a zoomed-out
+    // window stays inside it (Viewport::calculate clamps it there).
+    const double record = double(m.samples - 1) * 65536, reach = options.zoomOut > 1 ? 0 : view.spanQ16 / 2.0;
+    const double first = -reach - double(view.startQ16), last = record - double(view.spanQ16) + reach - double(view.startQ16);
+    const double scale = Options::PanFull / record;
+    low = int32_t(std::clamp(std::ceil(std::min(first, last) * scale), -double(Options::PanFull), 0.0));
+    high = int32_t(std::clamp(std::floor(std::max(first, last) * scale), 0.0, double(Options::PanFull)));
+    return true;
+}
 bool TraceMove::pan(Options &options, int horizontal, const Model *model, bool fine) {
-    const auto next = int32_t(std::clamp<int64_t>(options.panPpb + int64_t(horizontal) * panStep(model, fine), -Options::PanFull, Options::PanFull));
+    if (!horizontal) return false;
+    int32_t low = -Options::PanFull, high = Options::PanFull;
+    if (model) panLimits(options, *model, low, high);
+    // The timebase or a stored setting may leave the pan outside today's limits.
+    const int32_t start = std::clamp(options.panPpb, low, high);
+    const auto next = int32_t(std::clamp<int64_t>(start + int64_t(horizontal) * panStep(model, fine), low, high));
     const bool changed = next != options.panPpb;
     options.panPpb = next;
     return changed;

@@ -130,10 +130,18 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
     panRepeats_ = fine || !sign || sign != panSign_ ? 0 : panRepeats_ + 1;
     panSign_ = sign;
     if (options.mode != plot::Mode::XY) horizontal *= 1 << std::min(3U, panRepeats_ / PanDoubling);
+    // A pan moves the record on show: none, or one whose memory a waiting capture took, has nothing
+    // to move, and a press must not change the view unseen (issue #89).
+    const auto &model = view_.waveform().model();
+    if (horizontal && options.mode != plot::Mode::XY &&
+        (!model.hasFrame() || (!model.metadata().rolling && !data_.scopeRecordStored()))) {
+        view_.notify("No record to move", now);
+        horizontal = 0;
+    }
     const auto change = focus_ == plot::Focus::Trigger
-        ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &view_.waveform().model(), false)}
+        ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &model, false)}
         : plot::TraceMove::apply(request, options, selectedChannel_, held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
-                                 &view_.waveform().model());
+                                 &model);
     if (change.request && !applyEdited(request, now)) view_.notify("Finish data transfer first", now);
     if (change.view) {
         view_.waveform().configure(options);

@@ -64,30 +64,37 @@ void ScopeScreen::cards() {
     const auto scaleValue = plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
     plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 3); // The strip uses the same precision.
     const bool spectrum = widget.options().mode == plot::Mode::Spectrum;
-    plot::Format::quantity(framed && !spectrum ? plot::DisplayScale::secondsPerDivision(model.viewport(), shown) : shown.timebaseNs / 1e9, "s", time, sizeof time, 3);
-    std::snprintf(value, sizeof value, "%s %s", scale, time); // F1 is VOL/TIME, as on the factory firmware.
+    const double secondsPerDivision = framed && !spectrum
+        ? plot::DisplayScale::secondsPerDivision(model.viewport(), shown) : shown.timebaseNs / 1e9;
+    plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
-    // F1 Scale: the value row is the shown record's V/div and s/div (what the plot is drawn at);
-    // scales asked for but not yet captured (a stopped or held record) are its title, marked in the
-    // highlight: only the scales that differ, as the first that fits the zone (12, else condensed 11):
-    // "Scale Next 2V 20us", "Next 2V 20us", or "2V 20us" (the highlight still says Next).
-    char volts[16] = "", seconds[16] = "";
-    if (framed && plot::DisplayScale::nextDiffers(shown, next_, channel_)) {
-        const auto scaleNext = plot::DisplayScale::channel(next_.channels[channel_], plot::ChannelOptions{});
-        plot::Format::quantity(scaleNext.perDivision, scaleNext.unit, volts, sizeof volts, 3);
-        plot::Format::quantity(next_.timebaseNs / 1e9, "s", seconds, sizeof seconds, 3);
-        char parts[40];
-        const bool voltsDiffer = std::strcmp(volts, scale) != 0, timeDiffers = std::strcmp(seconds, time) != 0;
-        std::snprintf(parts, sizeof parts, "%s%s%s", voltsDiffer || !timeDiffers ? volts : "",
-                      (voltsDiffer || !timeDiffers) && timeDiffers ? " " : "", timeDiffers ? seconds : "");
-        std::snprintf(next, sizeof next, "Next %s", parts);
-        const int room = ScreenLayout::ButtonWidth - 8;
-        const auto fits = [&](const char *text) { return Elements::textWidth(text, 12) <= room || Elements::textWidth(text, 11) <= room; };
-        std::snprintf(title, sizeof title, "Scale %s", next);
-        if (!fits(title)) std::snprintf(title, sizeof title, "%s", fits(next) ? next : parts);
-    } else std::snprintf(title, sizeof title, "Scale CH%u", channel_ + 1);
-    bar.item(0, title, value, *next);
+    // F1 Scale (issue #90): always the selected channel over the V/div and s/div the plot is drawn at, in
+    // the card's own font. Scales asked for but not yet captured (a held or waiting record) mark the
+    // title and are named on the Details line: only those that really differ from what is plotted.
+    if (framed) {
+        const bool volts = plot::DisplayScale::voltsPending(shown, next_, channel_);
+        const bool seconds = plot::DisplayScale::timePending(shown, widget.options(), next_);
+        char pendingVolts[16] = "", pendingTime[16] = "";
+        if (volts) {
+            const auto scaleNext = plot::DisplayScale::channel(next_.channels[channel_], plot::ChannelOptions{});
+            plot::Format::quantity(scaleNext.perDivision, scaleNext.unit, pendingVolts, sizeof pendingVolts, 3);
+        }
+        if (seconds) plot::Format::quantity(next_.timebaseNs / 1e9, "s", pendingTime, sizeof pendingTime, 3);
+        if (volts || seconds) std::snprintf(next, sizeof next, "Next %s%s%s", pendingVolts, volts && seconds ? " " : "", pendingTime);
+    }
+    std::snprintf(title, sizeof title, "Scale CH%u", channel_ + 1);
+    std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", channel_ + 1, plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
+    // Keep the font fixed. A wide pair uses two significant digits, then coarser unit prefixes
+    // if needed (for example, "500mcnt" becomes "0.5cnt").
+    std::snprintf(value, sizeof value, "%s %s", scale, time);
+    for (bool coarse : {false, true}) {
+        if (Elements::textWidth(value, 11) <= ScreenLayout::ButtonWidth - 8) break;
+        plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 2, coarse);
+        plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 2, coarse);
+        std::snprintf(value, sizeof value, "%s %s", scale, time);
+    }
+    bar.item(0, title, value, *next, true);
     // F2 Position: the channel it moves, with its coupling and probe.
     std::snprintf(value, sizeof value, "CH%u %s %s", channel_ + 1, plot::DisplayScale::coupling(selected), probe);
     bar.item(1, "Position", value);
@@ -107,7 +114,6 @@ void ScopeScreen::cards() {
     bar.tint(2, channelTint(unsigned(model.triggerChannel())));
     bar.tint(3, Tint::Neutral);
     if (!host_.overlayActive()) bar.select(unsigned(focus_));
-    std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", channel_ + 1, plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
     host_.elements().text(ElementId::Details, details);
 }
 void ScopeScreen::update(const scope::FrameView &frame, bool held, unsigned selected, DataStatus health) {

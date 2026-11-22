@@ -86,6 +86,13 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     scope::ChannelMetadata scopeChannelFor(const ScopeRequest &request, unsigned channel) const;
     // consume=false: a look that leaves the frame unseen (it is not released for capture).
     bool acquireScope(scope::FrameLease &lease, bool consume = true);
+    // The record on show (`shown`: its metadata as the view has it), while its memory still holds it,
+    // annotated with the trigger it was shown with: the view moves it again when acquireScope gives
+    // nothing (Normal or Single waiting, issue #89). No other reader takes a record this way.
+    bool acquireShownScope(scope::FrameLease &lease, const scope::FrameMetadata &shown);
+    // A record in the store (the one on show, or a newer one the view takes next): with none, a
+    // waiting capture took the shown record's memory and the view cannot be projected again.
+    bool scopeRecordStored() const { return store_.hasFrame(); }
     // The record on display, leased for readouts computed beside the waveform (ReadoutScheduler).
     // DataAccess revokes it itself before anything that needs that memory or a new capture
     // (configuration, HOLD/RUN, retain, zero, measurement change, shutdown), so nobody has to wait
@@ -353,6 +360,15 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool internalCapture() const;
     bool zeroTrial() const; // A zero calibration's trial phase: its captures alone are untriggered.
     bool reserveCapture(bool rolling, scope::CaptureBuffer &buffer);
+    // Issue #89: a change of the trigger alone from Auto or Normal into Normal or Single keeps the
+    // record on show for the view (acquireShownScope) when the capture has a second slot: it is from
+    // before the arm, so acquireScope, the trigger inspection and hosts refuse it. A one-slot geometry
+    // (Compact, Split, 512K) has no room for it: the store drops it as before.
+    bool retainsShown(const ScopeRequest &next) const;
+    // A record from before the arm of a Normal or Single capture (Auto takes any).
+    bool beforeArm(uint32_t sequence) const {
+        return request_.trigger.mode != scope::TriggerMode::Auto && int32_t(sequence - armSequence_) < 0;
+    }
     bool samplePlan(scope::SamplePlan &plan) const;
     bool samplePlan(scope::SamplePlan &plan, const scope::CaptureBuffer &buffer, bool rolling) const;
     bool planCapture(scope::SamplePlan &plan, scope::CaptureBuffer &buffer, bool &rolling) const;

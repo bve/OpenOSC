@@ -46,6 +46,8 @@ private:
     // without the 64-bit product, as quotient and remainder. The point is the trigger's index, or
     // with `anchored` (a locked time view) the record's pretrigger point (index - triggerShift).
     uint64_t pretrigger(const scope::FrameMetadata &m, bool anchored) const;
+    // The same length for any record point: it lies as far into the window as into the record.
+    uint64_t place(const scope::FrameMetadata &m, uint32_t point) const;
 };
 struct Axis {
     int32_t zeroQ8 = 0, codesPerDivisionQ8 = 8192;

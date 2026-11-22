@@ -27,11 +27,16 @@ public:
         Decimal::fraction(uint64_t(metadata.probeNumerator) * 1000 / metadata.probeDenominator, 1000, number, sizeof number, 3);
         std::snprintf(output, capacity, "x%s", number);
     }
-    // Whether the acquisition settings differ from the record: the next capture is a different one.
-    static bool nextDiffers(const scope::FrameMetadata &record, const scope::FrameMetadata &next, unsigned c) {
+    // Whether the next capture's V/div (probe included) differs from the record's own.
+    static bool voltsPending(const scope::FrameMetadata &record, const scope::FrameMetadata &next, unsigned c) {
         const auto &a = record.channels[c], &b = next.channels[c];
-        return record.timebaseNs != next.timebaseNs || a.millivoltsPerDivision != b.millivoltsPerDivision ||
-               a.probeNumerator != b.probeNumerator || a.probeDenominator != b.probeDenominator;
+        return a.millivoltsPerDivision != b.millivoltsPerDivision || a.probeNumerator != b.probeNumerator ||
+               a.probeDenominator != b.probeDenominator;
+    }
+    // Whether the next capture's time/div differs from the one the record is shown at: a held record
+    // already follows the next time/div (Options::heldTimebaseNs, issue #7), so that one is not pending.
+    static bool timePending(const scope::FrameMetadata &record, const Options &options, const scope::FrameMetadata &next) {
+        return (options.heldTimebaseNs ? options.heldTimebaseNs : record.timebaseNs) != next.timebaseNs;
     }
 };
 } // namespace openosc::plot

@@ -37,11 +37,15 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
         // The crossing, not the first sample past it, at the trigger's place (GitHub #34).
         if (phase < 65536 && phased(m, o)) { phaseQ16 = phase; startQ16 -= phase; }
     }
-    // Without a trigger, Auto still needs captured history on both sides of the initial
-    // window. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
+    // Without a trigger, Auto still needs captured history on both sides of the initial window: its
+    // pretrigger point (#65) is placed as a trigger there would be, so the marker keeps its place at
+    // any span (issue #89: a centred window put it up to half a point left). A record without one is
+    // centred. X-Y and FFT retain their own origin; explicit free positioning is unchanged.
     else if (!m.rolling && !m.triggered && o.lockTrigger &&
              (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay))
-        startQ16 += centered ? int64_t(m.pretrigger) * 65536 - int64_t(spanQ16 / 2) : (int64_t(record) - int64_t(spanQ16)) / 2;
+        startQ16 += centered ? int64_t(m.pretrigger) * 65536 - int64_t(spanQ16 / 2)
+                  : m.pretriggerKnown ? int64_t(m.pretrigger) * 65536 - int64_t(place(m, m.pretrigger))
+                  : (int64_t(record) - int64_t(spanQ16)) / 2;
     // An explicitly centered held trigger can leave part of the viewport outside the record.
     if (o.zoomOut > 1 && !centered) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
     return true;
@@ -53,7 +57,11 @@ uint64_t Viewport::pretrigger(const scope::FrameMetadata &m, bool anchored) cons
     if (m.samples < 2) return 0;
     // The record's pretrigger point (anchored: where a shifted trigger should have been), else its trigger.
     const int64_t anchor = int64_t(m.triggerIndex) - (anchored ? m.triggerShift : 0);
-    const uint64_t last = m.samples - 1, index = uint64_t(std::clamp<int64_t>(anchor, 0, int64_t(last)));
+    return place(m, uint32_t(std::clamp<int64_t>(anchor, 0, int64_t(m.samples - 1))));
+}
+uint64_t Viewport::place(const scope::FrameMetadata &m, uint32_t point) const {
+    if (m.samples < 2) return 0;
+    const uint64_t last = m.samples - 1, index = std::min<uint64_t>(point, last);
     return spanQ16 / last * index + spanQ16 % last * index / last;
 }
 void Viewport::column(unsigned x, uint32_t samples, uint32_t &first, uint32_t &last) const {

@@ -45,6 +45,13 @@ bool DataAccess::stageScope(const ScopeRequest &r) {
     staged_ = true;
     return true;
 }
+bool DataAccess::retainsShown(const ScopeRequest &next) const {
+    using Arena = scope::AcquisitionArena;
+    auto trigger = next; trigger.trigger = request_.trigger; // Everything but the trigger stays.
+    return next.trigger.mode != scope::TriggerMode::Auto && request_.trigger.mode != scope::TriggerMode::Single &&
+           trigger.same(request_) && !request_.rolling() && !internalCapture() && store_.hasFrame() &&
+           !store_.busy() && (store_.region() & Arena::Slots) && Arena::slots(request_.recordPoints, recordGeometry()) == 2;
+}
 bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preserveRecord) {
     // The same request under other offsets (a hardware zero, a calibration trial) is a change too.
     if (!force && request_.same(r) && !captureFailed_ && frontendGeneration_==scopeCalibration_.generation()) {
@@ -56,7 +63,8 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
         status_ = DataStatus::InvalidArgument;
         return false;
     }
-    if (!stopCapture(false) || (!preserveRecord && !store_.cancel())) {
+    const bool retain = !force && !preserveRecord && retainsShown(r);
+    if (!stopCapture(false) || (!preserveRecord && !retain && !store_.cancel())) {
         status_ = DataStatus::Busy;
         return false;
     }
@@ -81,6 +89,7 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     armSequence_ = sequence_ + 1;
     triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
     captureFailed_ = false;
+    if (retain) store_.consume(store_.sequence()); // Seen: never a reason for the capture to wait.
     if (active_ && measurement_ == MeasurementMode::Oscilloscope && !burst && !startCapture() && !captureWaiting_) {
         const auto failure = status_;
         request_ = previous;
@@ -472,7 +481,7 @@ bool DataAccess::reserveCapture(bool rolling, scope::CaptureBuffer &buffer) {
 // AutoSetup and zero calibration take the trial area whatever a host waits for; HOLD keeps its own
 // lease. A record older than a Single arm is no reader's any more (acquireScope refuses it).
 bool DataAccess::hostOwed(uint32_t now) const {
-    const bool stale = request_.trigger.mode == scope::TriggerMode::Single && int32_t(acceptedSequence_ - armSequence_) < 0;
+    const bool stale = beforeArm(acceptedSequence_);
     return !internalCapture() && !stale && store_.hasFrame() && store_.sequence() == acceptedSequence_ &&
            frameHosts_.owed(acceptedSequence_, acceptedAt_, now);
 }
@@ -652,8 +661,7 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
     if (!zeroBusy() && !zeroBlocked_ && active_ && !stopping_ && measurement_ == MeasurementMode::Oscilloscope && !scopeHeld_ &&
         store_.acquireUninspected(inspected_)) {
         uint32_t index = 0;
-        const bool fresh = request_.trigger.mode != scope::TriggerMode::Single ||
-                           int32_t(inspected_.view().metadata().sequence - armSequence_) >= 0;
+        const bool fresh = !beforeArm(inspected_.view().metadata().sequence);
         const bool found=fresh && findTrigger(inspected_.view(),index);
         const bool accepted=fresh && triggerAccepts(inspected_.view().metadata(),found); // A forced record too.
         triggerWaiting_ = !accepted;
