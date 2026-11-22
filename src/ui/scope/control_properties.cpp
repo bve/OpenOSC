@@ -122,6 +122,8 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
     case CounterAverage: pick(averaged, 3); break;
     case Persistence:
         if (i < choices(row) && Persistences[i] == InfinitePersistence) std::snprintf(text, capacity, "Infinite");
+        // A graded channel (GitHub #85) keeps its density for the persistence, or this with none.
+        else if (i == 0 && options.graded()) std::snprintf(text, capacity, "Off (density %u s)", Options::DensityHistoryMs / 1000U);
         else std::snprintf(text, capacity, "%u ms", i < choices(row) ? Persistences[i] : options.persistenceMs);
         break;
     case Average: std::snprintf(text, capacity, "%u", i < choices(row) ? Averages[i] : options.averaging); break;

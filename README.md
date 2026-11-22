@@ -141,6 +141,11 @@ Captured on a ZT703S running OpenOSC.
 - Configurable on-screen measurements, two per channel in the footer, time and level cursors
 - Hardware frequency counter with an averaged on-screen overlay
 - XY, MATH and reference waveforms; sin(x)/x and spline interpolation, fading or infinite persistence, Glow
+- Per-channel waveform density (**Channel → Density**) in Y-T and Y-T+FFT. Choose **Colors** to show
+  rare paths in cooler colors and frequent paths in warmer colors, or **Mono** with a selectable color.
+  Density defaults to **Off**. Its history follows **Analyze → Display → History → Persistence**.
+  Density uses a 1 s history with Persistence Off. **Infinite** keeps every observed path, and
+  **Clear history and reference** starts a new accumulation
 - FFT up to 2048 points with four window functions, dBFS or linear scale
 - Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view, event detail; decoded data saved as CSV

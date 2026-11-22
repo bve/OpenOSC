@@ -17,7 +17,8 @@ bool Options::valid() const {
     for (const auto &c : channels)
         if (c.positionPermille < -1000 || c.positionPermille > 2000 || c.gainPercent < 1 ||
             c.gainPercent > 6400 || c.width < 1 || c.width > 3 ||
-            !std::isfinite(c.heldMillivoltsAtTip) || c.heldMillivoltsAtTip < 0)
+            !std::isfinite(c.heldMillivoltsAtTip) || c.heldMillivoltsAtTip < 0 || unsigned(c.grade) > 2 ||
+            (c.gradeColor != ChannelOptions::InheritColor && c.gradeColor >= 16))
             return false;
     const auto &c = cursors;
     return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2;
@@ -41,7 +42,8 @@ bool Options::sameTransform(const Options &b) const {
         const auto &x = channels[i];
         const auto &y = b.channels[i];
         if (x.positionPermille != y.positionPermille || x.gainPercent != y.gainPercent ||
-            x.invert != y.invert || x.visible != y.visible || x.heldMillivoltsAtTip != y.heldMillivoltsAtTip)
+            x.invert != y.invert || x.visible != y.visible || x.heldMillivoltsAtTip != y.heldMillivoltsAtTip ||
+            x.graded() != y.graded())
             return false;
     }
     return true;

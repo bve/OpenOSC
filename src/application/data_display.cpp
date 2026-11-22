@@ -172,7 +172,10 @@ void ApplicationController::displayData(uint32_t now) {
         view_.multimeterBar(shownReading(meter, meterSelecting()), meter.status(data_.nowUs(),2000000), &meter.relative(), now);
     }
     if (state_.mode != MeasurementMode::Oscilloscope) readouts_.reset(data_); // Left the Scope: nothing kept.
-    const unsigned interval = panel_ != Panel::None ? 40 : state_.mode == MeasurementMode::Oscilloscope ? 16
+    // The density map can take a new capture just before the ordinary 16 ms UI interval.
+    // The display still presents completed buffers at its own refresh rate.
+    const unsigned scopeInterval = view_.waveform().options().graded() ? 15 : 16;
+    const unsigned interval = panel_ != Panel::None ? 40 : state_.mode == MeasurementMode::Oscilloscope ? scopeInterval
                               : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
     // Bode (#72): the sweep's own service takes its records; no readouts, no decoder, no trace meanwhile.

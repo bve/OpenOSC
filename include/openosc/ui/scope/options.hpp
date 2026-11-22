@@ -16,7 +16,11 @@ enum class Reduction : uint8_t { Peak, Mean, Adaptive };
 enum class Interpolation : uint8_t { Linear, Sinc, Spline };
 enum class Focus : uint8_t { Scale, Position, Trigger, Cursor }; // What the arrows act on: F1..F4.
 enum class CursorLine : uint8_t { None, TimeA, TimeB, LevelA, LevelB };
+// Density grading (GitHub #85): a channel drawn by how often its recent fresh records crossed each
+// pixel (Persistence keeps the levels), in heat colours or one colour's intensity.
+enum class Grade : uint8_t { Off, Colors, Mono };
 struct ChannelOptions {
+    static constexpr uint8_t InheritColor = 0xff;
     int16_t positionPermille = 500;
     uint16_t gainPercent = 100;
     uint8_t width = 1, opacity = 255;
@@ -24,6 +28,9 @@ struct ChannelOptions {
     // The held view's mV/div at the probe tip, or 0 for the recorded scale. This changes only
     // projection; the held samples, calibration and acquisition metadata retain their values.
     float heldMillivoltsAtTip = 0;
+    Grade grade = Grade::Off;
+    uint8_t gradeColor = InheritColor; // Mono's colour: the channel's own, else a ColorCatalog swatch.
+    bool graded() const { return grade != Grade::Off; }
 };
 struct CursorOptions {
     uint16_t xA = 250, xB = 750, yA = 250, yB = 750;
@@ -59,6 +66,10 @@ struct Options {
     // held view shows what RUN will use. 0: the record's own. View only, never the record's metadata.
     uint64_t heldTimebaseNs = 0;
     bool centerHeldTrigger = false; // View-only override of a held record's original pretrigger.
+    // A density plane's history (GitHub #85): the persistence's, or DensityHistoryMs with none.
+    static constexpr uint16_t DensityHistoryMs = 1000;
+    uint16_t densityHistoryMs() const { return persistenceMs ? persistenceMs : DensityHistoryMs; }
+    bool graded() const { return (mode == Mode::Time || mode == Mode::SpectrumOverlay) && (channels[0].graded() || channels[1].graded()); }
     bool valid() const;
     bool sameTransform(const Options &other) const;
     // What HOLD may change to explore one record; a new capture starts from `saved` again.

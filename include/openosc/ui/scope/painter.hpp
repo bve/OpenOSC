@@ -34,6 +34,8 @@ private:
     void recordGapLabels(const RecordGaps &gaps);
     void traces();
     void glow(unsigned channel);
+    void density(unsigned channel); // A graded channel's density plane, from its own palette (GitHub #85).
+    bool densityShown(unsigned channel) const; // Graded with levels to draw: no trace, no glow over it.
     void spectrum();
     void persistence();
     void markers();

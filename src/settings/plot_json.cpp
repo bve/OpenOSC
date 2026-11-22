@@ -1,4 +1,5 @@
 #include "openosc/settings/plot_json.hpp"
+#include "openosc/settings/color_value.hpp"
 
 namespace openosc {
 void PlotJson::encode(JsonObject root, const plot::Options &o) {
@@ -41,6 +42,9 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
         item["opacity"] = c.opacity;
         item["visible"] = c.visible;
         item["invert"] = c.invert;
+        static constexpr const char *grades[] = {"off", "colors", "mono"};
+        item["grade"] = grades[unsigned(c.grade) % 3];
+        if (c.gradeColor != plot::ChannelOptions::InheritColor) item["grade_color"] = ColorCatalog::swatch(c.gradeColor).key;
     }
     auto cursor = root.createNestedObject("cursors");
     const auto &c = o.cursors;

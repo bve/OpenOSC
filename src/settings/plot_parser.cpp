@@ -1,4 +1,5 @@
 #include "openosc/settings/plot_json.hpp"
+#include "openosc/settings/color_value.hpp"
 #include <cstring>
 #include <limits>
 
@@ -95,6 +96,15 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
                 !integer(input, "opacity", c.opacity) || !flag(input, "visible", c.visible) ||
                 !flag(input, "invert", c.invert))
                 return false;
+            // GitHub #85: absent in older themes (Off, the channel's colour).
+            static constexpr const char *grades[] = {"off", "colors", "mono"};
+            if (!choice(input, "grade", c.grade, grades)) return false;
+            if (input.containsKey("grade_color")) {
+                if (!input["grade_color"].is<const char *>()) return false;
+                const uint8_t swatch = ColorCatalog::byKey(input["grade_color"].as<const char *>());
+                if (swatch == ColorValue::Inherit) return false;
+                c.gradeColor = swatch;
+            }
         }
     }
     if (object.containsKey("cursors")) {

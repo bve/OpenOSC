@@ -63,6 +63,7 @@ void WaveformWidget::clear() {
         lv_obj_invalidate(object_);
 }
 void WaveformWidget::held(bool value) {
+    model_.hold(value, lv_tick_get());
     if (value && !held_) {
         frozenAt_ = lv_tick_get();
         if (model_.agePersistence(frozenAt_) && object_) lv_obj_invalidate(object_);

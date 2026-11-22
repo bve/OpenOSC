@@ -11,8 +11,11 @@ void ApplicationController::scopeEditorKeys(uint32_t keys, uint32_t now) {
 // request in force again and the scale/position selection stays.
 void ApplicationController::commitScopeEditor(ui::ScopeEditor &editor, uint32_t now) {
     const auto &before = view_.waveform().options();
-    const bool changedPlot = before.channels[0].invert != editor.plot().channels[0].invert ||
-                             before.channels[1].invert != editor.plot().channels[1].invert;
+    bool changedPlot = false; // The view's rows: Invert, Density and its colour (GitHub #85).
+    for (unsigned c = 0; c < 2; ++c) {
+        const auto &a = before.channels[c], &b = editor.plot().channels[c];
+        changedPlot |= a.invert != b.invert || a.grade != b.grade || a.gradeColor != b.gradeColor;
+    }
     const bool changedRequest = !editor.request().same(data_.scopeRequest());
     if (changedRequest && !applyEdited(editor.request(), now)) {
         view_.notify("Finish data transfer first", now);

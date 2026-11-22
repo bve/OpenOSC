@@ -14,6 +14,14 @@ template <class T, size_t N> void cycle(T &value, int direction, const T (&choic
         index = 0;
     value = choices[(index + N + direction) % N];
 }
+// Digital gain (GitHub #98): ticks 1, 25, 50, ..., 6400 percent. A value between ticks (a stored
+// legacy one) moves to the adjacent tick in the direction; 1 stays the lowest (0 has no volts/div).
+uint16_t stepGain(uint16_t percent, int direction) {
+    constexpr int Tick = 25, Lowest = 1, Highest = 6400;
+    const int value = std::clamp<int>(percent, Lowest, Highest);
+    const int next = direction > 0 ? (value / Tick + 1) * Tick : ((value - 1) / Tick) * Tick;
+    return uint16_t(std::clamp(next, Lowest, Highest));
+}
 } // namespace
 void Controls::adjustPan(int direction, bool fine) {
     const int sign = direction > 0 ? 1 : -1;
@@ -92,7 +100,7 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
         c.invert = !c.invert;
         break;
     case Gain:
-        step(c.gainPercent, direction, 25, 1, 6400);
+        c.gainPercent = stepGain(c.gainPercent, direction);
         break;
     case Position:
         step(c.positionPermille, direction, 25, -1000, 2000);

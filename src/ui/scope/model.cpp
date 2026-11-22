@@ -12,6 +12,8 @@ void Model::reset() {
     for (auto &t : storage_.traces)
         t.enabled = false;
     clearHistory();
+    densityEdge_ = {};
+    held_ = false;
     xyCount_ = 0;
     spectrumDirty_ = true;
     statistics_ = {};
@@ -48,6 +50,9 @@ bool Model::configure(const Options &options) {
     spectrumDirty_ = spectrumDirty_ || options_.spectrum.channel != options.spectrum.channel ||
         options_.spectrum.window != options.spectrum.window || options_.spectrum.removeDc != options.spectrum.removeDc;
     options_ = options;
+    // Graded channels in a time view only (X-Y and the FFT keep their own drawing): a change clears.
+    const bool time = options.mode == Mode::Time || options.mode == Mode::SpectrumOverlay;
+    storage_.persistence.grade(time ? uint8_t(options.channels[0].graded() | options.channels[1].graded() << 1) : 0);
     dirty_ = true;
     return true;
 }
@@ -86,6 +91,12 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
         return true;
     if (!fresh && alignment)
         reset = true;
+    if (fresh && !held_ && edge.known) { // Another trigger level, slope or source: other paths (GitHub #85).
+        if (densityEdge_.known && (edge.level != densityEdge_.level || edge.rising != densityEdge_.rising ||
+                                   edge.channel != densityEdge_.channel))
+            storage_.persistence.clearDensity();
+        densityEdge_ = edge;
+    }
     if (reset) {
         clearHistory();
         reference_ = false;
@@ -116,12 +127,19 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
         clear();
         return false;
     }
-    if (options_.persistenceMs && fresh && options_.mode!=Mode::Spectrum) accumulate();
+    // Fresh records only: a repaint or a held view never counts again (GitHub #85).
+    if ((options_.persistenceMs || storage_.persistence.graded(0) || storage_.persistence.graded(1)) && fresh &&
+        options_.mode!=Mode::Spectrum) accumulate(now);
     if (fresh) ++statistics_.frames;
     dirty_ = false;
     ++statistics_.projections;
     valid_ = true;
     return true;
+}
+void Model::hold(bool held, uint32_t now) {
+    if (held && !held_) heldAt_ = now;
+    if (!held && held_) storage_.persistence.delayDensity(now - heldAt_);
+    held_ = held;
 }
 void Model::trigger(scope::Channel channel, double codes) {
     if (unsigned(channel) < 2 && std::isfinite(codes) && std::abs(codes) < 32768) {

@@ -1,6 +1,7 @@
 #include "openosc/ui/editors/scope_editor.hpp"
 #include "openosc/acquisition/probe_attenuation.hpp"
 #include "openosc/ui/scope/format.hpp"
+#include "openosc/settings/color_value.hpp"
 #include <algorithm>
 #include <cstdio>
 
@@ -13,7 +14,8 @@ PropertyKind ChannelEditor::kind(unsigned row) const {
     }
 }
 void ChannelEditor::name(unsigned row, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Channel", "Enabled", "Coupling", "Probe", "Scale / div", "Analog zero", "Invert"};
+    static constexpr const char *names[] = {"Channel", "Enabled", "Coupling", "Probe", "Scale / div", "Analog zero", "Invert",
+                                            "Density", "Density color"};
     std::snprintf(output, capacity, "%s", row < Fields ? names[row] : "");
 }
 unsigned ChannelEditor::options(unsigned row) const {
@@ -21,6 +23,8 @@ unsigned ChannelEditor::options(unsigned row) const {
     case Channel: case Coupling: case Enabled: case Invert: return 2;
     case Probe: return scope::ProbeAttenuation::Count;
     case Scale: return scope::VoltageRanges::Count;
+    case Density: return 3;
+    case DensityColor: return 1 + ColorCatalog::Swatches; // The channel's own, then the named colours.
     default: return 0;
     }
 }
@@ -36,6 +40,11 @@ unsigned ChannelEditor::option(unsigned row) const {
         return scope::ProbeAttenuation::Count;
     case Scale: return f.range[channel_];
     case Invert: return plot_.channels[channel_].invert;
+    case Density: return unsigned(plot_.channels[channel_].grade);
+    case DensityColor: {
+        const uint8_t color = plot_.channels[channel_].gradeColor;
+        return color == plot::ChannelOptions::InheritColor ? 0 : 1U + color;
+    }
     default: return 0;
     }
 }
@@ -48,8 +57,21 @@ void ChannelEditor::optionName(unsigned row, unsigned index, char *output, size_
         plot::Format::quantity(scope::AnalogFrontend::millivoltsForRange(index) / 1000.0 *
             request_.probeNumerator[channel_] / request_.probeDenominator[channel_], "V", output, capacity);
         break;
+    case Density: {
+        static constexpr const char *grades[] = {"Off", "Colors", "Mono"};
+        std::snprintf(output, capacity, "%s", grades[index % 3]);
+        break;
+    }
+    case DensityColor:
+        std::snprintf(output, capacity, "%s", index ? ColorCatalog::swatch(index - 1).name : "Channel");
+        break;
     default: PropertyList::optionName(row, index, output, capacity); break;
     }
+}
+bool ChannelEditor::optionSwatch(unsigned row, unsigned option, uint32_t &rgb) const {
+    if (row != DensityColor || !option || option > ColorCatalog::Swatches) return false;
+    rgb = ColorCatalog::swatch(option - 1).rgb;
+    return true;
 }
 void ChannelEditor::value(unsigned row, char *output, size_t capacity) const {
     const auto &f = request_.frontend;
@@ -77,6 +99,11 @@ bool ChannelEditor::choose(unsigned row, unsigned index) {
         return true;
     }
     if (row == Scale) { request_.frontend.range[channel_] = index; return true; }
+    if (row == Density) { plot_.channels[channel_].grade = plot::Grade(index); return true; }
+    if (row == DensityColor) {
+        plot_.channels[channel_].gradeColor = index ? uint8_t(index - 1) : plot::ChannelOptions::InheritColor;
+        return true;
+    }
     return PropertyList::choose(row, index);
 }
 void ChannelEditor::adjust(unsigned row, int direction) {

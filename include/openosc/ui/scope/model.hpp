@@ -81,6 +81,8 @@ public:
     bool hasReference() const { return reference_; }
     unsigned xyCount() const { return xyCount_; }
     bool agePersistence(uint32_t now) { return storage_.persistence.advance(now, options_.persistenceMs); }
+    // HOLD (GitHub #85): no record steps or ages a density plane, and the time held ages nothing after.
+    void hold(bool held, uint32_t now);
     // Whether the record has a trigger position to mark: its trigger, or (untriggered: Auto's newest
     // points, an edge Noise reject refused, a forced record) its configured pretrigger point (#65).
     bool triggerPlaced() const { return metadata_.triggered || metadata_.pretriggerKnown; }
@@ -104,7 +106,7 @@ private:
     void screenSeries(const scope::FrameView &frame, bool aggregate, const Source &source, scope::BandEstimate (&bands)[2]);
     bool projectXY(const scope::FrameView &frame);
     bool projectSpectrum(const scope::FrameView &frame, bool recalculate);
-    void accumulate();
+    void accumulate(uint32_t now);
     Storage &storage_;
     scope::SpectrumStorage &spectrum_;
     Options options_;
@@ -119,7 +121,9 @@ private:
     double triggerLevel_ = 0;
     CursorLine cursorFocus_ = CursorLine::None;
     unsigned frontChannel_ = 0; // As the controller's first selection.
-    bool valid_ = false, dirty_ = true, reference_ = false;
+    bool valid_ = false, dirty_ = true, reference_ = false, held_ = false;
+    uint32_t heldAt_ = 0;
+    scope::TriggerEdge densityEdge_; // The last live triggered record's: a new definition clears the density.
 };
 Storage &applicationStorage();
 scope::SpectrumStorage &applicationSpectrum();

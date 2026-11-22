@@ -125,13 +125,16 @@ void ScopeScreen::cards() {
 void ScopeScreen::update(const scope::FrameView &frame, bool held, unsigned selected, DataStatus health) {
     if (!frame.valid() || selected > 1 || host_.overlayActive()) return;
     auto &widget = host_.waveform();
-    widget.held(held);
     // A new frame for TRIG'D only when it is another record (or the first: sequence 0 included); the
     // controller passes the same leased record again for UI refreshes, which must not renew TRIG'D.
     const auto &m = frame.metadata();
     newFrame_ = !frameSeen_ || m.sequence != frameSequence_ || m.timestampUs != frameTimestampUs_;
     frameSeen_ = true; frameSequence_ = m.sequence; frameTimestampUs_ = m.timestampUs;
+    // Single delivers a new acquisition already marked held. Count it before freezing the history.
+    const bool freezeAfterFrame = held && newFrame_ && widget.options().graded();
+    widget.held(held && !freezeAfterFrame);
     widget.setFrame(frame);
+    if (freezeAfterFrame) widget.held(true);
     status(health, held);
 
     host_.scopeFooter().frame(widget.model()); // Every preset: the footer's six readouts (Legacy too).

@@ -22,7 +22,8 @@ protected:
 };
 class ChannelEditor final : public ScopeEditor {
 public:
-    enum Row : unsigned { Channel, Enabled, Coupling, Probe, Scale, Zero, Invert, Fields };
+    // Density and its colour (GitHub #85) are the view's, as Invert; the colour row only for Mono.
+    enum Row : unsigned { Channel, Enabled, Coupling, Probe, Scale, Zero, Invert, Density, DensityColor, Fields };
     const char *title() const override { return "CHANNEL"; }
     void value(unsigned row, char *output, size_t capacity) const override;
     unsigned options(unsigned row) const override;
@@ -32,9 +33,11 @@ public:
     void adjust(unsigned row, int direction) override;
     int32_t number(unsigned row) const override { return row == Zero ? request_.frontend.position[channel_] : 0; }
     void setNumber(unsigned row, int32_t value) override { if (row == Zero) request_.frontend.position[channel_] = value; }
-    unsigned count() const override { return Fields; }
+    unsigned count() const override { return plot_.channels[channel_].grade == plot::Grade::Mono ? Fields : DensityColor; }
     PropertyKind kind(unsigned row) const override;
     void name(unsigned row, char *output, size_t capacity) const override;
+    bool optionSwatch(unsigned row, unsigned option, uint32_t &rgb) const override;
+    bool valueSwatch(unsigned row, uint32_t &rgb) const override { return optionSwatch(row, option(row), rgb); }
 };
 class AcquisitionEditor final : public ScopeEditor {
 public:
