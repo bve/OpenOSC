@@ -28,7 +28,15 @@ public:
     }
     // A fractional code of this record. Convert to the requested range before quantizing.
     static bool midpoint(const scope::FrameView &frame, scope::Channel channel, double &code);
-    void levelEdit(scope::TriggerLevel::Bounds bounds, int step) { levelBounds_ = bounds; levelStep_ = step; }
+    void levelEdit(scope::TriggerLevel::Bounds bounds, int step) { levelBounds(bounds); levelStep_ = step; }
+    // The Level row's range (the plot's): Level steps stop at its ends and its value is marked "(max)"
+    // or "(min)" there (issue #61). True when that mark changes.
+    bool levelBounds(scope::TriggerLevel::Bounds bounds) {
+        const int before = levelEnd();
+        levelBounds_ = bounds;
+        return levelEnd() != before;
+    }
+    int levelEnd() const { return settings_.level == levelBounds_.high ? 1 : settings_.level == levelBounds_.low ? -1 : 0; }
     int coarseStep(unsigned row) const override { return row == Level ? levelStep_ : 1; }
     unsigned count() const override { return Fields; }
     PropertyKind kind(unsigned row) const override;

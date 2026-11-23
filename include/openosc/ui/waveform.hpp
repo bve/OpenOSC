@@ -30,6 +30,13 @@ public:
     bool cursorLines(const plot::CursorOptions &cursors);
     void cursorFocus(plot::CursorLine line);
     void frontChannel(unsigned channel); // Repaints, a held record included, when it changes.
+    // The trigger level at the upper (+1) or lower (-1) end of its range, else 0 (issue #61): a
+    // small badge beside the marker. Leaving the limit also ends a pulse. Repaints the margin only.
+    void triggerLimit(int limit);
+    // A press against the limit: the marker pulses for PulseMs from `now` (service), the margin only.
+    void triggerPulse(uint32_t now);
+    static constexpr uint32_t PulseMs = 500, PulseBeatMs = 125; // Taller, normal, taller, normal.
+    const plot::TriggerMark &triggerMark() const { return triggerMark_; } // On show (tests).
     // A one-line note in the top right corner of the plot; empty hides it.
     void note(const char *text, uint32_t color);
     // The frequency counter overlay in the top left corner; empty hides it.
@@ -52,11 +59,14 @@ private:
     // under it (its parents' backgrounds are skipped). Anything else keeps LVGL's own answer.
     static void cover(lv_event_t *event);
     static void geometry(lv_event_t *event);
+    void triggerMark(plot::TriggerMark mark); // Repaints the right margin when it changes.
     lv_obj_t *object_ = nullptr, *note_ = nullptr, *counter_ = nullptr;
     bool noteLow_ = false; // The note in the plot's bottom left: Y-T+FFT has its header on the top line.
     plot::Model model_;
     plot::Palette palette_;
-    uint32_t fadeAt_ = 0, frozenAt_ = 0;
+    uint32_t fadeAt_ = 0, frozenAt_ = 0, pulseAt_ = 0;
+    bool pulsing_ = false; // A pulse in progress since pulseAt_.
+    plot::TriggerMark triggerMark_;
     bool held_ = false, inlineScales_ = true;
     const plot::ColumnCache *cache_ = nullptr;
 };

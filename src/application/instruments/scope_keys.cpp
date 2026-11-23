@@ -194,6 +194,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         triggerEditor_.begin(data_.scopeRequest().trigger);
         triggerEditor_.sources(data_.scopeRequest().frontend.enabled[0], data_.scopeRequest().frontend.enabled[1]);
         triggerEditor_.calibration(data_.scopeMetadata());
+        markTriggerEditor();
         openPanel(Panel::Trigger, triggerEditor_);
     };
     // F3 (issue #95): from another card only the Trigger card; on it each tap the next mode, Auto,
@@ -247,9 +248,15 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         const bool invert = view_.waveform().options().channels[unsigned(request.trigger.channel)].invert;
         const int delta = invert ? -step : step;
         request.trigger.level = bounds.clamp(bounds.clamp(before) + delta);
-        if (!fine && request.trigger.level == before) return; // One warning per visit to the limit.
+        if (request.trigger.level == before) {
+            if (fine) { // A fresh press at the limit sets the current level as the anchor, without refreshing the plot.
+                triggerFollow_.forget();
+                pulseTriggerLimit(now);
+            }
+            return;
+        }
         if (!applyEdited(request, now, LevelIntent::Set)) { view_.notify("Finish data transfer first", now); return; }
-        if (request.trigger.level == (delta > 0 ? bounds.high : bounds.low)) notifyTriggerLimit(direction, now);
+        if (request.trigger.level == (delta > 0 ? bounds.high : bounds.low)) pulseTriggerLimit(now); // Each press against it.
         return;
     }
     if (focus_ == plot::Focus::Position || focus_ == plot::Focus::Trigger) { // Left/Right move the record in both, as on the factory firmware.

@@ -89,10 +89,13 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     return ModeChange::Selected;
 }
 bool ApplicationController::applyScope(const ScopeRequest &request, uint32_t now, ScopeApply mode) {
+    const auto previousTrigger = data_.scopeRequest().trigger;
     const bool applied = mode == ScopeApply::Resume ? data_.resumeScope(request)
         : mode == ScopeApply::StageIfHeld && data_.scopeHeld() ? data_.stageScope(request) : data_.configureScope(request);
     if (!applied) return false;
     const auto &active = data_.scopeRequest();
+    if (uiReady_ && (active.trigger.channel != previousTrigger.channel || active.trigger.mode != previousTrigger.mode))
+        view_.waveform().triggerLimit(0);
     triggerFollow_.observe(triggerPlace(active));
     const auto previous = prefs_;
     InstrumentState::capture(active, prefs_);
@@ -131,7 +134,7 @@ bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, S
     if (intent==LevelIntent::Set) triggerFollow_.forget();
     if (following) {
         triggerFollow_.commit(proposal);
-        if (proposal.limited && !alreadyLimited && uiReady_) view_.notify("Trigger level at its limit", now);
+        if (proposal.limited && !alreadyLimited) pulseTriggerLimit(now);
     }
     return true;
 }
@@ -176,8 +179,18 @@ scope::TriggerLevel::Bounds ApplicationController::triggerBounds(const ScopeRequ
     const auto toRequested = [&](int y) { return scope::TriggerLevel::inFrame(axis.code(y), shown, target); };
     return scope::TriggerLevel::Bounds::between(toRequested(0), toRequested(height - 1));
 }
-void ApplicationController::notifyTriggerLimit(int direction, uint32_t now) {
-    if (uiReady_) view_.notify(direction > 0 ? "Trigger upper limit" : "Trigger lower limit", now);
+int ApplicationController::triggerLimit(const ScopeRequest &request) {
+    const auto &options = view_.waveform().options();
+    const unsigned source = unsigned(request.trigger.channel);
+    if (source >= 2 || request.rolling() || (options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay)) return 0;
+    const auto bounds = triggerBounds(request);
+    const int level = request.trigger.level, end = level >= bounds.high ? 1 : level <= bounds.low ? -1 : 0;
+    return options.channels[source].invert ? -end : end;
+}
+bool ApplicationController::markTriggerEditor() {
+    auto request = data_.scopeRequest();
+    request.trigger = triggerEditor_.settings();
+    return triggerEditor_.levelBounds(triggerBounds(request));
 }
 bool ApplicationController::triggerMidpoint(uint32_t now) {
     auto request = data_.scopeRequest();
@@ -198,7 +211,7 @@ bool ApplicationController::triggerMidpoint(uint32_t now) {
     const double remainder = exact - place.level;
     const bool limited = std::abs(remainder) > .5;
     triggerFollow_.anchor(place, remainder, limited);
-    if (limited) notifyTriggerLimit(remainder > 0 ? 1 : -1, now);
+    if (limited) pulseTriggerLimit(now);
     return true;
 }
 bool ApplicationController::restoreStartupOutput(const PreferencesResult &applied) {

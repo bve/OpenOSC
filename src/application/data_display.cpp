@@ -44,6 +44,8 @@ void ApplicationController::showTrigger(const scope::FrameMetadata *shown) {
     const unsigned source = unsigned(trigger.channel);
     const auto &settings = data_.scopeMetadata().channels[source];
     view_.waveform().trigger(trigger.channel, shown ? scope::TriggerLevel::inFrame(trigger.level, settings, shown->channels[source]) : double(trigger.level));
+    // Each refresh and frame: a new source, mode, invert or scale (also staged in HOLD) leaves the limit.
+    view_.waveform().triggerLimit(triggerLimit(data_.scopeRequest()));
     view_.scopeTrigger(trigger, settings);
 }
 // One decision for F1-F4's captions, from what the key handlers act on: Remote locks every local

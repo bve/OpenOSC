@@ -303,8 +303,9 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
         } else imageKeys(keys,now);
         return;
     }
-    if (events.shortPress & Keypad::Mode) {
-        if (selectMode(nextMode(state_.mode), now) == ModeChange::Refused) view_.notify("Cannot switch measurement hardware",now);
+    if ((events.shortPress | events.longPress) & Keypad::Mode) { // A tap: the next of three screens; held: heldMode.
+        const auto target = events.shortPress & Keypad::Mode ? nextMode(state_.mode) : heldMode(state_.mode);
+        if (selectMode(target, now) == ModeChange::Refused) view_.notify("Cannot switch measurement hardware",now);
         return;
     }
     if ((events.longPress & Keypad::Menu) && !state_.settingsOpen) {

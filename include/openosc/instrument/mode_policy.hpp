@@ -6,4 +6,8 @@ namespace openosc {
 constexpr MeasurementMode nextMode(MeasurementMode mode) {
     return static_cast<MeasurementMode>((static_cast<unsigned>(mode) + 1) % InstrumentModeCount);
 }
+// MODE held: Scope <-> GEN; from the DMM, Scope first.
+constexpr MeasurementMode heldMode(MeasurementMode mode) {
+    return mode == MeasurementMode::Oscilloscope ? MeasurementMode::Generator : MeasurementMode::Oscilloscope;
+}
 } // namespace openosc

@@ -64,12 +64,8 @@ void ApplicationController::triggerKeys(uint32_t keys, uint32_t now, bool fine) 
         triggerEditor_.begin(data_.scopeRequest().trigger);
         view_.properties(triggerEditor_, navigator_);
     } else if (key == FieldKey::Committed) commitTrigger(now, navigator_.row() == ui::TriggerEditor::Level);
-    else if (editing && !(keys & (Keypad::F4 | Keypad::Menu))) {
-        const int direction = keys & Keypad::Right ? 1 : keys & Keypad::Up ? 1 : keys & Keypad::Left ? -1 : vertical;
-        const auto level = triggerEditor_.settings().level;
-        if (direction && level == (direction > 0 ? bounds.high : bounds.low) && (fine || level != request.trigger.level))
-            notifyTriggerLimit(direction, now);
-    }
+    // The draft, a new source or a committed level at either end: the Level row's mark follows.
+    if (panel_ == Panel::Trigger && markTriggerEditor()) view_.properties(triggerEditor_, navigator_);
 }
 // Each short F3 (plan S01): the trigger focus and the next mode, Auto, Normal, Single, Auto; the source
 // is in the Trigger menu. In RUN, Single arms one record (as Analyze's Arm Single). Held (HOLD or a

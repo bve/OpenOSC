@@ -7,6 +7,7 @@ namespace openosc {
 lv_obj_t *WaveformWidget::create(lv_obj_t *parent) {
     held_ = false;
     fadeAt_ = frozenAt_ = 0;
+    pulsing_ = false; triggerMark_ = {};
     model_.reset();
     object_ = lv_obj_create(parent);
     lv_obj_remove_style_all(object_);
@@ -85,6 +86,23 @@ void WaveformWidget::cursorFocus(plot::CursorLine line) {
     model_.cursorFocus(line);
     if (object_) lv_obj_invalidate(object_);
 }
+void WaveformWidget::triggerMark(plot::TriggerMark mark) {
+    if (mark == triggerMark_) return;
+    triggerMark_ = mark;
+    if (!object_) return;
+    lv_area_t margin; // The trigger level's margin, its whole height: the marker, its pulse and badge only.
+    lv_obj_get_coords(object_, &margin);
+    margin.x1 = margin.x2 - plot::PlotFrame::Right + 1;
+    lv_obj_invalidate_area(object_, &margin);
+}
+void WaveformWidget::triggerLimit(int limit) {
+    if (!limit) pulsing_ = false;
+    triggerMark({int8_t(limit > 0 ? 1 : limit < 0 ? -1 : 0), pulsing_ && triggerMark_.pulse});
+}
+void WaveformWidget::triggerPulse(uint32_t now) {
+    pulseAt_ = now; pulsing_ = true;
+    triggerMark({triggerMark_.limit, true});
+}
 void WaveformWidget::frontChannel(unsigned channel) {
     if (model_.frontChannel() == (channel & 1)) return;
     model_.frontChannel(channel);
@@ -121,6 +139,11 @@ void WaveformWidget::setFrame(const scope::FrameView &frame) {
         lv_obj_invalidate(object_);
 }
 void WaveformWidget::service(uint32_t now) {
+    if (pulsing_) { // Its beats: one margin repaint each, none once it ends.
+        const uint32_t elapsed = now - pulseAt_;
+        pulsing_ = elapsed < PulseMs;
+        triggerMark({triggerMark_.limit, pulsing_ && (elapsed / PulseBeatMs) % 2 == 0});
+    }
     // The fade pass: only a finite persistence fades (an infinite one changes only with a frame).
     if (!object_ || held_ || !model_.options().persistenceMs ||
         model_.options().persistenceMs == plot::InfinitePersistence || !model_.hasFrame())
@@ -156,7 +179,7 @@ void WaveformWidget::draw(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     lv_area_t area;
     lv_obj_get_coords(self.object_, &area);
-    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_).draw();
+    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_).draw();
 }
 void WaveformWidget::cover(lv_event_t *event) {
     auto *info = static_cast<lv_cover_check_info_t *>(lv_event_get_param(event));

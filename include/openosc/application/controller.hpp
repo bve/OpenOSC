@@ -251,7 +251,14 @@ private:
     bool triggerMidpoint(uint32_t now);
     scope::TriggerLevel::Bounds triggerBounds(const ScopeRequest &request);
     int triggerStep(int direction, bool fine);
-    void notifyTriggerLimit(int direction, uint32_t now);
+    // The level at the upper (+1) or lower (-1) end of triggerBounds on the screen (the channel's
+    // invert turns them over), else 0; outside Y-T or in Roll none (issue #61).
+    int triggerLimit(const ScopeRequest &request);
+    // A press against that end: the marker's pulse (WaveformWidget::triggerPulse), no notice.
+    void pulseTriggerLimit(uint32_t now) { if (uiReady_) view_.waveform().triggerPulse(now); }
+    // The Trigger panel's Level row marks a level at either end of its range: the panel can cover
+    // the plot and its draft is not applied before MENU. True when that mark changed.
+    bool markTriggerEditor();
     bool centerChannels(uint32_t now); // Analyze -> Center channels, and the F2 hold's Home view.
     bool applyGenerator(const generator::Settings &settings, uint32_t now);
     void dataKeys(uint32_t keys, uint32_t now, bool fine);

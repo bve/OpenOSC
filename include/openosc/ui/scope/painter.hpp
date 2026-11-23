@@ -17,12 +17,22 @@ struct Palette {
     uint32_t triggerColor(unsigned source) const { return trigger == FollowSource ? channels[source & 1] : trigger; }
     uint32_t tagInk(uint32_t fill) const { return tagText == Contrast ? ColorContrast::ink(fill) : tagText; }
 };
+// The trigger level marker's limit feedback (issue #61), drawn in the right margin only. limit: the
+// level at the upper (+1) or lower (-1) end of its range, a small "!" badge beside the marker while
+// it stays there; pulse: a press against that end, the marker drawn taller (TriggerPulse's beats).
+struct TriggerMark {
+    int8_t limit = 0;
+    bool pulse = false;
+    bool operator==(const TriggerMark &o) const { return limit == o.limit && pulse == o.pulse; }
+    bool operator!=(const TriggerMark &o) const { return !(*this == o); }
+};
 class Painter {
 public:
     // frame: the whole waveform object; the plot is frame less the PlotFrame margins.
     Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette,
-            bool inlineScales = true)
-        : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), inlineScales_(inlineScales) {}
+            bool inlineScales = true, TriggerMark trigger = {})
+        : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), inlineScales_(inlineScales),
+          trigger_(trigger) {}
     void draw();
     static lv_area_t plotArea(const lv_area_t &frame) {
         return {frame.x1 + PlotFrame::Left, frame.y1 + PlotFrame::Top, frame.x2 - PlotFrame::Right, frame.y2 - PlotFrame::Bottom};
@@ -55,11 +65,13 @@ private:
     void cursorLine(CursorLine name, const char *label, int x1, int y1, int x2, int y2, int tagX, int tagY, uint32_t color);
     void triangle(Point a, Point b, Point c, uint32_t color);
     void zeroTag(unsigned channel, int zero, int centre, int bottom);
+    void limitBadge(int y, int limit, int h, uint32_t color); // TriggerMark::limit beside the marker at y.
     lv_layer_t *layer_;
     lv_area_t frame_, area_; // area_: the plot; drawing coordinates are relative to its corner.
     Model &model_;
     const Palette &palette_;
     bool inlineScales_;
+    TriggerMark trigger_;
 };
 class Path {
 public:

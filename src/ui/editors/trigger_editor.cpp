@@ -2,6 +2,7 @@
 #include "openosc/ui/scope/format.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 namespace openosc::ui {
 bool TriggerEditor::midpoint(const scope::FrameView &frame, scope::Channel channel, double &code) {
@@ -48,6 +49,10 @@ void TriggerEditor::value(unsigned row, char *output, size_t capacity) const {
         if (cal.calibrated)
             plot::Format::quantity((settings_.level-cal.zeroCode)*cal.voltsPerCode*cal.probeNumerator/cal.probeDenominator,"V",output,capacity);
         else std::snprintf(output,capacity,"%d cnt",settings_.level);
+        if (const int end = levelEnd()) { // At either end of the plot's range: no further step that way.
+            const size_t used = std::strlen(output);
+            if (used < capacity) std::snprintf(output + used, capacity - used, end > 0 ? " (max)" : " (min)");
+        }
     } else if (row == Pretrigger) std::snprintf(output,capacity,"%u.%u%%",settings_.position/10,settings_.position%10);
     else PropertyList::value(row, output, capacity);
 }

@@ -41,12 +41,15 @@ void Painter::markers() {
     // Trigger level: right margin, pointing at the plot edge.
     const int right = w + 1, outer = w + PlotFrame::Right;
     const int y = model_.triggerY();
-    if (y < 0) triangle({int16_t(right), 5}, {int16_t(outer), 5}, {int16_t((right + outer) / 2), 0}, color);
-    else if (y > h) triangle({int16_t(right), int16_t(h - 5)}, {int16_t(outer), int16_t(h - 5)}, {int16_t((right + outer) / 2), int16_t(h)}, color);
+    const int offPlotHeight = trigger_.pulse ? 7 : 5;
+    if (y < 0) triangle({int16_t(right), int16_t(offPlotHeight)}, {int16_t(outer), int16_t(offPlotHeight)}, {int16_t((right + outer) / 2), 0}, color);
+    else if (y > h) triangle({int16_t(right), int16_t(h - offPlotHeight)}, {int16_t(outer), int16_t(h - offPlotHeight)}, {int16_t((right + outer) / 2), int16_t(h)}, color);
     else {
         line(0, y, w, y, color, 65, true);
-        triangle({int16_t(outer), int16_t(y - 4)}, {int16_t(right), int16_t(y)}, {int16_t(outer), int16_t(y + 4)}, color);
+        const int half = trigger_.pulse ? 7 : 4; // A press against a limit: taller, still only in the margin.
+        triangle({int16_t(outer), int16_t(y - half)}, {int16_t(right), int16_t(y)}, {int16_t(outer), int16_t(y + half)}, color);
     }
+    if (trigger_.limit) limitBadge(std::clamp(y, 0, h), trigger_.limit, h, color);
     // Trigger position: top margin, pointing down at the plot edge. An untriggered record (Auto's
     // newest points, an edge Noise reject refused) marks its configured pretrigger point (#65).
     if (!model_.triggerPlaced()) return;
@@ -57,6 +60,21 @@ void Painter::markers() {
         line(x, 0, x, h, color, 55, true);
         triangle({int16_t(x - 4), int16_t(top)}, {int16_t(x + 4), int16_t(top)}, {int16_t(x), int16_t(edge)}, color);
     }
+}
+// A warning triangle with "!" in the right margin, on the side of the marker away from its limit
+// (below an upper one, above a lower one), the other side where the plot has no room. Its ink is the
+// TagText role on the trigger colour, as on the zero tags.
+void Painter::limitBadge(int y, int limit, int h, uint32_t color) {
+    constexpr int Height = 10, Gap = 8; // Gap: clear of the marker, also while it pulses (7).
+    const int right = model_.viewport().width, outer = right + PlotFrame::Right - 1, middle = (right + outer) / 2;
+    const int below = y + Gap, above = y - Gap - Height + 1;
+    const int top = limit > 0 ? (below + Height - 1 <= h ? below : above) : (above >= 0 ? above : below);
+    const int base = top + Height - 1;
+    triangle({int16_t(middle), int16_t(top)}, {int16_t(outer + 1), int16_t(base + 1)}, {int16_t(right), int16_t(base + 1)}, color);
+    const auto ink = palette_.tagInk(color);
+    const int x = area_.x1 + middle, y0 = area_.y1 + top;
+    fill({x, y0 + 3, x, y0 + 6}, ink); // The stroke and the dot of "!".
+    fill({x, y0 + 8, x, y0 + 8}, ink);
 }
 // The channel's zero: a box with its digit in the left margin at `centre` and a tip to the plot
 // edge at the zero itself (or, for a zero above or below the plot, an arrow that way).
