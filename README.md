@@ -1,5 +1,11 @@
 # OpenOSC
 
+[![Total release downloads](https://img.shields.io/github/downloads/bve/OpenOSC/total?style=plastic)](https://github.com/bve/OpenOSC/releases)
+[![ZT703S firmware downloads](https://img.shields.io/github/downloads/bve/OpenOSC/OpenOSC-Firmware-ZT703S.OSC?style=plastic&label=ZT703S%20downloads&displayAssetName=false)](https://github.com/bve/OpenOSC/releases)
+[![ZT706S firmware downloads](https://img.shields.io/github/downloads/bve/OpenOSC/OpenOSC-Firmware-ZT706S.OSC?style=plastic&label=ZT706S%20downloads&displayAssetName=false)](https://github.com/bve/OpenOSC/releases)
+[![Latest release](https://img.shields.io/github/v/release/bve/OpenOSC?style=plastic)](https://github.com/bve/OpenOSC/releases/latest)
+[![GitHub stars](https://img.shields.io/github/stars/bve/OpenOSC?style=plastic)](https://github.com/bve/OpenOSC/stargazers)
+
 Open-source firmware for the **ZT703S** and **ZT706S** handheld oscilloscope multimeters.
 
 OpenOSC replaces the stock application with its own oscilloscope, multimeter and signal generator
