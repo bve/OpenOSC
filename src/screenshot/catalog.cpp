@@ -61,10 +61,12 @@ bool ImageCatalog::eraseSelected() {
     return refresh();
 }
 bool ImageCatalog::beginClear() {
-    error_=nullptr; erased_=0;
-    if (clearing_ || !fs_.mounted()) return fail("Storage not available");
+    if (clearing_) return fail("Image cleanup already in progress");
+    erased_=0;
+    // Clear screenshots can start directly from Settings. Count the BMPs on disk before deleting any.
+    if (!refresh()) return false;
+    if (!count_) return true;
     const auto opened=f_opendir(&directory_,Directory);
-    if (opened==FR_NO_PATH) return true;
     if (opened!=FR_OK) return fail("Cannot read screenshot directory");
     clearing_=true;
     return true;

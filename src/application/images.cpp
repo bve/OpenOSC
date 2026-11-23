@@ -84,10 +84,13 @@ void ApplicationController::serviceImages(uint32_t now) {
         if (!images_.clearStep()) {
             const char *error=images_.error(); images_.refresh(); showImages(); view_.notify(error,now);
         }
-        else if (!images_.clearing()) { showImages(); view_.notify("Screenshots cleared",now); }
-        else if (images_.erased()!=imageProgress_) {
+        else if (!images_.clearing() || images_.erased()!=imageProgress_) {
+            const bool complete=!images_.clearing();
+            if (complete) showImages();
             imageProgress_=images_.erased();
-            char progress[40]; std::snprintf(progress,sizeof progress,"Deleting images: %u/%u",imageProgress_,total);
+            char progress[48];
+            std::snprintf(progress,sizeof progress,"%s: %u/%u",complete ? "Screenshots cleared" : "Deleting images",
+                          imageProgress_,total);
             view_.notify(progress,now);
         }
     }
