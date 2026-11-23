@@ -101,6 +101,6 @@ private:
     mutable dmm::Result reading_;
     char serial_[25]{};
     FIL file_{};
-    bool fileOpen_ = false;
+    bool fileOpen_ = false, fileShot_ = false;
 };
 } // namespace openosc

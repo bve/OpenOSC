@@ -262,13 +262,12 @@ int InstrumentBackend::fileOpen(const char *path, uint32_t &bytes) {
     fileClose();
     if (!application_.fs_.mounted()) return -250;
     const bool shots = !std::strncmp(path, storage::Layout::Screenshots, std::strlen(storage::Layout::Screenshots));
-    if (shots && application_.images_.clearing()) return -221;
     FILINFO info{};
     if (const FRESULT found = f_stat(path, &info); found != FR_OK || (info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
-        return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : -250; // As MMEM:CAT? lists.
+        return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : found == FR_INVALID_NAME ? -257 : -250; // As MMEM:CAT? lists.
     const FRESULT result = f_open(&file_, path, FA_READ);
     if (result != FR_OK) return result == FR_NO_FILE || result == FR_NO_PATH ? -256 : -250;
-    fileOpen_ = true; ++storage::openReaders; bytes = uint32_t(f_size(&file_));
+    fileOpen_ = true; fileShot_ = shots; ++storage::openReaders; storage::screenshotReaders += shots; bytes = uint32_t(f_size(&file_));
     return 0;
 }
 size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
@@ -276,14 +275,14 @@ size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
     if (!fileOpen_ || (f_tell(&file_) != at && f_lseek(&file_, at) != FR_OK) || f_read(&file_, out, UINT(size), &n) != FR_OK) return 0;
     return n;
 }
-void InstrumentBackend::fileClose() { if (fileOpen_) { f_close(&file_); --storage::openReaders; } fileOpen_ = false; }
+void InstrumentBackend::fileClose() { if (fileOpen_) { f_close(&file_); --storage::openReaders; storage::screenshotReaders -= fileShot_; } fileOpen_ = false; }
 int InstrumentBackend::fileDelete(const char *path) {
     if (!application_.fs_.mounted()) return -250;
     const auto &a = application_;
     const bool shots = !std::strncmp(path, storage::Layout::Screenshots, std::strlen(storage::Layout::Screenshots));
     FILINFO info{};
     if (const FRESULT found = f_stat(path, &info); found != FR_OK || (info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
-        return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : -250;
+        return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : found == FR_INVALID_NAME ? -257 : -250;
     if (storage::openReaders || (shots && (a.imageReader_.busy() || a.images_.clearing() || a.panel_ == ApplicationController::Panel::Images ||
         (a.panel_ == ApplicationController::Panel::Confirmation && a.confirmationImages_)))) return -221; // Being read or browsed.
     const FRESULT result = f_unlink(path);

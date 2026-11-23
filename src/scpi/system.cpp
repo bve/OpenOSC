@@ -11,7 +11,7 @@ constexpr const char *Folders[] = {"SCREENSHOTS", "LOGS", "CAPTURES", "DECODE", 
 bool field(const char *&p, char *out, size_t size) {
     const char quote = *p == '"' || *p == '\'' ? *p++ : 0;
     size_t n = 0;
-    while (*p && (quote ? *p != quote : *p != ',')) { if (n + 1 >= size) return false; out[n++] = *p++; }
+    while (*p && (quote ? *p != quote : *p != ',')) { if (n + 1 >= size || uint8_t(*p) < 0x20) return false; out[n++] = *p++; }
     if (quote) { if (*p != quote) return false; ++p; }
     else while (n && out[n - 1] == ' ') --n;
     out[n] = 0;
@@ -66,8 +66,10 @@ bool Engine::systemCommand(const Command &c) {
         uint32_t count = 0, total = 0;
         const int e = backend_.fileList(folder, uint32_t(start), list, sizeof list, count, total);
         if (e) error(int16_t(e), true);
-        else if (!count && start < total) error(-223, true); // One name longer than a reply: paging cannot pass it.
-        else reply("%lu,%lu%s%s", (unsigned long)total, (unsigned long)count, *list ? "," : "", list);
+        else {
+            if (!count && start < total) errors_.push(-223); // One name longer than a reply: skip it with start + 1.
+            reply("%lu,%lu%s%s", (unsigned long)total, (unsigned long)count, *list ? "," : "", list);
+        }
     } else if (match("MMEMory:DATA")) { // "FOLDER/NAME": the file as a definite block.
         const char *p = c.argument;
         char file[200];
