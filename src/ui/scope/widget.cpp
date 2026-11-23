@@ -32,6 +32,14 @@ lv_obj_t *WaveformWidget::create(lv_obj_t *parent) {
     lv_obj_set_style_pad_hor(counter_, 2, 0);
     lv_obj_align(counter_, LV_ALIGN_TOP_LEFT, plot::PlotFrame::Left + 1, plot::PlotFrame::Top + 1);
     lv_obj_set_hidden(counter_, true);
+    meterTag_ = lv_label_create(object_);
+    lv_obj_remove_style_all(meterTag_);
+    lv_obj_set_style_text_font(meterTag_, ui::Elements::font(12), 0);
+    lv_obj_set_style_bg_opa(meterTag_, LV_OPA_70, 0);
+    lv_obj_set_style_pad_hor(meterTag_, 2, 0);
+    // One row above the inline scales (Painter::scales, 14 pixels at the plot's bottom).
+    lv_obj_align(meterTag_, LV_ALIGN_BOTTOM_LEFT, plot::PlotFrame::Left + 1, -(plot::PlotFrame::Bottom + 16));
+    lv_obj_set_hidden(meterTag_, true);
     return object_;
 }
 void WaveformWidget::colors(const Theme &theme) {
@@ -138,6 +146,12 @@ void WaveformWidget::counter(const char *text, uint32_t color) {
     // The Math label moves when the counter appears or disappears, including on a held trace.
     if (wasVisible != bool(*text) && model_.options().math != plot::Math::Off) lv_obj_invalidate(object_);
 }
+void WaveformWidget::meterReadings(const dmm::ReadingTrace *readings) {
+    if (meter_ == readings) return;
+    meter_ = readings;
+    if (object_) lv_obj_invalidate(object_);
+}
+void WaveformWidget::meterTag(const char *text, uint32_t color) { overlayLabel(meterTag_, text, color, palette_.background); }
 void WaveformWidget::setFrame(const scope::FrameView &frame) {
     if (!object_)
         return;
@@ -193,7 +207,8 @@ void WaveformWidget::draw(lv_event_t *event) {
     int counterHeight = 0;
     if (self.model_.options().math != plot::Math::Off && self.counter_ && !lv_obj_is_hidden(self.counter_))
         counterHeight = lv_obj_get_height(self.counter_);
-    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_, counterHeight).draw();
+    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_, counterHeight,
+                  self.meter_).draw();
 }
 void WaveformWidget::cover(lv_event_t *event) {
     auto *info = static_cast<lv_cover_check_info_t *>(lv_event_get_param(event));
@@ -214,7 +229,7 @@ void WaveformWidget::cover(lv_event_t *event) {
 void WaveformWidget::geometry(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     if (lv_event_get_code(event) == LV_EVENT_DELETE)
-        self.object_ = self.note_ = self.counter_ = nullptr;
+        self.object_ = self.note_ = self.counter_ = self.meterTag_ = nullptr;
     else {
         self.model_.clear();
         lv_obj_invalidate(self.object_);

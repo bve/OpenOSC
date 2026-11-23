@@ -28,6 +28,7 @@ void ApplicationController::commitScopeEditor(ui::ScopeEditor &editor, uint32_t 
     // selection of the UI, no capture change. A channel switched off hands it to the one left on;
     // the FFT and cursor channels follow what is shown (data_display.cpp), the trigger source the editor.
     selectedChannel_ = data_.scopeRequest().frontend.enabled[editor.channel()] ? editor.channel() : editor.channel() ^ 1;
+    meterSelected_ = false;
     editor.begin(data_.scopeRequest(), view_.waveform().options(), editor.channel()); // What was taken.
     dataRefresh_ = true;
     view_.properties(editor, navigator_);

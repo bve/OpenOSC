@@ -5,8 +5,15 @@
 #include <iterator>
 
 namespace openosc::plot {
+bool MeterTraceOptions::valid() const {
+    if (position < -PositionLimit || position > PositionLimit) return false;
+    for (unsigned i = 0; i < MeterScale::Quantities; ++i)
+        if (!MeterScale::valid(i, scales[i])) return false;
+    return true;
+}
 bool Options::valid() const {
     if (unsigned(mode) > 3 || unsigned(style) > 2 || unsigned(grid) > 3 || unsigned(math) > 2 || !spectrum.valid() || !counter.valid() ||
+        !meter.valid() ||
         unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom || !zoomOut ||
         zoom > MaximumZoom || panPpb < -PanFull || panPpb > PanFull ||
         (persistenceMs > 10000 && persistenceMs!=InfinitePersistence) ||

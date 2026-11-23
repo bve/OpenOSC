@@ -30,6 +30,8 @@ public:
         CursorAY,
         CursorBY,
         MathTrace,
+        MeterTrace,
+        MeterFunction,
         Reference,
         Clear,
         SampleReduction,
@@ -62,6 +64,9 @@ public:
     unsigned channel = 0;
     bool enabled[2] = {true, true};
     ChannelView view; // Swap CH1/CH2: rows and choices name each input by its on-screen number.
+    // The DMM's function (Preferences::meterFunction, a MeterFunctions index), the MeterFunction row's
+    // draft: the DMM trace's and the DMM screen's alike.
+    unsigned meterFunction = 0;
     // One row (Row) as a property: what it is, its name and value, its options, its steps.
     ui::PropertyKind kind(unsigned row) const;
     void name(unsigned row, char *output, size_t capacity) const;

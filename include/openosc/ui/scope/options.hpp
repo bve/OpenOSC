@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "openosc/acquisition/spectrum.hpp"
+#include "openosc/ui/scope/meter_scale.hpp"
 
 namespace openosc::plot {
 constexpr unsigned MaximumWidth = 320, MaximumHeight = 240, MaximumXYPoints = 640;
@@ -71,6 +72,18 @@ struct CounterOptions {
         return source <= 2 && (average == 1 || average == 3 || average == 10) && ppm >= -1000 && ppm <= 1000 && estimate <= 1 && timed <= 1;
     }
 };
+// The Scope's DMM trace (DataAccess::meterReadings, drawn in Roll): shown or not, where its zero lies
+// and each quantity's units/div (MeterScale steps, in MeterScale's order).
+struct MeterTraceOptions {
+    // Its zero within the plot, as a channel's: four divisions either way of the middle line.
+    static constexpr int8_t PositionSteps = 20, PositionLimit = 4 * PositionSteps; // Per division.
+    bool shown = false;
+    int8_t position = 0; // Its zero above the plot's middle line, in 1/PositionSteps of a division.
+    int8_t scales[MeterScale::Quantities] = {MeterScale::Spans[0].initial, MeterScale::Spans[1].initial,
+                                             MeterScale::Spans[2].initial, MeterScale::Spans[3].initial,
+                                             MeterScale::Spans[4].initial, MeterScale::Spans[5].initial};
+    bool valid() const;
+};
 struct Options {
     Mode mode = Mode::Time;
     Style style = Style::Vectors;
@@ -78,19 +91,21 @@ struct Options {
     Math math = Math::Off;
     Reduction reduction = Reduction::Peak;
     Interpolation interpolation = Interpolation::Linear;
+    // zoomOut views more than one screen of a longer record. Zoom & Pan keeps one of zoom/zoomOut at 1 (ViewZoom).
+    // Here, after the six choices, they fill the padding before channels: Options keeps its 96 bytes.
+    uint8_t averaging = 1, zoomOut = 1;
     ChannelOptions channels[2];
     CursorOptions cursors;
     scope::SpectrumOptions spectrum;
     uint16_t zoom = 1, persistenceMs = 0;
     int32_t panPpb = 0; // Parts per billion of the record (PanFull: all of it).
     static constexpr int32_t PanFull = 1000000000;
-    // zoomOut views more than one screen of a longer record. Zoom & Pan keeps one of zoom/zoomOut at 1 (ViewZoom).
-    uint8_t averaging = 1, zoomOut = 1;
     uint8_t gridBrightness = Brightness::Full; // Brightness, GitHub #86.
     static constexpr uint16_t MaximumZoom = 256;
     static constexpr uint8_t MaximumZoomOut = 64;
     bool lockTrigger = true, showTrigger = true, showZero = true, glow = false, peakHold = false,
          showScale = true;
+    MeterTraceOptions meter; // Bytes, with the flags before heldTimebaseNs: in what was its padding.
     // The time/div a held record is shown at: the next capture's, chosen in HOLD (issue #7), so the
     // held view shows what RUN will use. 0: the record's own. View only, never the record's metadata.
     uint64_t heldTimebaseNs = 0;
@@ -105,6 +120,9 @@ struct Options {
     // What HOLD may change to explore one record; a new capture starts from `saved` again.
     void restoreHeldView(const Options &saved);
 };
+// Every Theme holds the plot options, and SRAM4 holds three Themes (JsonWorkspace): on the ZT703S it has
+// 32 bytes to spare, so a field that grows this struct has to be paid for there first.
+static_assert(sizeof(Options) == 96, "plot::Options grew: check the Themes' room in SRAM4");
 struct Point {
     int16_t x = Missing, y = Missing;
 };

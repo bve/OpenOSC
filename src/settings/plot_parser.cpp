@@ -84,6 +84,20 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
         if (!integer(input,"source",o.counter.source) || !integer(input,"average",o.counter.average) || !integer(input,"ppm",o.counter.ppm) ||
             !integer(input,"estimate",o.counter.estimate) || !integer(input,"timed",o.counter.timed)) return false; // #172, #173: absent reads 0.
     }
+    if (object.containsKey("dmm")) { // Absent in older themes: off, at the middle line, the initial scales.
+        if (!object["dmm"].is<JsonObjectConst>()) return false;
+        const auto input = object["dmm"].as<JsonObjectConst>();
+        if (!flag(input, "shown", o.meter.shown) || !integer(input, "position", o.meter.position)) return false;
+        if (input.containsKey("per_division")) {
+            if (!input["per_division"].is<JsonObjectConst>()) return false;
+            const auto scales = input["per_division"].as<JsonObjectConst>();
+            for (unsigned i = 0; i < plot::MeterScale::Quantities; ++i) {
+                const char *key = plot::MeterScale::Spans[i].key;
+                if (!scales.containsKey(key)) continue;
+                if (!scales[key].is<double>() || !plot::MeterScale::step(i, scales[key].as<double>(), o.meter.scales[i])) return false;
+            }
+        }
+    }
     if (object.containsKey("channels")) {
         auto channels = object["channels"].as<JsonArrayConst>();
         if (channels.size() != 2)

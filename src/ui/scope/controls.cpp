@@ -1,4 +1,5 @@
 #include "openosc/ui/scope/controls.hpp"
+#include "openosc/measurement/meter_function.hpp"
 #include <algorithm>
 
 namespace openosc::plot {
@@ -131,6 +132,12 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
         break;
     case MathTrace:
         options.math = Math((unsigned(options.math) + 3 + direction) % 3);
+        break;
+    case MeterTrace:
+        options.meter.shown = !options.meter.shown;
+        break;
+    case MeterFunction:
+        meterFunction = (meterFunction + MeterFunctionCount + direction) % MeterFunctionCount;
         break;
     default:
         break;

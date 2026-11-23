@@ -26,6 +26,7 @@
 #include "openosc/measurement/dmm/link_watchdog.hpp"
 #include "openosc/measurement/dmm/meter_commands.hpp"
 #include "openosc/measurement/dmm/ranges.hpp"
+#include "openosc/measurement/dmm/reading_trace.hpp"
 #include "openosc/calibration/zero_operation.hpp"
 #include "openosc/calibration/zero_file.hpp"
 #include "openosc/calibration/zero_selection.hpp"
@@ -145,7 +146,26 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // A physical F1-F4: one group key (dmm::MeterCommands::pressGroup), the statistics restart; what the
     // controller does is read from its packets. SCPI and the restore select a function instead.
     bool sendDmmGroup(dmm::CommandGroup group);
+    // In the DMM, and in the Scope while its DMM trace runs (meterTraceRunning).
     bool selectDmmFunction(dmm::Function function);
+    // The Scope's DMM trace, asked for by the view: while the Scope is the measurement the DMM chip is
+    // powered beside the capture by bit 13 of the scope word (AnalogFrontend::dmmPower), its UART
+    // receives by interrupt (the capture holds DMA1 Stream0), and its packets go into the DMM's session
+    // (meter()) under LinkWatchdog, which power-cycles it by that bit alone. Leaving the Scope, a
+    // shutdown or the trace off unpower the chip (LinkWatchdog::left: the DMM then keeps it off for
+    // OffMs as after a DMM visit); a clock change restarts only its UART.
+    void meterTrace(bool asked) { meterTraceAsked_ = asked; }
+    bool meterTraceRunning() const { return meterTraceRunning_; }
+    // Counts each start of the chip under the Scope: it comes up in its default function, so the
+    // caller selects the saved one (as on a DMM entry). Restarts after silence: dmmRestarts().
+    uint32_t meterTraceStarts() const { return meterTraceStarts_; }
+    // The readings the trace draws in Roll: time on the Roll snapshots' clock (nowUs), the value in SI.
+    // Kept while Roll runs at one time/div (a HOLD freezes them, a restart in between leaves a gap);
+    // restarted when Roll is entered, its time/div changes or the reading's quantity does.
+    const dmm::ReadingTrace &meterReadings() const { return meterReadings_; }
+    // The newest reading of the running trace, at most ReadingStaleUs old; nullptr without one.
+    static constexpr uint64_t ReadingStaleUs = 2000000;
+    const dmm::Result *meterTraceReading() const;
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
     bool dmmRanged() const { return !meter_.typeK() && dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
@@ -431,6 +451,26 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void stopDmmUart();
     void serviceDmmWatchdog(uint32_t now);
     void restartDmmUart();
+    // The chip's commands are this session's: the DMM active, or the Scope's DMM trace running.
+    bool meterLinked() const { return active_ && (measurement_ == MeasurementMode::Multimeter || meterTraceRunning_); }
+    // The chip powered or not by what is in force: the DMM word (with the generator's bits), or in the
+    // Scope bit 13 of its word.
+    void powerMeter(bool on);
+    bool startMeterUart(); // uart_ in the measurement's receive mode, its fault counts taken.
+    bool receiveFaults();  // A byte lost since the last look: the framer starts again.
+    // The next packet framed from uart_, reading at most `budget` bytes (counted down); each one
+    // feeds the watchdog.
+    bool framePacket(uint8_t (&packet)[dmm::Packet::Bytes], unsigned &budget);
+    void serviceMeterTrace(uint32_t now);
+    void stopMeterTrace();
+    void traceReading(); // The session's newest reading into meterReadings_ (Roll running, not held).
+    bool meterTraceAsked_ = false, meterTraceRunning_ = false;
+    // Readings were missed since the last one kept (HOLD, a restart): the next is preceded by a gap.
+    bool meterGap_ = false;
+    uint32_t meterTraceStarts_ = 0;
+    uint64_t meterTraceSinceUs_ = 0; // Its last start: an older reading is not this run's.
+    // Valid from a Roll start to the next start of another capture or a measurement change.
+    dmm::ReadingTrace meterReadings_{scope::AcquisitionArena::rollSpare()};
     static_assert(dmm::LinkWatchdog::OffMs <= dmm::FunctionSelector::PowerOnWaitMs, "A selection's deadline covers the power-on wait");
     dmm::LinkWatchdog watchdog_; // Silence power-cycles, the minimum off time, the UART's bounded restarts.
     static constexpr uint32_t DmmCloseMs = 500;

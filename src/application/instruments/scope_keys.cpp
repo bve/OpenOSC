@@ -6,6 +6,7 @@
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/ui/scope/view_zoom.hpp"
+#include "openosc/measurement/dmm/function.hpp"
 #include <algorithm>
 #include <cstdio>
 
@@ -30,6 +31,54 @@ void ApplicationController::setScopeFocus(plot::Focus focus) {
     focus_ = focus;
     view_.waveform().cursorFocus(focus == plot::Focus::Cursor ? cursors_.line() : plot::CursorLine::None);
     view_.scopeContext(selectedChannel_, focus_, prefs_.panReverse != 0);
+    view_.scopeMeter(meterCard());
+}
+void ApplicationController::selectNext() {
+    if (meterSelected_) {
+        meterSelected_ = false;
+        if (channelShown(0)) selectedChannel_ = 0;
+        else if (channelShown(1)) selectedChannel_ = 1;
+    } else if (selectedChannel_ == 0 && channelShown(1)) selectedChannel_ = 1;
+    else if (view_.waveform().options().meter.shown) meterSelected_ = true;
+    else if (channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
+}
+Quantity ApplicationController::meterQuantity() const {
+    using F = dmm::Function;
+    switch (const auto function = F(prefs_.meterFunction)) {
+    case F::Continuity: return Quantity::Resistance; // Its reading is in ohms.
+    case F::Diode: return Quantity::Voltage;
+    case F::Temperature: return Quantity::Temperature;
+    default: return dmm::Functions::quantity(function);
+    }
+}
+ui::ScopeScreen::Meter ApplicationController::meterCard() const {
+    ui::ScopeScreen::Meter card;
+    const auto &options = view_.waveform().options();
+    const auto quantity = meterQuantity();
+    if (!meterSelected_ || !options.meter.shown || !plot::MeterScale::scaled(quantity)) return card;
+    const unsigned index = plot::MeterScale::index(quantity);
+    card.selected = true;
+    card.perDivision = plot::MeterScale::perDivision(options.meter.scales[index]);
+    card.unit = plot::MeterScale::Spans[index].unit;
+    card.function = prefs_.meterFunction < MeterFunctionCount ? MeterFunctions[prefs_.meterFunction].name : "";
+    return card;
+}
+// One 1-2-5 step of the units/div within the quantity's span: a view setting, saved with the plot
+// (HOLD's view keeps it, as it is no part of what RUN restores).
+void ApplicationController::stepMeterScale(int direction, uint32_t now) {
+    const auto quantity = meterQuantity();
+    if (!direction || !plot::MeterScale::scaled(quantity)) return;
+    auto options = view_.waveform().options();
+    const unsigned index = plot::MeterScale::index(quantity);
+    const int next = options.meter.scales[index] + direction;
+    if (!plot::MeterScale::valid(index, next)) {
+        view_.notify(Tooltip::Unavailable, direction > 0 ? "Largest DMM scale" : "Smallest DMM scale", now);
+        return;
+    }
+    options.meter.scales[index] = int8_t(next);
+    view_.waveform().configure(options);
+    queuePlotSave(now);
+    view_.scopeMeter(meterCard());
 }
 // The active line has to be one that is drawn: follow every change of the cursor mode or view.
 void ApplicationController::syncCursorFocus() {
@@ -170,14 +219,25 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
         if (fine) view_.notify(Tooltip::Unavailable, "No record to move", now); // Once per press: a held key repeats silently.
         horizontal = 0;
     }
-    const auto change = focus_ == plot::Focus::Zoom // Pan only: no channel moves.
+    // The DMM trace selected: Up/Down move its zero (a view setting, saved also in HOLD: RUN keeps it).
+    const bool meter = meterSelected_ && focus_ == plot::Focus::Position;
+    bool meterMoved = false;
+    if (meter) {
+        auto &position = options.meter.position;
+        constexpr int Limit = plot::MeterTraceOptions::PositionLimit;
+        const auto next = int8_t(std::clamp(position + axis(keys, Keypad::Down, Keypad::Up) * (fine ? 1 : 4), -Limit, Limit));
+        meterMoved = next != position;
+        position = next;
+    }
+    auto change = focus_ == plot::Focus::Zoom || meter // Pan only: no channel moves.
         ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &model, false)}
         : plot::TraceMove::apply(request, options, selectedChannel_, held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
                                  &model);
+    change.view |= meterMoved;
     if (change.request && !applyEdited(request, now)) view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
     if (change.view) {
         view_.waveform().configure(options);
-        if (!held) queuePlotSave(now);
+        if (!held || meterMoved) queuePlotSave(now);
     }
 }
 // Issue #123: the Trigger card's Left/Right set the pretrigger, the share of the next records before their
@@ -261,13 +321,13 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     }
     holdKeys(keys, now);
     if (keys & Keypad::Relative) view_.scopeFooterPage(); // REL has no other Scope use; its hold is power.
-    // A second F1/F2 press changes the channel only to one that is shown (followShownChannel).
+    // A second F1/F2 press selects only a channel that is shown (followShownChannel), or the DMM trace on.
     if (keys & Keypad::F1) {
-        if (focus_ == plot::Focus::Scale && channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
+        if (focus_ == plot::Focus::Scale) selectNext();
         focus_ = plot::Focus::Scale;
     }
     if (keys & Keypad::F2) {
-        if (focus_ == plot::Focus::Position && channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
+        if (focus_ == plot::Focus::Position) selectNext();
         focus_ = plot::Focus::Position;
     }
     setScopeFocus(focus_);
@@ -301,13 +361,18 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     if (focus_ == plot::Focus::Position) { moveTrace(arrows, now, fine); return; }
     scaleKeys(arrows, now);
 }
-// F1: Up/Down the selected channel's V/div, Left/Right the time/div, one standard step each, in RUN
-// and HOLD alike. A held record cannot be re-acquired: they stage the next capture (no relay
-// switches, no new arm; RUN applies them) and the record is shown at them (followNextCapture,
-// issues #7, #93). A held FFT's Left/Right zoom its bins instead.
+// F1: Up/Down the selected channel's V/div (the DMM trace's units/div), Left/Right the time/div, one
+// standard step each, in RUN and HOLD alike. A held record cannot be re-acquired: they stage the next
+// capture (no relay switches, no new arm; RUN applies them) and the record is shown at them
+// (followNextCapture, issues #7, #93). A held FFT's Left/Right zoom its bins instead.
 void ApplicationController::scaleKeys(uint32_t keys, uint32_t now) {
     const bool held = data_.scopeHeld();
     uint32_t steps = keys;
+    if (meterSelected_ && (steps & (Keypad::Up | Keypad::Down))) {
+        stepMeterScale(axis(steps, Keypad::Down, Keypad::Up), now);
+        steps &= ~uint32_t(Keypad::Up | Keypad::Down);
+        if (!steps) return;
+    }
     if (held && view_.waveform().options().mode == plot::Mode::Spectrum && (keys & (Keypad::Left | Keypad::Right))) {
         beginHeldView();
         auto view = view_.waveform().options();
@@ -416,6 +481,7 @@ void ApplicationController::openShortcut(uint32_t) {
         plotControls_.view = view_.channelView();
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
         plotControls_.options.cursors.channel = selectedChannel_;
+        plotControls_.meterFunction = prefs_.meterFunction;
         plotControls_.group = plot::Controls::Group::Cursors; plotControls_.listing = false;
         sectionDirect_ = true; // Back closes the section (analyzeRow_ none).
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_));
