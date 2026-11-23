@@ -20,6 +20,9 @@ constexpr const char *generatorStartups[] = {"off","restore"};
 constexpr const char *batteryDisplays[] = {"icon","volts","percent"};
 // usb.controller (Preferences::usbController, the index); absent in older files: enabled.
 constexpr const char *usbControllers[] = {"disabled","enabled"};
+// power_on_keys (PowerOnKeys): a key per held button; absent in older files: the defaults.
+constexpr const char *powerOnButtons[] = {"auto_range", "hold_save", "mode"};
+static_assert(sizeof powerOnButtons / sizeof *powerOnButtons == PowerOnKeys::Count);
 template<class T> bool number(JsonObjectConst object, const char *key, T &value) {
     if (!object.containsKey(key))
         return true;
@@ -41,7 +44,7 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
     JsonObjectConst root = lease->as<JsonObjectConst>();
     if (!root["schema"].is<unsigned>() || root["schema"].as<unsigned>() != 1 || !section(root, "display") ||
         !section(root, "scope") || !section(root, "multimeter") || !section(root, "generator") || !section(root, "usb") ||
-        !section(root, "power"))
+        !section(root, "power") || !section(root, "power_on_keys"))
         return false;
     Preferences candidate;
     if (!number(root["display"], "brightness", candidate.brightness) ||
@@ -106,6 +109,17 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!number(power, "battery_gain_permille", gain) || !number(power, "battery_offset_mv", offset) ||
             !power::BatteryGauge::trimValid(gain, offset)) return false;
         candidate.batteryGainPermille = int8_t(gain); candidate.batteryOffsetMv = int16_t(offset);
+    }
+    { // power_on_keys: what REL held with AUTO/RANGE, HOLD/SAVE or MODE starts.
+        const auto keys = root["power_on_keys"].as<JsonObjectConst>();
+        for (unsigned i = 0; i < PowerOnKeys::Count; ++i) {
+            if (!keys.containsKey(powerOnButtons[i])) continue;
+            const char *name = keys[powerOnButtons[i]].is<const char *>() ? keys[powerOnButtons[i]].as<const char *>() : "";
+            uint32_t target = 0;
+            while (target < PowerOnKeys::Options && std::strcmp(name, PowerOnKeys::key(target))) ++target;
+            if (target == PowerOnKeys::Options) return false;
+            candidate.powerOnKeys.target[i] = target;
+        }
     }
     const auto usb = root["usb"].as<JsonObjectConst>();
     if (usb.containsKey("controller")) {
@@ -246,6 +260,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["power"]["battery_gain_permille"] = int(values.batteryGainPermille);
     document["power"]["battery_offset_mv"] = int(values.batteryOffsetMv);
     document["usb"]["controller"] = usbControllers[values.usbController];
+    for (unsigned i = 0; i < PowerOnKeys::Count; ++i) document["power_on_keys"][powerOnButtons[i]] = PowerOnKeys::key(values.powerOnKeys.target[i]);
     document["scope"]["timebase_ns"] = values.timebaseNs;
     auto channels = document["scope"].createNestedArray("millivolts_per_division");
     channels.add(values.millivolts[0]);

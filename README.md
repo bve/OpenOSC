@@ -308,6 +308,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   holds only the firmware. You can edit the files from a computer; a damaged settings file is
   restored from its previous version or from a copy in `/openosc/SETCOPY/`.
 - Hold-to-power-off with a progress bar
+- Power-on keys: hold AUTO/RANGE, HOLD/SAVE or MODE together with REL while switching on to start
+  in the screen chosen for that key (**Settings → Device → Power → Power-on keys**): the
+  oscilloscope, the generator or any multimeter function. AUTO/RANGE starts Continuity by default
 - Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
 
 **Recovery bootloader**

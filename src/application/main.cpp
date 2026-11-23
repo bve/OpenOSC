@@ -1,6 +1,7 @@
 #include "openosc/platform/watchdog.hpp"
 #include "openosc/platform/stack_guard.hpp"
 #include "openosc/platform/board.hpp"
+#include "openosc/platform/input.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/clocks.hpp"
 #include "openosc/platform/power.hpp"
@@ -40,6 +41,9 @@ int main() {
     const auto startupTemperature = mcuTemperature.captureStartup();
     LvglDisplay display;
     const bool bootDisplayReady = display.showBootSplash(bootFrame, bootStyle);
+    // Power-on keys: read now, before the NOR and FAT start (about 0.75 s on a ZT703S, SYST:BOOT?), not
+    // at the settings.
+    const uint32_t powerOnKeys = Keypad::read();
     boot_diagnostics.factoryCrc = Crc32::compute(reinterpret_cast<const void*>(layout::FactoryBase), layout::FactoryBytes);
     BootTiming::mark(BootTiming::Crc);
     NorFlash nor;
@@ -57,6 +61,7 @@ int main() {
     Watchdog::progress(); // Boot stages are the boot's progress (one pass, WatchdogPolicy::OperationMs).
     PreferencesFile preferences(fs);
     preferences.load();
+    preferences.applyPowerOnKeys(powerOnKeys); // Before PE10, which follows the start mode.
     Board::configurePe10(preferences.values().mode == unsigned(MeasurementMode::Generator));
     BootTiming::mark(BootTiming::Settings);
     Watchdog::progress();

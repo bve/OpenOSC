@@ -38,6 +38,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
 [[noreturn]] void ApplicationController::run() {
     prefs_ = preferences_.values();
     applyPreferences();
+    if (preferences_.keyStart()) changed(Board::milliseconds()); // The power-on key's screen, saved at power-off.
     // The factory record's reading is the settings' choice at boot only (Reload settings keeps it).
     const bool backend = data_.initialize(state_.mode, FactoryRecordPolicy(prefs_.scope.factoryRecordFormat));
     const auto applied = applyDataPreferences();

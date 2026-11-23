@@ -15,6 +15,14 @@ public:
     bool load();
     bool save(const Preferences& values); // False only when the JSON was not written.
     const Preferences& values() const { return values_; }
+    // The start screen of the power-on keys held (Keypad::read()), over the saved one.
+    void applyPowerOnKeys(uint32_t keys) {
+        const uint32_t mode = values_.mode, function = values_.meterFunction;
+        PowerOnKeys::apply(values_.powerOnKeys.pick(keys), values_.mode, values_.meterFunction);
+        keyStart_ = values_.mode != mode || values_.meterFunction != function;
+    }
+    // A power-on key changed the start screen: saved at power-off like a mode change (nothing written at boot).
+    bool keyStart() const { return keyStart_; }
     const char* error() const { return error_; }
     bool repaired() const { return repaired_; } // An invalid JSON was archived.
     bool restored() const { return restored_; } // The values came from a previous or backup copy.
@@ -25,6 +33,6 @@ private:
     Filesystem& fs_;
     Preferences values_;
     const char* error_ = nullptr;
-    bool repaired_ = false, restored_ = false;
+    bool repaired_ = false, restored_ = false, keyStart_ = false;
 };
 }

@@ -11,6 +11,7 @@
 #include "openosc/settings/tooltips.hpp"
 #include "openosc/settings/bode_preferences.hpp"
 #include "openosc/settings/menu_contrast.hpp"
+#include "openosc/settings/power_on_keys.hpp"
 #include <cstdint>
 
 namespace openosc {
@@ -55,6 +56,9 @@ struct Preferences {
     ScopePreferences scope;
     MeterPreferences meter;
     IdleSettings idle;
+    // REL + AUTO/RANGE, HOLD/SAVE or MODE at power-on (Settings > Device > Power): three bytes in the tail
+    // padding after idle (sizeof checked below).
+    PowerOnKeys powerOnKeys;
     bool valid() const {
         scope::SamplePlan sampling;
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
@@ -69,7 +73,7 @@ struct Preferences {
                generatorAmplitudeMillivolts <= generator::Capabilities::amplitudeLimitMillivolts(generator::Shape(generatorShape), generatorMillihertz) &&
                (!generator::Capabilities::AmplitudeStepMillivolts || !(generatorAmplitudeMillivolts % (generator::Capabilities::AmplitudeStepMillivolts ? generator::Capabilities::AmplitudeStepMillivolts : 1))) &&
                generatorLevel<4 && generatorSquareDrive<2 && generatorStartup<2 && generatorLastOutput<2 && generatorArrangement.valid() && generatorMinimumCode<=generatorMaximumCode &&
-               generatorMaximumCode<=4095 && scope.valid() && meter.valid() && idle.valid() &&
+               generatorMaximumCode<=4095 && scope.valid() && meter.valid() && idle.valid() && powerOnKeys.valid() &&
                scope::SamplePlan::calculate(timebaseNs,
                     scope::RecordBudget::perChannel(scope.recordPoints,scope::RecordBudget::channels(scope.enabled[0],scope.enabled[1])),
                     RunModes[scope.runMode].maximumSampleRate(),scope::RecordBudget::Maximum,sampling);
