@@ -6,7 +6,7 @@
 
 namespace openosc::ui {
 // The DMM's F1..F4 cards as signs instead of words: each card's row shows every function its key
-// selects (F1 V DC/AC; F2 Ω, continuity, diode, capacitor; F3 A DC/AC; F4 mV DC/AC and Type K
+// selects (F1 V DC/AC; F2 Ω, continuity, diode, capacitor; F3 A DC/AC; F4 mV DC/AC and thermocouple
 // on V/Ω, mA DC/AC on mA), the decoded function in the highlight colour, the others muted (on the selected
 // card's accent fill: its ink, the others faded). The cards themselves (fill, focus, the value
 // line) stay ParameterBar's, shared with Scope and GEN.

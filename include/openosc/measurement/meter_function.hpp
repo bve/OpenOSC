@@ -9,7 +9,7 @@ inline constexpr MeterFunctionInfo MeterFunctions[] = {
     {"current_dc", "DC current", "A"}, {"current_ac", "AC current", "A"},
     {"millivolts_dc", "DC millivolts", "mV"}, {"millivolts_ac", "AC millivolts", "mV"},
     {"milliamps_dc", "DC milliamps", "mA"}, {"milliamps_ac", "AC milliamps", "mA"},
-    {"temperature_k", "Temperature (Type K)", "degC"}
+    {"temperature_k", "Thermocouple", "degC"}
 };
 inline constexpr unsigned MeterFunctionCount = sizeof MeterFunctions / sizeof *MeterFunctions;
 }

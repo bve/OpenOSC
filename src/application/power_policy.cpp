@@ -9,7 +9,7 @@ void ApplicationController::applyBrightness() {
     if (uiReady_) PowerControl::brightness(dimmed_ ? prefs_.idle.dimmedBrightness(prefs_.brightness) : prefs_.brightness);
 }
 // The DMM's packet is usable while current, confirmed (no selection under way) and not held (the
-// manual HOLD, the meter's own, a hold mode's capture); Type K reads millivolts, never a range.
+// manual HOLD, the meter's own, a hold mode's capture); a thermocouple reads millivolts, never a range.
 // Off or another instrument on show: nothing else is read, only the trigger serial is followed.
 bool ApplicationController::measurementActivity() {
     MeasurementWake::Pass pass;
@@ -24,7 +24,7 @@ bool ApplicationController::measurementActivity() {
         const auto &meter = data_.meter();
         pass.reading = &meter.latest();
         pass.usable = meter.status(data_.nowUs(), 2000000) == DataStatus::Ok && !meter.awaitingFunction() &&
-                      data_.dmmSelectionStatus() != DataStatus::Busy && !meter.held() && !meter.holding() && !meter.typeK();
+                      data_.dmmSelectionStatus() != DataStatus::Busy && !meter.held() && !meter.holding() && !meter.thermocouple();
     }
     return measurementWake_.poll(pass);
 }

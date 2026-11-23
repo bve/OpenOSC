@@ -326,6 +326,7 @@ private:
     void triggerKeys(uint32_t keys, uint32_t now, bool fine);
     void frequencyKeys(uint32_t keys, uint32_t now);
     void meterPanelKeys(uint32_t keys, uint32_t now);
+    void notifyJunctionWindow(uint32_t now);
     void meterChanged(unsigned row, uint32_t now); // The DMM panel's changed row, taken at once (that row only).
     ui::MeterProperties meterProperties() const;
     void meterAppearanceKeys(uint32_t keys, uint32_t now);

@@ -251,7 +251,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
             std::snprintf(text, sizeof text, "--");
             const unsigned decimals = dmm::Resolution::decimals(result);
             const double value = result.primary.quantity == Quantity::Temperature
-                ? dmm::TypeK::display(measured, result.unit, relative || result.peerRelative) : measured / factor;
+                ? dmm::TemperatureUnits::display(measured, result.unit, relative || result.peerRelative) : measured / factor;
             if (!Decimal::fixed(value, decimals, text, sizeof text)) Decimal::number(value, text, sizeof text, 6);
             shownUnit = MeterText::unit(result.unit);
         }

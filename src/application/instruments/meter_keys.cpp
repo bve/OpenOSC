@@ -1,6 +1,7 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/ui/editors/meter_properties.hpp"
+#include <cstdio>
 
 namespace openosc {
 void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
@@ -30,13 +31,14 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     const auto &meter = data_.meter();
     if ((keys & Keypad::F4) && meter.latest().sequence && !meter.latest().currentInput) {
         using F = dmm::Function;
-        const auto current = meter.typeK() ? F::Temperature : dmm::Functions::identify(meter.latest());
+        const auto current = meter.thermocouple() ? F::Temperature : dmm::Functions::identify(meter.latest());
         const bool needsJunction = current == F::MillivoltsAc && !prefs_.meter.temperature.configured();
         auto next = F::MillivoltsDc;
         if (current == F::MillivoltsDc) next = F::MillivoltsAc;
         if (current == F::MillivoltsAc && !needsJunction) next = F::Temperature;
         if (!meterCommand(data_.selectDmmFunction(next))) view_.notify(Tooltip::Unavailable, "Measurement command busy", now);
-        else if (needsJunction) view_.notify(Tooltip::Usage, "Type K: set Manual junction in MENU", now);
+        else if (needsJunction) view_.notify(Tooltip::Usage, "Thermocouple: set Manual junction in MENU", now);
+        else if (next == F::Temperature) notifyJunctionWindow(now);
         return;
     }
     dmm::CommandGroup group = dmm::CommandGroup::Voltage;
@@ -149,6 +151,16 @@ void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
     }
     view_.properties(appearanceEditor_, navigator_);
 }
+// A tooltip when the junction in effect is outside the window of the selected thermocouple type.
+void ApplicationController::notifyJunctionWindow(uint32_t now) {
+    const auto &temperature = prefs_.meter.temperature;
+    if (!temperature.junctionOutsideWindow(data_.meter().mcuJunction())) return;
+    const auto window = dmm::Thermocouple::junctionWindow(temperature.type);
+    char type[4], text[48];
+    meterEditor_.optionName(ui::MeterProperties::ThermocoupleType, unsigned(temperature.type), type, sizeof type);
+    std::snprintf(text, sizeof text, "Type %s: junction %d..%d °C", type, window.from, window.to);
+    view_.notify(Tooltip::Usage, text, now);
+}
 // A choice in the DMM panel, taken at once: only the row that was changed. A look (Display, colours,
 // digits, Statistics) sets its preference and sends nothing: the panel's snapshot of Range, REL, log
 // and serial (from when it opened, or a HOLD's reading) is never compared with the instrument then.
@@ -193,9 +205,10 @@ void ApplicationController::meterChanged(unsigned row, uint32_t now) {
     case Row::Colors:
         if (meterEditor_.palette() == prefs_.meter.shownPalette()) return;
         prefs_.meter.custom(); prefs_.meter.palette=meterEditor_.palette(); break;
-    case Row::JunctionSource: case Row::ColdJunction: case Row::TemperatureUnit:
+    case Row::ThermocoupleType: case Row::JunctionSource: case Row::ColdJunction: case Row::TemperatureUnit:
         meterTemperatureSettings(meterEditor_.temperature(), now);
         meterEditor_ = meterProperties();
+        notifyJunctionWindow(now);
         return;
     default: return;
     }

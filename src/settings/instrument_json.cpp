@@ -32,6 +32,8 @@ constexpr const char *triggerModes[] = {"auto", "normal", "single"};
 constexpr const char *triggerTypes[] = {"edge", "width", "runt", "transition"};
 constexpr const char *triggerConditions[] = {"any", "less", "greater", "inside", "outside"};
 constexpr const char *junctionSources[] = {"manual", "startup", "live"};
+constexpr const char *thermocoupleTypes[] = {"b", "e", "j", "k", "n", "r", "s", "t"};
+static_assert(sizeof thermocoupleTypes / sizeof *thermocoupleTypes == unsigned(dmm::ThermocoupleType::Count), "a key per thermocouple type");
 constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact", "mkr"}; // FactoryRecordPolicy.
 constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
 constexpr const char *faces[] = {"ibm", "mono", "segment"}, *palettes[] = {"dark", "amber", "paper"};
@@ -364,9 +366,12 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
             boolean(temperature, "mcu_sensor", mcuSensor);
             // The old MCU option followed the sensor live. A named source takes precedence.
             uint32_t source = unsigned(mcuSensor ? dmm::JunctionSource::McuLive : dmm::JunctionSource::Manual);
+            uint32_t type = unsigned(dmm::ThermocoupleType::K);
             choice(temperature, "source", source, junctionSources);
+            choice(temperature, "type", type, thermocoupleTypes);
             settings.fahrenheit = fahrenheit != 0;
             settings.source = dmm::JunctionSource(source);
+            settings.type = dmm::ThermocoupleType(type);
             output.meter.temperature = settings;
         }
     }
@@ -492,6 +497,8 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
         object["fahrenheit"] = temperature.fahrenheit;
         if (temperature.source != dmm::JunctionSource::Manual)
             object["source"] = junctionSources[unsigned(temperature.source)];
+        if (temperature.type != dmm::ThermocoupleType::K)
+            object["type"] = thermocoupleTypes[unsigned(temperature.type)];
     }
 }
 } // namespace openosc

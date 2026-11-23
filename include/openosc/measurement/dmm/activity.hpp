@@ -15,7 +15,7 @@ namespace openosc::dmm {
 // ceil(full scale counts / 10), 2500 counts of the 2.5 V range, 1000 of 9.999 nF.
 // A new baseline, without activity: the first reading, another function, range, input or meter REL,
 // and the first reading after anything not usable. Not usable (the baseline is dropped): a reading
-// the caller marks so (stale, an unconfirmed selection, HOLD of either kind, Type K), no value (OL,
+// the caller marks so (stale, an unconfirmed selection, HOLD of either kind, a thermocouple), no value (OL,
 // a blank, an unreadable one), no range table (continuity, the diode, temperature), above its range,
 // and the DC/AC millivolt functions, whose open inputs pick up static and mains (the issue's reports).
 class ActivityDetector {

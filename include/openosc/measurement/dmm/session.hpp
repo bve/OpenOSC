@@ -102,7 +102,7 @@ public:
     const Result &latest() const { return latest_; }
     const Result &live() const { return shown_; }
     const TemperatureSettings &temperatureSettings() const { return temperatureSettings_; }
-    bool typeK() const { return typeK_; }
+    bool thermocouple() const { return thermocouple_; }
     void startupJunction(std::optional<int16_t> reading) { startupJunction_ = reading; }
     bool liveJunction(std::optional<int16_t> reading) {
         if (liveJunction_ == reading) return false;
@@ -117,7 +117,7 @@ public:
         }
     }
     void configureTemperature(TemperatureSettings settings, uint64_t nowUs);
-    void typeK(bool enabled, uint64_t nowUs);
+    void thermocouple(bool enabled, uint64_t nowUs);
     // The newest packet that decoded, as received (SYST:DMM:PACK?); 0 bytes before the first.
     size_t packet(const uint8_t *&data) const { data = raw_; return rawBytes_; }
     // What the screen, the needle and SCPI show: the manual HOLD's reading, else the Delayed/Stable/
@@ -199,7 +199,7 @@ private:
     Quantity trendQuantity_ = Quantity::Unknown; // The trend restarts on a quantity of its own.
     uint32_t sequence_ = 0;
     bool userHold_ = false, frozen_ = false, awaiting_ = false;
-    bool typeK_ = false;
+    bool thermocouple_ = false;
 };
 // The controller's two-byte commands. AUTO/RANGE is the factory's KEY5 stroke (RangeStroke): NextRange
 // 20 20 (press), RangeRelease 21 21 (short release), AutoRange 22 22 (hold).
