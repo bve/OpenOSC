@@ -11,7 +11,8 @@
 namespace openosc::ui {
 void ScopeScreen::activate(const ApplicationState &state) {
     measurements_=state.scope.measurements.valid() ? state.scope.measurements : scope::ReadoutSelection{};
-    host_.scopeFooter().selection(measurements_);
+    host_.scopeFooter().selection(measurements_, state.scope.meterMeasurements.valid() ? state.scope.meterMeasurements
+                                                                                    : scope::MeterReadoutSelection{});
     countersValid_=false; readoutsPainted_=false;
     valid_ = false;
     status_ = "WAITING FOR DATA";
@@ -47,6 +48,9 @@ void ScopeScreen::meter(const Meter &meter) {
         return;
     meter_ = meter;
     cards();
+}
+void ScopeScreen::meterReadouts(const plot::MeterReadouts &readouts) {
+    if (!host_.overlayActive()) host_.scopeFooter().meter(readouts);
 }
 void ScopeScreen::select(unsigned channel) {
     channel_ = channel < 2 ? channel : 0;
@@ -160,8 +164,8 @@ void ScopeScreen::cards() {
     // the selected channel's (the DMM trace's), F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
     using Tint = ParameterBar::Tint;
     const auto channelTint = [&](unsigned c) { return c > 1 ? Tint::Neutral : view.slot(c) ? Tint::Channel2 : Tint::Channel1; };
-    bar.tint(0, meter ? Tint::Reference : channelTint(channel_));
-    bar.tint(1, meter ? Tint::Reference : channelTint(channel_));
+    bar.tint(0, meter ? Tint::Meter : channelTint(channel_));
+    bar.tint(1, meter ? Tint::Meter : channelTint(channel_));
     bar.tint(2, channelTint(unsigned(model.triggerChannel())));
     bar.tint(3, Tint::Neutral);
     if (!host_.overlayActive()) bar.select(focus_ == plot::Focus::Zoom ? 3U : unsigned(focus_));

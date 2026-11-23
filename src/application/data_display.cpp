@@ -15,33 +15,34 @@ const dmm::Result &shownReading(const dmm::Session &meter, dmm::Function selecti
     return selecting != dmm::Function::Unknown ? none : meter.displayed();
 }
 } // namespace
-// The DMM trace, each pass: its readings to the plot (Roll draws them), its value tag (Y-T and
-// Y-T+FFT, with the units/div in Roll) and the cards while F1/F2 select it. While a function is
-// selected the old one's reading is not shown, as in the DMM.
+// The DMM trace, each pass (Y-T and Y-T+FFT): its readings to the plot, its value tag with its
+// units/div, its readouts over the visible window and its scale to the footer, and the cards while
+// F1/F2 select it. While a function is selected the old one's reading is not shown, as in the DMM.
 void ApplicationController::showMeterTrace() {
     auto &widget = view_.waveform();
     const auto &options = widget.options();
-    const bool shown = options.meter.shown;
-    widget.meterReadings(shown ? &data_.meterReadings() : nullptr);
+    widget.meterReadings(options.meter.shown ? &data_.meterReadings() : nullptr);
     char text[64] = "";
-    if (shown && (options.mode == plot::Mode::Time || options.mode == plot::Mode::SpectrumOverlay)) {
+    plot::MeterReadouts readouts;
+    readouts.shown = options.meter.shown && (options.mode == plot::Mode::Time || options.mode == plot::Mode::SpectrumOverlay);
+    if (readouts.shown) {
         const auto *reading = data_.dmmSelectionStatus() == DataStatus::Busy ? nullptr : data_.meterTraceReading();
         if (!reading) std::snprintf(text, sizeof text, "DMM ----");
         else std::snprintf(text, sizeof text, "DMM %s %s", ui::MeterText::reading(*reading), ui::MeterText::unit(reading->unit));
-        const auto &model = widget.model();
-        const auto quantity = data_.meterReadings().quantity();
+        using F = dmm::Function;
+        const auto function = F(prefs_.meterFunction);
+        readouts.rmsOffered = function != F::VoltageAc && function != F::MillivoltsAc && function != F::CurrentAc && function != F::MilliampsAc;
+        readouts.function = prefs_.meterFunction < MeterFunctionCount ? MeterFunctions[prefs_.meterFunction].name : "";
+        readouts.calculate(data_.meterReadings(), widget.model());
         char scale[24];
-        if (model.hasFrame() && model.metadata().rolling && plot::MeterScale::scaled(quantity)) {
-            const unsigned index = plot::MeterScale::index(quantity);
-            if (plot::Format::quantity(plot::MeterScale::perDivision(options.meter.scales[index]), plot::MeterScale::Spans[index].unit,
-                                       scale, sizeof scale, 3)) {
-                const size_t used = std::strlen(text);
-                std::snprintf(text + used, sizeof text - used, "  %s/div", scale);
-            }
+        if (readouts.perDivision > 0 && plot::Format::quantity(readouts.perDivision, readouts.unit, scale, sizeof scale, 3)) {
+            const size_t used = std::strlen(text);
+            std::snprintf(text + used, sizeof text - used, "  %s/div", scale);
         }
     }
-    widget.meterTag(text, widget.palette().reference);
+    widget.meterTag(text, widget.palette().meter);
     view_.scopeMeter(meterCard());
+    view_.scopeMeterReadouts(readouts);
 }
 // The function a running selection awaits, unless a HOLD keeps a reading.
 dmm::Function ApplicationController::meterSelecting() const {
@@ -244,9 +245,15 @@ void ApplicationController::displayData(uint32_t now) {
             options.spectrum.channel ^= 1;
             view_.waveform().configure(options);
         }
-        if (options.cursors.voltage && !channelShown(options.cursors.channel) && channelShown(options.cursors.channel^1)) {
-            auto cursors=options.cursors; cursors.channel^=1;
-            view_.waveform().cursorLines(cursors); queuePlotSave(now);
+        // Level cursors on a channel or the DMM trace that is no longer shown: on the other channel shown.
+        if (options.cursors.voltage) {
+            const unsigned channel = options.cursors.channel;
+            const bool meter = channel == plot::CursorOptions::Meter;
+            const unsigned other = meter ? (channelShown(0) ? 0U : 1U) : channel ^ 1;
+            if ((meter ? !options.meter.shown : !channelShown(channel)) && channelShown(other)) {
+                auto cursors = options.cursors; cursors.channel = uint8_t(other);
+                view_.waveform().cursorLines(cursors); queuePlotSave(now);
+            }
         }
         followShownChannel();
         if (options.mode==plot::Mode::XY && (!channelShown(0) || !channelShown(1))) {

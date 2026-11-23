@@ -54,6 +54,7 @@ struct ChannelOptions {
     bool graded() const { return grade != Grade::Off; }
 };
 struct CursorOptions {
+    static constexpr uint8_t Meter = 2; // channel: the DMM trace's level cursors, in its units (MeterTraceOptions).
     uint16_t xA = 250, xB = 750, yA = 250, yB = 750;
     uint8_t channel = 0;
     bool time = false, voltage = false;
@@ -72,8 +73,8 @@ struct CounterOptions {
         return source <= 2 && (average == 1 || average == 3 || average == 10) && ppm >= -1000 && ppm <= 1000 && estimate <= 1 && timed <= 1;
     }
 };
-// The Scope's DMM trace (DataAccess::meterReadings, drawn in Roll): shown or not, where its zero lies
-// and each quantity's units/div (MeterScale steps, in MeterScale's order).
+// The Scope's DMM trace (DataAccess::meterReadings, drawn in Y-T and Y-T+FFT): shown or not, where its
+// zero lies and each quantity's units/div (MeterScale steps, in MeterScale's order).
 struct MeterTraceOptions {
     // Its zero within the plot, as a channel's: four divisions either way of the middle line.
     static constexpr int8_t PositionSteps = 20, PositionLimit = 4 * PositionSteps; // Per division.

@@ -7,8 +7,8 @@ constexpr ScopeRoleInfo roles[ScopeAppearance::Roles] = {
     {"Background", "background"}, {"Panels", "panel"},      {"Text", "text"},
     {"Secondary text", "secondary"}, {"Grid", "grid"},      {"CH1", "channel1"},
     {"CH2", "channel2"},          {"Math", "math"},         {"Reference", "reference"},
-    {"Cursors", "cursor"},        {"Trigger", "trigger"},   {"Selection", "selection"},
-    {"Readouts", "readout"},      {"Tag text", "tag_text"}};
+    {"DMM", "dmm"},               {"Cursors", "cursor"},    {"Trigger", "trigger"},
+    {"Selection", "selection"},   {"Readouts", "readout"},  {"Tag text", "tag_text"}};
 constexpr const char *schemeNames[] = {"Current", "High contrast", "Daylight", "Amber"};
 constexpr const char *schemeKeys[] = {"current", "high_contrast", "daylight", "amber"};
 static_assert(sizeof schemeKeys / sizeof *schemeKeys == unsigned(ScopeScheme::Count));

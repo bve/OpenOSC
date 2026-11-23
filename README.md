@@ -173,10 +173,12 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   of that budget, for example as DMA headroom at the fastest sample rates. The prefix depends on the
   plan only, so it stays steady while the settings stay the same. **Analyze → Acquisition → Captured**
   shows the exact number of points per channel in the displayed record.
-- The multimeter as a third trace beside CH1 and CH2 (**Analyze → Display → View → DMM** and
-  **DMM function**), measured at the multimeter's own inputs: its reading over the plot at every
-  timebase, its line in Roll. **F1**/**F2** select it after the channels; Up/Down then set its
-  units/div and its position
+- The multimeter as a third channel beside CH1 and CH2 (**Analyze → Display → View → DMM** and
+  **DMM function**), measured at the multimeter's own inputs: its line at every timebase in its own
+  color (**Analyze → Colors**), with its zero tag and its reading over the plot. **F1**/**F2** select
+  it after the channels; Up/Down then set its units/div and its position. Its readouts (mean, min,
+  max, peak to peak, RMS) have a footer page of their own, or the panel of a channel that is off, and
+  level cursors can measure it in its units
 - In the default **Quick** profile, tap **AUTO** to start Auto Setup or cancel it in progress.
   Hold **AUTO** for 2 s in Y-T to open **Zoom & Pan**. Up/Down zoom the view, Left/Right pan, and
   **F4** returns to the previous card. The **Classic** profile uses a tap to reset pan and a hold to

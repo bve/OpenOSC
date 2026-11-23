@@ -583,9 +583,6 @@ bool DataAccess::startCapture() {
             metadata.interleaveMatch = matchFor(metadata, frontend, actualRate);
     }
 #endif
-    // A slot capture may write bank 3, where the DMM trace's readings lie (AcquisitionArena::rollSpare):
-    // they are given up before its first DMA transfer.
-    if (!rolling) meterReadings_.invalidate();
     usbtrace::mark(usbtrace::Tag::CaptureBegin);
     const bool captureStarted = capture_.start(metadata, frontend, buffer, rolling, trigger.comparatorLevel(), zeroTrial() ? nullptr : &trigger);
     usbtrace::mark(usbtrace::Tag::CaptureEnd);
@@ -608,12 +605,6 @@ bool DataAccess::startCapture() {
     if (rolling) {
         rolling_.reset(plan.count); rollingConsumed_=rollingPublished_=0; rollingLost_=false;
         rollingAt_=Board::milliseconds()-16;
-    }
-    // The DMM trace's readings span one Roll at one time/div: entered anew (after another capture or
-    // measurement) or at another time/div they start again; a restart within it keeps them.
-    if (rolling && (!meterReadings_.valid() || meterReadings_.timebaseNs() != request_.timebaseNs)) {
-        meterReadings_.reset(meterReadings_.quantity(), request_.timebaseNs);
-        meterGap_ = false;
     }
     if (!holdPending_) status_ = DataStatus::Ok; // A pending HOLD's retry keeps the fault until a record arrives.
     applyForce();

@@ -254,6 +254,7 @@ void ApplicationController::applyPreferences() {
     state_.mode = static_cast<MeasurementMode>(prefs_.mode);
     state_.scope.timebaseNs = prefs_.timebaseNs;
     state_.scope.measurements = prefs_.scope.measurements;
+    state_.scope.meterMeasurements = prefs_.scope.meterMeasurements;
     for (unsigned c = 0; c < 2; ++c) state_.scope.millivoltsPerDivision[c] = prefs_.millivolts[c];
     state_.meter.function = prefs_.meterFunction;
     configureDecoder();

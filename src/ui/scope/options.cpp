@@ -29,7 +29,7 @@ bool Options::valid() const {
             c.brightness < Brightness::LowestTrace || c.brightness > Brightness::Full)
             return false;
     const auto &c = cursors;
-    return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2;
+    return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel <= CursorOptions::Meter;
 }
 void Options::restoreHeldView(const Options &saved) {
     zoom = saved.zoom; zoomOut = saved.zoomOut; panPpb = saved.panPpb; heldTimebaseNs = saved.heldTimebaseNs;

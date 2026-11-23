@@ -6,8 +6,9 @@ MEMORY {
     AHB (rw) : ORIGIN = 0x30000000, LENGTH = 128K
     SRAM4 (rw) : ORIGIN = 0x38000000, LENGTH = 32K
     /* ITCM (64 KiB at 0; the CPU, the debugger and MDMA reach it, DMA1/2 and DMA2D do not): the
-       decoder workspace and, in firmware_trace builds, the USB trace ring (sections below). The
-       first 1 KiB stays unused, so no object has the null address. */
+       decoder workspace, the Scope's DMM trace readings and, in firmware_trace builds, the USB trace
+       ring in their room (sections below). The first 1 KiB stays unused, so no object has the null
+       address. */
     ITCM (rw) : ORIGIN = 0x00000400, LENGTH = 63K
 }
 _estack = ORIGIN(RAM) + LENGTH(RAM);
@@ -64,6 +65,9 @@ SECTIONS {
     .scpi_measure (NOLOAD) : { . = ALIGN(8); _sscpi_measure = .; KEEP(*(.scpi_measure)) . = ALIGN(8); _escpi_measure = .; } > ITCM
     /* The DMM session recorder (GitHub #144: its file, record and accumulators), zeroed at reset, built in place on first use. */
     .dmm_log (NOLOAD) : { . = ALIGN(8); _sdmm_log = .; KEEP(*(.dmm_log)) . = ALIGN(8); _edmm_log = .; } > ITCM
+    /* The Scope's DMM trace readings (DataAccess::meterReadings, the CPU's alone), zeroed at reset in 64-bit
+       ECC words. Empty in OPENOSC_USB_TRACE builds: their trace ring takes this room. */
+    .meter_trace (NOLOAD) : { . = ALIGN(8); _smeter_trace = .; KEEP(*(.meter_trace)) . = ALIGN(8); _emeter_trace = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")
     ASSERT(ADDR(.runtime_vectors) == ORIGIN(RAM) && SIZEOF(.runtime_vectors) == 1024, "Runtime vectors must open DTCM")
@@ -74,8 +78,8 @@ SECTIONS {
     ASSERT(SIZEOF(.capture_arena) == 393216, "Record banks 1-3 must be 384 KiB of AXI SRAM")
     ASSERT(SIZEOF(.acquisition) == 131072, "Record bank 0 must be the 128 KiB AHB SRAM")
     ASSERT(SIZEOF(.decode_workspace) <= 40960, "Decoder workspace exceeds its 40 KiB plan")
-    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) + SIZEOF(.bode) + SIZEOF(.scpi_measure) + SIZEOF(.dmm_log) <= LENGTH(ITCM),
-           "ITCM: decoder, trace ring, Bode session, SCPI measure and DMM session recorder exceed usable RAM")
+    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) + SIZEOF(.bode) + SIZEOF(.scpi_measure) + SIZEOF(.dmm_log) + SIZEOF(.meter_trace) <= LENGTH(ITCM),
+           "ITCM: decoder, trace ring, Bode session, SCPI measure, DMM session recorder and DMM trace exceed usable RAM")
     ASSERT(SIZEOF(.capture_trial) == 16384, "The AutoSetup trial area must be AXI SRAM")
     ASSERT(SIZEOF(.capture_nodes) == 960, "MDMA history nodes must be AXI SRAM")
     ASSERT(LOADADDR(.dma_data) + SIZEOF(.dma_data) <= __openosc_flash_end, "Application exceeds Flash reservation")

@@ -24,8 +24,8 @@ struct ScopeLook {
 };
 class ScopeStyles {
 public:
-    // A scheme's own colour of a role (Current: the theme's field; Trigger: FollowSource; Readout:
-    // the scheme's Text; TagText: Contrast). What "Default" means in the menu.
+    // A scheme's own colour of a role (Current: the theme's field, a constant for DMM; Trigger:
+    // FollowSource; Readout: the scheme's Text; TagText: Contrast). What "Default" means in the menu.
     static uint32_t base(ScopeScheme scheme, ScopeRole role, const Theme &theme);
     static ScopeLook look(const Theme &theme, const ScopeAppearance &appearance);
     // The theme the Scope screen and its menus draw with, written into `output` (the UI owner's

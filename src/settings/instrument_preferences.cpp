@@ -10,7 +10,7 @@ bool ScopePreferences::valid() const {
         triggerType > 3 || triggerCondition > 4 ||
         triggerMinimumNs < scope::TriggerSettings::MinimumNs || triggerMinimumNs > scope::TriggerSettings::MaximumNs ||
         triggerMaximumNs < scope::TriggerSettings::MinimumNs || triggerMaximumNs > scope::TriggerSettings::MaximumNs ||
-        !measurements.valid() ||
+        !measurements.valid() || !meterMeasurements.valid() ||
         runMode>=RunModeCount || rollAuto>1 || longerRecord > 1 || interleave>(board::Current::Features.interleaveControl() ? 2U : 1U) ||
         factoryRecordFormat>3 || !arrangement.valid() || !appearance.valid() || !decoder.valid() || !keys.valid()) return false;
     for (unsigned c = 0; c < 2; ++c)

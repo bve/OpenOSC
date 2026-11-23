@@ -8,6 +8,7 @@ struct ScopeSettings {
     uint64_t timebaseNs = 1000000;
     uint32_t millivoltsPerDivision[2] = {500, 500};
     scope::ReadoutSelection measurements;
+    scope::MeterReadoutSelection meterMeasurements;
 };
 struct MeterSettings {
     unsigned function = 0;

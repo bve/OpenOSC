@@ -130,10 +130,14 @@ void ScreenHost::paintScope() {
     const auto &t = theme();
     lv_obj_set_style_bg_color(chrome_, lv_color_hex(t.background), 0);
     waveform_.colors(t);
-    if (scopeLook_ && mode_ == MeasurementMode::Oscilloscope)
-        waveform_.roles(scopeLook_->color(ScopeRole::Trigger), scopeLook_->color(ScopeRole::TagText), scopeLook_->color(ScopeRole::Readout));
-    else waveform_.roles(plot::Palette::FollowSource, plot::Palette::Contrast, t.foreground);
-    scopeFooter_.theme(t);
+    const bool look = scopeLook_ && mode_ == MeasurementMode::Oscilloscope;
+    // The DMM trace's colour: the look's DMM role, else the Current scheme's (the theme has no field).
+    const uint32_t meter = look ? scopeLook_->color(ScopeRole::Meter) : ScopeStyles::base(ScopeScheme::Current, ScopeRole::Meter, t);
+    if (look)
+        waveform_.roles(scopeLook_->color(ScopeRole::Trigger), scopeLook_->color(ScopeRole::TagText), scopeLook_->color(ScopeRole::Readout), meter);
+    else waveform_.roles(plot::Palette::FollowSource, plot::Palette::Contrast, t.foreground, meter);
+    parameters_.meterTint(meter);
+    scopeFooter_.theme(t, meter);
     decodeTable_.colors(t); decodeStrip_.colors(t);
 }
 void ScreenHost::buttons(int y) {

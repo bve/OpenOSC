@@ -48,11 +48,11 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         sectionDirect_ = true; // Back returns to Analyze.
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_), plotControls_.index(plot::Controls::FftSource)); return;
     case Actions::Measurements:
-        measurementEditor_.begin(prefs_.scope.measurements, view_.channelView());
+        measurementEditor_.begin(prefs_.scope.measurements, prefs_.scope.meterMeasurements, view_.channelView());
         openPanel(Panel::Measurements, measurementEditor_); return;
     case Actions::Display:
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
-        plotControls_.options.cursors.channel = selectedChannel_;
+        plotControls_.options.cursors.channel = uint8_t(meterSelected_ ? plot::CursorOptions::Meter : selectedChannel_);
         plotControls_.listing = true; sectionDirect_ = false;
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_), unsigned(plotControls_.group)); return;
     case Actions::Layout:
@@ -123,6 +123,7 @@ bool ApplicationController::centerChannels(uint32_t now) {
 void ApplicationController::measurementKeys(uint32_t keys, uint32_t now) {
     if (fieldKeys(keys, measurementEditor_, now) != FieldKey::Committed) return;
     prefs_.scope.measurements = state_.scope.measurements = measurementEditor_.selection();
+    prefs_.scope.meterMeasurements = state_.scope.meterMeasurements = measurementEditor_.meter();
     changed(now); dataRefresh_ = true;
     view_.properties(measurementEditor_, navigator_);
 }

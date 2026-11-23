@@ -9,7 +9,8 @@ namespace {
 // the item's digit limit.
 bool narrower(const ReadoutRow::Item &item, unsigned from, int than, unsigned size, bool gap, unsigned &index, ReadoutParts &parts) {
     for (unsigned i = from; i < ReadoutText::Forms; ++i)
-        if (ReadoutText::form(item.kind, item.valid, item.value, item.mark, i, parts, size, item.limit, ReadoutText::Prefer{item.prefer}, gap) &&
+        if (ReadoutText::form(item.kind, item.valid, item.value, item.mark, i, parts, size, item.limit, ReadoutText::Prefer{item.prefer}, gap,
+                              item.unit) &&
             (than < 0 || parts.width() < than)) {
             index = i;
             return true;

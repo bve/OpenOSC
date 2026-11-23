@@ -51,6 +51,27 @@ struct ReadoutSelection {
     }
 };
 static_assert(sizeof(ReadoutSelection)==36, "ReadoutSelection keeps its size (GitHub #171's flag in its padding)");
+// The Scope's DMM trace's readouts (plot::MeterReadouts): of its readings over the visible window,
+// whatever the basis; only Kinds. Beside ReadoutSelection, not in it: the scheduler never computes
+// them, and ReadoutSelection has no byte to spare.
+struct MeterReadoutSelection {
+    static constexpr Measurement Kinds[]={Measurement::Off,Measurement::Mean,Measurement::Minimum,Measurement::Maximum,
+                                          Measurement::PeakToPeak,Measurement::Rms};
+    static constexpr bool kind(unsigned value) {
+        for (auto k : Kinds) if (value==unsigned(k)) return true;
+        return false;
+    }
+    uint8_t values[ReadoutSelection::PerChannel]={uint8_t(Measurement::Mean),uint8_t(Measurement::PeakToPeak),
+                                                  uint8_t(Measurement::Minimum),uint8_t(Measurement::Maximum)};
+    bool valid() const {
+        for (auto value : values) if (!kind(value)) return false;
+        return true;
+    }
+    bool same(const MeterReadoutSelection &b) const {
+        for (unsigned i=0;i<ReadoutSelection::PerChannel;++i) if (values[i]!=b.values[i]) return false;
+        return true;
+    }
+};
 // Computed readouts with where they come from: the record (sequence), the record points they
 // cover, the basis and when they were finished, so a result is never taken for another frame's.
 struct ReadoutResult {

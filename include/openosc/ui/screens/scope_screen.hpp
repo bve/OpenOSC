@@ -5,6 +5,7 @@
 #include "openosc/acquisition/counter_window.hpp"
 #include "openosc/generator/waveform.hpp"
 #include "openosc/ui/scope/cursor_control.hpp"
+#include "openosc/ui/scope/meter_readouts.hpp"
 #include "openosc/ui/screens/instrument_screen.hpp"
 
 namespace openosc::ui {
@@ -25,6 +26,8 @@ public:
         const char *unit = "", *function = "";
     };
     void meter(const Meter &meter);
+    // The DMM trace's readouts and scale to the footer, each display pass (not under a panel).
+    void meterReadouts(const plot::MeterReadouts &readouts);
     void generator(const generator::Snapshot &output, bool captureHalved);
     // Settings > Display > Swap CH1/CH2: the plot, footer and cards relabelled at once (HOLD included).
     void channelView(const plot::ChannelView &view) { host_.channelView(view); cards(); }

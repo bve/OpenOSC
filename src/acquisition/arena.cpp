@@ -40,7 +40,6 @@ uint16_t *AcquisitionArena::bank(unsigned index) { return !index ? ahb : index <
 uint16_t *AcquisitionArena::trialMemory() { return trialArea; }
 uint16_t *AcquisitionArena::rollHistory() { return bank(1); }
 uint16_t *AcquisitionArena::rollSnapshot() { return bank(2); }
-uint16_t *AcquisitionArena::rollSpare() { return bank(3); }
 unsigned AcquisitionArena::slots(uint32_t budget, Geometry geometry) {
     // A balanced two-channel slot takes a half of AHB for its two AHB lanes: 128K and less.
     if (geometry == Geometry::Balanced) return budget <= Bytes / 4 ? 2 : 1;

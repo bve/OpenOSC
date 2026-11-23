@@ -28,6 +28,7 @@ struct ScopePreferences {
     uint8_t triggerReject = 1; // TriggerSettings::reject; files without it: on.
     uint8_t triggerType = 0, triggerCondition = uint8_t(scope::TriggerCondition::Greater);
     scope::ReadoutSelection measurements;
+    scope::MeterReadoutSelection meterMeasurements; // The DMM trace's readouts; a file without them: the defaults.
     uint32_t runMode = 0; // Index into RunModes.
     // Bytes, rollAuto to interleave: the Scope part keeps its size as choices join them (sizeof checked
     // in preferences.hpp).

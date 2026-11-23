@@ -3,9 +3,21 @@
 #include <cmath>
 
 // The Scope's DMM trace: the DMM chip powered beside the capture, its packets into the DMM's session,
-// and the readings Roll draws.
+// and the readings its line is drawn from.
 namespace openosc {
-static_assert(dmm::ReadingTrace::Bytes <= scope::AcquisitionArena::BankBytes, "The DMM trace's readings fit bank 3");
+namespace {
+#ifndef OPENOSC_USB_TRACE
+// ITCM, the CPU's alone: Reset_Handler zeroes it in 64-bit ECC words, no capture or DMA reaches it.
+__attribute__((section(".meter_trace"), aligned(8))) dmm::ReadingTrace::Reading meterReadingMemory[dmm::ReadingTrace::Capacity];
+#endif
+} // namespace
+dmm::ReadingTrace::Reading *DataAccess::meterTraceMemory() {
+#ifdef OPENOSC_USB_TRACE
+    return nullptr; // The USB trace ring takes this ITCM (usb_trace.cpp): the DMM trace keeps no readings.
+#else
+    return meterReadingMemory;
+#endif
+}
 // Each pass: started while asked for in a running Scope, stopped otherwise. While it runs, as the DMM:
 // the packets into the session, LinkWatchdog (power by bit 13 alone, the UART by interrupt) and the
 // function commands. A clock change leaves it running with its UART stopped until restartClockUsers.
@@ -55,12 +67,13 @@ void DataAccess::stopMeterTrace() {
 void DataAccess::traceReading() {
     const auto &reading = meter_.live();
     if (reading.sequence != meter_.latest().sequence) return; // Not shown: an overload's settling (OverloadSettle).
-    // No Roll since a capture of another kind, HOLD, or the old function's readings while a selection runs.
-    if (!meterReadings_.valid() || scopeHeld_ || dmm_.selectionStatus() == DataStatus::Busy) { meterGap_ = true; return; }
+    // HOLD (none of the readings a held frame shows is overwritten), or the old function's readings while a
+    // selection runs.
+    if (scopeHeld_ || dmm_.selectionStatus() == DataStatus::Busy) { meterGap_ = true; return; }
     const auto &primary = reading.primary;
     const auto ms = uint32_t(reading.timestampUs / 1000);
     if (primary.quantity != Quantity::Unknown && primary.quantity != meterReadings_.quantity()) {
-        meterReadings_.reset(primary.quantity, meterReadings_.timebaseNs());
+        meterReadings_.reset(primary.quantity);
         meterGap_ = false;
     }
     if (meterGap_) meterReadings_.push(ms, NAN);

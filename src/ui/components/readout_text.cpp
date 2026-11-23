@@ -68,14 +68,15 @@ bool ReadoutText::fit(const char *tag, bool valid, double value, const char *uni
 }
 unsigned ReadoutText::digits(unsigned index) { return index < Overflow ? Steps[Shapes[index].step].precision : 0; }
 bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark, unsigned index, ReadoutParts &output, unsigned size,
-                       unsigned limit, Prefer prefer, bool gap) {
+                       unsigned limit, Prefer prefer, bool gap, const char *unit) {
     output = {};
     output.size = size;
     if (index >= Forms || kind >= scope::Measurements::Count || kind == unsigned(scope::Measurement::Off)) return false;
     const bool overflow = index == Overflow;
     const auto shape = overflow ? Shape{0, false} : Shapes[index];
+    const char *units = unit ? unit : scope::Measurements::Units[kind];
     if (overflow) { // Only for a value no other form can write (far outside the instrument's range).
-        for (unsigned i = 0; i < Overflow; ++i) if (form(kind, valid, value, mark, i, output, size, limit, prefer, gap)) return false;
+        for (unsigned i = 0; i < Overflow; ++i) if (form(kind, valid, value, mark, i, output, size, limit, prefer, gap, unit)) return false;
         output = {};
         output.size = size;
         std::snprintf(output.value, sizeof output.value, "OVR");
@@ -85,14 +86,14 @@ bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark
         const bool timed = kind == unsigned(scope::Measurement::CounterFrequency) && limit > scope::Measurements::MaximumDigits;
         const unsigned offered = timed ? TimedDigits[shape.step] : step.precision;
         const unsigned precision = limit && !step.coarse ? std::min(offered, limit) : offered;
-        if (!plot::Format::quantity(value, scope::Measurements::Units[kind], output.value, sizeof output.value, precision, step.coarse,
+        if (!plot::Format::quantity(value, units, output.value, sizeof output.value, precision, step.coarse,
                                     prefer.index, &output.prefix))
             return false;
         // A percent just under 100 that rounds to "100%" would read as DC: its bound instead, with
         // the decimals the form keeps (">99.9%" at three digits, ">99.99%" at two decimals). A form
         // with no decimal to spare (">99%") says too little of an exact value: not offered unbounded;
         // bounded to two digits it is all the value supports.
-        if (std::strstr(output.value, "100") == output.value && std::abs(value) < 100 && !std::strcmp(scope::Measurements::Units[kind], "%")) {
+        if (std::strstr(output.value, "100") == output.value && std::abs(value) < 100 && !std::strcmp(units, "%")) {
             const unsigned nines = step.coarse ? precision : precision > 2 ? precision - 2 : 0;
             if (!nines && !limit) return false;
             char decimals[8] = "";
@@ -101,7 +102,8 @@ bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark
         }
         if (limit && significant(output.value) > limit) return false;
     } else std::snprintf(output.value, sizeof output.value, "--");
-    std::snprintf(output.tag, sizeof output.tag, "%s%s", shape.shortTag ? ShortTags[kind] : scope::Measurements::Tags[kind], mark ? mark : "");
+    const bool shortTag = shape.shortTag || (unit && kind == unsigned(scope::Measurement::PeakToPeak));
+    std::snprintf(output.tag, sizeof output.tag, "%s%s", shortTag ? ShortTags[kind] : scope::Measurements::Tags[kind], mark ? mark : "");
     output.tagWidth = Elements::textWidth(output.tag, size) + (gap && !shape.shortTag ? TagGap : 0);
     output.valueWidth = Elements::textWidth(output.value, size);
     return true;
