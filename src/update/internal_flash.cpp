@@ -8,10 +8,12 @@ constexpr uint32_t Controller = 0x52002000, ErrorMask = 0x17ee0000;
 constexpr uint32_t EccErrors = 0x06000000; // SNECCERR, DBECCERR: raised by reads, not by an erase or write.
 volatile uint32_t& reg(uint32_t address) { return *reinterpret_cast<volatile uint32_t*>(address); }
 uint32_t controller(uint32_t destination) { return Controller + (destination >= 0x08100000 ? 0x100 : 0); }
-bool valid(uint32_t address, size_t size) {
-    return address >= layout::ApplicationBase && address <= layout::FlashEnd
-        && size <= layout::FlashEnd - address;
 }
+bool InternalFlash::writable(uint32_t address, size_t size) const {
+    if (address >= layout::ApplicationBase && address <= layout::FlashEnd)
+        return size <= layout::FlashEnd - address;
+    constexpr uint32_t end = layout::FactoryBootSector + layout::SectorBytes;
+    return factoryBootSector_ && address >= layout::FactoryBootSector && address < end && size <= end - address;
 }
 bool InternalFlash::fail(const char* message) { error_ = message; return false; }
 bool InternalFlash::wait(uint32_t address) {
@@ -36,7 +38,7 @@ bool InternalFlash::unlock(uint32_t address) {
     return wait(address);
 }
 bool InternalFlash::eraseSector(uint32_t address) {
-    if ((address & (layout::SectorBytes - 1)) || !valid(address, layout::SectorBytes))
+    if ((address & (layout::SectorBytes - 1)) || !writable(address, layout::SectorBytes))
         return fail("PROTECTED FLASH ERASE REJECTED");
     if (!unlock(address)) return false;
     const uint32_t base = controller(address);
@@ -49,7 +51,7 @@ bool InternalFlash::eraseSector(uint32_t address) {
     return result;
 }
 bool InternalFlash::program(uint32_t address, const void* data, size_t size) {
-    if ((address & 15) || (size & 15) || !valid(address, size) || (!data && size))
+    if ((address & 15) || (size & 15) || !writable(address, size) || (!data && size))
         return fail("PROTECTED FLASH WRITE REJECTED");
     const auto* source = static_cast<const uint32_t*>(data);
     while (size) {

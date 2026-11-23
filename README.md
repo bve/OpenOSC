@@ -27,9 +27,11 @@ instrument, the SCPI reference, troubleshooting and pages for contributors.
 > at your own risk.
 
 > [!NOTE]
-> **You can always go back to the stock firmware.** OpenOSC never modifies the factory bootloader,
-> your calibration or the factory settings. The factory bootloader still accepts official updates,
-> so installing the official firmware replaces OpenOSC completely.
+> **You can always go back to the stock firmware.** OpenOSC never modifies your calibration or the
+> factory settings, and changes the factory bootloader only when you choose **POWER-ON HOLD** in
+> Recovery. The factory bootloader still accepts official updates, so installing the official
+> firmware replaces OpenOSC completely. If you changed **POWER-ON HOLD**, set it back to 500 ms, the
+> factory value, before you install it.
 > See [Going back to the stock firmware](#going-back-to-the-stock-firmware).
 
 ## Screenshots
@@ -273,17 +275,19 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Accepts `.OSC` packages and raw `.bin` images; verifies the board model and CRC before erasing
 - Shows the factory calibration data and its format (long or compact) and can save a copy of the
   factory Flash block
+- Sets how long the power button must be held to switch the device on (**POWER-ON HOLD**)
 - Checks and repairs the FAT file system, and can format the storage drive
 - Opens automatically if the main firmware is missing or invalid
 
 ## How it works
 
 The device's own factory bootloader occupies the first 128 KiB of internal Flash. OpenOSC never
-modifies it. OpenOSC is installed on top of it in two parts:
+modifies it, except for the power-on hold time that you can set in Recovery. OpenOSC is installed
+on top of it in two parts:
 
 | Part | Address | Purpose |
 | --- | --- | --- |
-| Factory bootloader | `0x08000000` | Untouched, together with the calibration and factory settings stored in the same block. Accepts the stock `.ZTK` update containers. |
+| Factory bootloader | `0x08000000` | Untouched, together with the calibration and factory settings stored in the same block, except for its sector `0x0800E000` that Recovery's **POWER-ON HOLD** rewrites on your confirmation. Accepts the stock `.ZTK` update containers. |
 | OpenOSC Recovery | `0x08020000` | Second-stage bootloader (128 KiB). Exposes a USB drive and installs the main firmware. |
 | OpenOSC firmware | `0x08040400` | The main application. |
 
@@ -325,13 +329,16 @@ Install it the same way as an official firmware update:
 
 **This step is optional.** You can skip it and go straight to step 2.
 
-OpenOSC never writes to the factory block. The only Flash write code in OpenOSC accepts addresses
-from `0x08040000` upward, the firmware area, so neither Recovery nor the firmware can erase or
-change the factory block, even by mistake. Installing, updating and running OpenOSC leave it
-exactly as it was.
+OpenOSC writes to the factory block in one case only: Recovery's **POWER-ON HOLD** item rewrites
+the factory bootloader's sector `0x0800E000` (8 KiB), and only after you confirm. Apart from that
+sector, the Flash write code in OpenOSC accepts addresses from `0x08040000` upward, the firmware
+area, so neither Recovery nor the firmware can erase or change the rest of the factory block, even
+by mistake. Installing, updating and running OpenOSC leave it exactly as it was, unless you use
+**POWER-ON HOLD**.
 
-The backup is a precaution for rare events outside OpenOSC, such as a hardware fault. If you want
-one:
+The backup is a precaution for rare events, such as a hardware fault, and before you use
+**POWER-ON HOLD**: if the power fails while it writes, the device cannot switch on until that
+sector is restored over SWD from the backup. If you want one:
 
 1. In Recovery, select **BACKUP FACTORY BOOT**, then **CONFIRM** and press **MENU**.
 2. Recovery copies the whole factory block (`0x08000000`–`0x0801FFFF`, 128 KiB) to the USB drive
@@ -356,6 +363,9 @@ Writing a backup back requires an SWD programmer.
 6. When the update completes, select **START APPLICATION**.
 
 Recovery controls: **MENU** = OK, **F4** = back/cancel, arrow keys = navigation.
+**POWER-ON HOLD** shows how many milliseconds the factory bootloader makes you hold the power button
+after switching on, and sets any value from 1 to 65535 (**L/R** = digit, **UP/DOWN** = change it).
+It works only with a factory bootloader it recognises; with any other it writes nothing.
 Every confirmation starts on **CANCEL**: press left/right to select **CONFIRM**, then **MENU**.
 If the computer still has the USB drive mounted, Recovery first asks **DISCONNECT USB DISK?**.
 Confirm it and Recovery detaches the drive itself; the cable can stay connected.
@@ -366,8 +376,9 @@ An image for another model is rejected. Later updates of the main firmware use s
 ### Going back to the stock firmware
 
 You can return to the stock firmware at any time. OpenOSC only replaces the application area. The
-factory bootloader is never modified, and it starts before OpenOSC every time the device is
-switched on.
+factory bootloader is modified only by **POWER-ON HOLD**, and it starts before OpenOSC every time
+the device is switched on. If you changed **POWER-ON HOLD**, set it back to 500 ms, the factory
+value, first.
 
 1. Get the official firmware update (`.ZTK`) for your model from the manufacturer. It is a good idea
    to download it before you install OpenOSC.
@@ -376,9 +387,9 @@ switched on.
 3. The factory bootloader replaces OpenOSC Recovery and the OpenOSC firmware with the stock
    application.
 
-The calibration and the factory settings are stored in the factory block, which OpenOSC never
-writes, so the stock firmware uses them as before. OpenOSC's own files in the `/openosc/` folder
-on the storage drive are not needed by the stock firmware and can be deleted.
+The calibration and the factory settings are stored in their own sectors of the factory block,
+which OpenOSC never writes, so the stock firmware uses them as before. OpenOSC's own files in the `/openosc/` folder on the storage drive are not needed by the
+stock firmware and can be deleted.
 
 The [factory block backup](#optional-back-up-the-factory-block) is not needed for this. It is a
 safety copy for the unlikely case that the block itself is ever damaged.

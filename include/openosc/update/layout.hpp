@@ -17,8 +17,11 @@ constexpr uint32_t SectorBytes = 8192;
 constexpr uint32_t ProgramBytes = 16;
 constexpr uint32_t BoardId = board::Current::ImageBoardId;
 constexpr uint32_t CalibrationBase = 0x0801c000;
+// The one factory-bootloader sector Recovery may rewrite (its power-on hold time, PowerHold).
+constexpr uint32_t FactoryBootSector = 0x0800e000;
 static_assert((VectorBase & 1023U) == 0);
 static_assert(ApplicationBase == 0x08040000);
+static_assert(FactoryBootSector % SectorBytes == 0 && FactoryBootSector + SectorBytes <= CalibrationBase);
 static_assert(LoaderBase % SectorBytes == 0 && LoaderBytes % SectorBytes == 0);
 }
 

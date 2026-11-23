@@ -4,6 +4,7 @@
 #include "openosc/platform/input.hpp"
 #include "openosc/platform/handoff.hpp"
 #include "openosc/platform/power.hpp"
+#include <cstdio>
 
 namespace openosc {
 void RecoveryController::filesKey(uint32_t key) {
@@ -37,6 +38,11 @@ void RecoveryController::drawConfirm() {
                        storage::Layout::FactoryBackup, yes_); break;
     case Action::Launch:
         views_.confirm("START APPLICATION?", update_.image().version, yes_); break;
+    case Action::PowerHold: {
+        char detail[24];
+        std::snprintf(detail, sizeof detail, "%lu MS", static_cast<unsigned long>(holdValue_));
+        views_.confirm("WRITE POWER-ON HOLD?", detail, yes_); break;
+    }
     case Action::PowerOff:
         views_.confirm("POWER OFF?", "ALL DISK OPERATIONS ARE COMPLETE", yes_); break;
     case Action::CheckFat: views_.fatRepairConfirm(fatCheck_.report(), yes_); break;
@@ -47,6 +53,7 @@ void RecoveryController::drawConfirm() {
 void RecoveryController::confirmKey(uint32_t key) {
     if ((key & Keypad::F4) || ((key & Keypad::Menu) && !yes_)) {
         if (action_ == Action::Update) { state_ = State::Files; views_.files(catalog_, file_); }
+        else if (action_ == Action::PowerHold) { state_ = State::HoldEdit; views_.powerHold(holdCurrent_, holdValue_, holdDigit_); }
         else if (action_ == Action::CheckFat) { state_ = State::FatReport; views_.fatReport(fatCheck_.report()); }
         else showMain();
         return;
@@ -70,6 +77,8 @@ void RecoveryController::perform() {
         repairFat();
     } else if (action_ == Action::Format) {
         formatStorage();
+    } else if (action_ == Action::PowerHold) {
+        writePowerHold();
     } else {
         if (!fs_.unmount() || !usb_.stop() || (storageReady_ && !nor_.restoreLegacyAddressing())) {
             message("STORAGE ERROR", "CANNOT FINISH DISK OPERATIONS");
@@ -78,5 +87,65 @@ void RecoveryController::perform() {
         if (action_ == Action::Launch) Handoff::jump(layout::VectorBase);
         if (action_ == Action::PowerOff) PowerControl::powerOff();
     }
+}
+void RecoveryController::beginPowerHold() {
+    if (!PowerHold::read(holdCurrent_)) {
+        message("POWER-ON HOLD", "FACTORY BOOTLOADER NOT SUPPORTED");
+        return;
+    }
+    holdValue_ = holdCurrent_;
+    holdDigit_ = 4;
+    state_ = State::HoldEdit;
+    views_.powerHold(holdCurrent_, holdValue_, holdDigit_);
+}
+void RecoveryController::powerHoldKey(uint32_t key) {
+    if (key & Keypad::F4) { showMain(); return; }
+    if (key & Keypad::Menu) {
+        if (holdValue_ < PowerHold::MinMs || holdValue_ > PowerHold::MaxMs) {
+            message("POWER-ON HOLD", "VALUE MUST BE 1 TO 65535 MS");
+            return;
+        }
+        yes_ = false;
+        state_ = State::Confirm;
+        drawConfirm();
+        return;
+    }
+    if (key & Keypad::Left) holdDigit_ = (holdDigit_ + 4) % 5;
+    if (key & Keypad::Right) holdDigit_ = (holdDigit_ + 1) % 5;
+    if (key & (Keypad::Up | Keypad::Down)) {
+        uint32_t weight = 1;
+        for (unsigned n = 4 - holdDigit_; n; --n) weight *= 10;
+        const uint32_t digit = holdValue_ / weight % 10, next = (digit + ((key & Keypad::Up) ? 1 : 9)) % 10;
+        holdValue_ = holdValue_ - digit * weight + next * weight;
+    }
+    views_.powerHold(holdCurrent_, holdValue_, holdDigit_);
+}
+void RecoveryController::writePowerHold() {
+    if (holdValue_ == holdCurrent_) {
+        message("POWER-ON HOLD UNCHANGED", "THE BOOTLOADER ALREADY HAS THIS VALUE");
+        return;
+    }
+    if (!powerHold_.prepare(holdValue_)) {
+        message("POWER-ON HOLD NOT SET", powerHold_.error());
+        return;
+    }
+    commitPowerHold();
+}
+// From the erase on, the sector is not trusted until it verifies: a failure keeps the prepared copy.
+void RecoveryController::commitPowerHold() {
+    screen_.clear();
+    if (powerHold_.write()) {
+        char detail[24];
+        std::snprintf(detail, sizeof detail, "%lu MS", static_cast<unsigned long>(holdValue_));
+        message("POWER-ON HOLD SET", detail);
+        return;
+    }
+    state_ = State::HoldFailed;
+    views_.powerHoldFailed(powerHold_.error());
+}
+void RecoveryController::holdFailedKey(uint32_t key) {
+    if (!(key & Keypad::Menu)) return;
+    Watchdog::expect(LongOperationMs);
+    commitPowerHold();
 }
 }

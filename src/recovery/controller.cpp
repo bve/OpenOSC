@@ -56,6 +56,7 @@ void RecoveryController::begin(Action action) {
     }
     if (!releaseHost()) return;
     if (action == Action::CheckFat) { checkFat(); return; } // The explicit check reports everything.
+    if (action == Action::PowerHold) { beginPowerHold(); return; }
     // The host session just ended: its dirty flag and the factory label, before FatFs mounts.
     if (storageReady_ && action != Action::Format && !fatCheck_.reconcile()) {
         message("FAT REPAIR FAILED", fatCheck_.error());
@@ -100,6 +101,8 @@ void RecoveryController::onKey(uint32_t key) {
     case State::Formatting: break; // The confirmed metadata rewrite must finish before other actions.
     case State::Files: filesKey(key); break;
     case State::Confirm: confirmKey(key); break;
+    case State::HoldEdit: powerHoldKey(key); break;
+    case State::HoldFailed: holdFailedKey(key); break; // Only a verified write leaves this state.
     case State::Message:
         if (key & (Keypad::Menu | Keypad::F4)) showMain();
         break;

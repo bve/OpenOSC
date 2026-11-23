@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/recovery/screens.hpp"
 #include "openosc/recovery/backup.hpp"
+#include "openosc/recovery/power_hold.hpp"
 #include "openosc/recovery/action.hpp"
 #include "openosc/storage/fat/formatter.hpp"
 #include "openosc/recovery/fat_check.hpp"
@@ -21,7 +22,7 @@ public:
     [[noreturn]] void run();
     void reportFatRepairFailure() { repairFailed_ = true; } // Shown instead of the main menu once.
 private:
-    enum class State { Main, Disconnect, Files, Calibration, Confirm, Message, FatReport, Formatting };
+    enum class State { Main, Disconnect, Files, Calibration, Confirm, Message, FatReport, Formatting, HoldEdit, HoldFailed };
     using Action = RecoveryAction;
     void onKey(uint32_t key);
     void begin(Action action);
@@ -33,6 +34,11 @@ private:
     void repairFat();
     void fatReportKey(uint32_t key);
     void formatStorage();
+    void beginPowerHold();
+    void powerHoldKey(uint32_t key);
+    void writePowerHold();
+    void commitPowerHold();
+    void holdFailedKey(uint32_t key);
     void serviceFormat();
     void drawConfirm();
     void showMain();
@@ -47,12 +53,15 @@ private:
     FatCheckOperation& fatCheck_;
     fat::Formatter formatter_;
     FactoryBackup backup_;
+    PowerHold powerHold_;
     ImageCatalog catalog_;
     const bool storageReady_;
     bool repairFailed_ = false;
     State state_ = State::Main;
     Action action_ = Action::Update;
     unsigned selected_ = 0, file_ = 0, channel_ = 0;
+    uint32_t holdCurrent_ = 0, holdValue_ = 0; // Power-on hold: the bootloader's value and the edited one, ms.
+    unsigned holdDigit_ = 0;                  // The edited digit, 0 = the leftmost of five.
     bool yes_ = false, hex_ = true, overwrite_ = false;
     char imagePath_[FF_MAX_LFN + 10]{};
 };

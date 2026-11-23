@@ -16,6 +16,8 @@ public:
     void message(const char* title, const char* detail);
     void disconnect(bool yes);
     void backupResult(uint32_t crc);
+    void powerHold(uint32_t current, uint32_t value, unsigned digit);
+    void powerHoldFailed(const char* detail);
     void fatReport(const fat::Report& report);
     void fatRepairConfirm(const fat::Report& report, bool yes);
     void fatFormatConfirm(bool yes);

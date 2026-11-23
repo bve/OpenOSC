@@ -17,12 +17,12 @@ void RecoveryScreens::menu(unsigned selected, uint32_t jedec, uint32_t bytes, co
         if (i == selected) screen_.rectangle(8, 32 + i * 18, 304, 16, Display::Selected);
         screen_.text(16, 36 + i * 18, RecoveryItems[i]);
     }
-    screen_.text(8, 164, "NOR:"); screen_.number(38, 164, jedec, 6, 16);
-    screen_.number(92, 164, bytes / (1024 * 1024)); screen_.text(110, 164, "MIB");
-    screen_.text(8, 184, status);
+    screen_.text(8, 180, "NOR:"); screen_.number(38, 180, jedec, 6, 16);
+    screen_.number(92, 180, bytes / (1024 * 1024)); screen_.text(110, 180, "MIB");
+    screen_.text(8, 196, status);
     char images[48];
     std::snprintf(images, sizeof images, "IMAGES: %s/*.OSC, *.BIN", storage::Layout::Update);
-    screen_.text(8, 204, images);
+    screen_.text(8, 211, images);
     screen_.present();
 }
 void RecoveryScreens::files(const ImageCatalog& catalog, unsigned selected) {
@@ -68,6 +68,28 @@ void RecoveryScreens::backupResult(uint32_t crc) {
     screen_.text(8, 48, storage::Layout::FactoryBackup);
     screen_.text(8, 72, "SIZE: 131072 BYTES");
     screen_.text(8, 94, "CRC32:"); screen_.number(56, 94, crc, 8, 16);
+    screen_.present();
+}
+void RecoveryScreens::powerHold(uint32_t current, uint32_t value, unsigned digit) {
+    frame("FACTORY POWER-ON HOLD", "L/R=DIGIT  UP/DOWN=VALUE  MENU=OK  F4=BACK");
+    screen_.text(8, 40, "CURRENT:"); screen_.number(62, 40, current); screen_.text(104, 40, "MS");
+    screen_.text(8, 70, "NEW:");
+    for (unsigned i = 0; i < 5; ++i) {
+        unsigned weight = 1;
+        for (unsigned n = 4 - i; n; --n) weight *= 10;
+        if (i == digit) screen_.rectangle(38 + i * 12, 66, 11, 15, Display::Selected);
+        screen_.number(40 + i * 12, 70, value / weight % 10, 1);
+    }
+    screen_.text(104, 70, "MS");
+    screen_.text(8, 100, "POWER BUTTON HOLD TIME AT SWITCH-ON.");
+    screen_.text(8, 116, "RANGE: 1 TO 65535 MS.");
+    screen_.present();
+}
+void RecoveryScreens::powerHoldFailed(const char* detail) {
+    frame("WRITE FAILED - DO NOT POWER OFF", "MENU=RETRY");
+    screen_.text(8, 48, detail, Display::Red);
+    screen_.text(8, 72, "THE FACTORY BOOT SECTOR IS NOT VERIFIED.");
+    screen_.text(8, 88, "PRESS MENU TO WRITE IT AGAIN.");
     screen_.present();
 }
 void RecoveryScreens::calibration(unsigned channel, bool hex) {
