@@ -78,6 +78,9 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
     case GridStyle:
         options.grid = Grid((unsigned(options.grid) + 4 + direction) % 4);
         break;
+    case GridBrightness:
+        options.gridBrightness = Brightness::step(options.gridBrightness, direction, Brightness::LowestGrid);
+        break;
     case Persistence:
         cycle(options.persistenceMs, direction, persist);
         break;

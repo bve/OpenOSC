@@ -2,11 +2,14 @@
 
 namespace openosc::plot {
 void Painter::grid() {
-    const auto mode = model_.options().grid;
-    if (mode == Grid::None)
+    const auto &options = model_.options();
+    const auto mode = options.grid;
+    if (mode == Grid::None || !options.gridBrightness) // At 0 % the grid is the background: nothing to draw.
         return;
     const int w = lv_area_get_width(&area_) - 1, h = lv_area_get_height(&area_) - 1;
-    Path path(layer_, area_, palette_.grid, 255, 1, model_.statistics());
+    // Its brightness (GitHub #86) is one opaque colour over the background, as the grid at 100 %.
+    Path path(layer_, area_, ColorShade::toward(palette_.grid, palette_.background, options.gridBrightness), 255, 1,
+              model_.statistics());
     if (mode != Grid::Axes) {
         for (unsigned i = 0; i <= 10; ++i) {
             const int x = i * w / 10;

@@ -15,7 +15,7 @@ PropertyKind ChannelEditor::kind(unsigned row) const {
 }
 void ChannelEditor::name(unsigned row, char *output, size_t capacity) const {
     static constexpr const char *names[] = {"Channel", "Enabled", "Coupling", "Probe", "Scale / div", "Analog zero", "Invert",
-                                            "Density", "Density color"};
+                                            "Trace brightness", "Density", "Density color"};
     std::snprintf(output, capacity, "%s", row < Fields ? names[row] : "");
 }
 unsigned ChannelEditor::options(unsigned row) const {
@@ -23,6 +23,7 @@ unsigned ChannelEditor::options(unsigned row) const {
     case Channel: case Coupling: case Enabled: case Invert: return 2;
     case Probe: return scope::ProbeAttenuation::Count;
     case Scale: return scope::VoltageRanges::Count;
+    case TraceBrightness: return plot::Brightness::choices(plot::Brightness::LowestTrace);
     case Density: return 3;
     case DensityColor: return 1 + ColorCatalog::Swatches; // The channel's own, then the named colours.
     default: return 0;
@@ -40,6 +41,7 @@ unsigned ChannelEditor::option(unsigned row) const {
         return scope::ProbeAttenuation::Count;
     case Scale: return f.range[channel_];
     case Invert: return plot_.channels[channel_].invert;
+    case TraceBrightness: return plot::Brightness::choice(plot_.channels[channel_].brightness, plot::Brightness::LowestTrace);
     case Density: return unsigned(plot_.channels[channel_].grade);
     case DensityColor: {
         const uint8_t color = plot_.channels[channel_].gradeColor;
@@ -57,6 +59,12 @@ void ChannelEditor::optionName(unsigned row, unsigned index, char *output, size_
         plot::Format::quantity(scope::AnalogFrontend::millivoltsForRange(index) / 1000.0 *
             request_.probeNumerator[channel_] / request_.probeDenominator[channel_], "V", output, capacity);
         break;
+    case TraceBrightness: { // A value between the steps (options()) as it is.
+        const unsigned percent = index < options(row) ? plot::Brightness::percent(index, plot::Brightness::LowestTrace)
+                                                      : plot_.channels[channel_].brightness;
+        std::snprintf(output, capacity, "%u%%", percent);
+        break;
+    }
     case Density: {
         static constexpr const char *grades[] = {"Off", "Colors", "Mono"};
         std::snprintf(output, capacity, "%s", grades[index % 3]);
@@ -99,6 +107,7 @@ bool ChannelEditor::choose(unsigned row, unsigned index) {
         return true;
     }
     if (row == Scale) { request_.frontend.range[channel_] = index; return true; }
+    if (row == TraceBrightness) { plot_.channels[channel_].brightness = plot::Brightness::percent(index, plot::Brightness::LowestTrace); return true; }
     if (row == Density) { plot_.channels[channel_].grade = plot::Grade(index); return true; }
     if (row == DensityColor) {
         plot_.channels[channel_].gradeColor = index ? uint8_t(index - 1) : plot::ChannelOptions::InheritColor;

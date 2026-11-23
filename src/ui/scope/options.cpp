@@ -10,7 +10,7 @@ bool Options::valid() const {
         unsigned(reduction)>2 || unsigned(interpolation)>2 || !zoom || !zoomOut ||
         zoom > MaximumZoom || panPpb < -PanFull || panPpb > PanFull ||
         (persistenceMs > 10000 && persistenceMs!=InfinitePersistence) ||
-        !averaging || averaging > 64 || (averaging & (averaging - 1)) ||
+        !averaging || averaging > 64 || (averaging & (averaging - 1)) || gridBrightness > Brightness::Full ||
         (heldTimebaseNs && std::find(std::begin(scope::Timebases::Values), std::end(scope::Timebases::Values),
                                      heldTimebaseNs) == std::end(scope::Timebases::Values)))
         return false;
@@ -18,7 +18,8 @@ bool Options::valid() const {
         if (c.positionPermille < -1000 || c.positionPermille > 2000 || c.gainPercent < 1 ||
             c.gainPercent > 6400 || c.width < 1 || c.width > 3 ||
             !std::isfinite(c.heldMillivoltsAtTip) || c.heldMillivoltsAtTip < 0 || unsigned(c.grade) > 2 ||
-            (c.gradeColor != ChannelOptions::InheritColor && c.gradeColor >= 16))
+            (c.gradeColor != ChannelOptions::InheritColor && c.gradeColor >= 16) ||
+            c.brightness < Brightness::LowestTrace || c.brightness > Brightness::Full)
             return false;
     const auto &c = cursors;
     return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2;

@@ -30,6 +30,9 @@ public:
 
 private:
     void grid();
+    // A channel's trace colour at its brightness (GitHub #86), once a layer: the marks, tags and
+    // labels keep the channel's own colour (Palette::channels).
+    uint32_t traceColor(unsigned channel) const;
     void recordGaps(const RecordGaps &gaps);      // The window's parts outside the record (record_edges.cpp).
     void recordGapLabels(const RecordGaps &gaps);
     void traces();

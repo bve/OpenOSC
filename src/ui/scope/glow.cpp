@@ -222,7 +222,7 @@ void Painter::glow(unsigned channel) {
         (options.mode != Mode::XY && !model_.storage().traces[channel].enabled)) return;
     // RenderIdle services I/O only. The projected model remains stable until
     // the queued tasks of this refresh have completed.
-    GlowTask task{{}, &model_, lv_color_hex(palette_.channels[channel]), channel};
+    GlowTask task{{}, &model_, lv_color_hex(traceColor(channel)), channel}; // Its halo at the trace's brightness.
     task.descriptor.base.dsc_size = sizeof(task);
     task.descriptor.render = GlowTask::render;
     lv_draw_sw_callback(layer_, &area_, &task.descriptor);

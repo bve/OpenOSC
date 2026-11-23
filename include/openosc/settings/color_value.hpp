@@ -48,4 +48,10 @@ struct ColorContrast {
     static bool light(uint32_t rgb);
     static uint32_t ink(uint32_t fill) { return light(fill) ? Dark : Light; }
 };
+
+// A colour dimmed towards a background: percent 100 is the colour itself (unchanged), 0 the
+// background, per 8-bit channel and rounded. The same on a dark or a light background.
+struct ColorShade {
+    static uint32_t toward(uint32_t rgb, uint32_t background, unsigned percent);
+};
 } // namespace openosc

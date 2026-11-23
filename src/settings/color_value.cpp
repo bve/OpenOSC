@@ -74,4 +74,13 @@ bool ColorContrast::light(uint32_t rgb) {
     const uint32_t r = rgb >> 16 & 0xff, g = rgb >> 8 & 0xff, b = rgb & 0xff;
     return 299 * r + 587 * g + 114 * b > 140000; // Luma above ~55 %.
 }
+uint32_t ColorShade::toward(uint32_t rgb, uint32_t background, unsigned percent) {
+    if (percent >= 100) return rgb;
+    uint32_t out = 0;
+    for (unsigned shift = 0; shift < 24; shift += 8) {
+        const int color = int(rgb >> shift & 0xff), base = int(background >> shift & 0xff), d = (color - base) * int(percent);
+        out |= uint32_t(base + (d + (d < 0 ? -50 : 50)) / 100) << shift;
+    }
+    return out;
+}
 } // namespace openosc

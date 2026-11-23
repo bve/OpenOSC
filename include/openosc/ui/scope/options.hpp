@@ -20,6 +20,22 @@ enum class CursorLine : uint8_t { None, TimeA, TimeB, LevelA, LevelB };
 // Density grading (GitHub #85): a channel drawn by how often its recent fresh records crossed each
 // pixel (Persistence keeps the levels), in heat colours or one colour's intensity.
 enum class Grade : uint8_t { Off, Colors, Mono };
+// Grid and trace brightness (GitHub #86): the percent of a colour shown over the plot's background
+// (100: the colour itself, 0: the background), in steps of Step. A trace keeps at least LowestTrace:
+// Visible hides it. A value between steps (a hand-edited file) moves to the adjacent step.
+struct Brightness {
+    static constexpr uint8_t Full = 100, Step = 10, LowestGrid = 0, LowestTrace = 10;
+    static constexpr unsigned choices(uint8_t lowest) { return (Full - lowest) / Step + 1U; }
+    // The choice of a percent; choices(lowest) for one between steps.
+    static constexpr unsigned choice(uint8_t percent, uint8_t lowest) {
+        return percent >= lowest && percent <= Full && percent % Step == 0 ? unsigned(percent - lowest) / Step : choices(lowest);
+    }
+    static constexpr uint8_t percent(unsigned choice, uint8_t lowest) { return uint8_t(lowest + choice * Step); }
+    static constexpr uint8_t step(uint8_t percent, int direction, uint8_t lowest) {
+        const int next = direction > 0 ? (percent / Step + 1) * Step : ((percent + Step - 1) / Step - 1) * Step;
+        return uint8_t(next < lowest ? lowest : next > Full ? Full : next);
+    }
+};
 struct ChannelOptions {
     static constexpr uint8_t InheritColor = 0xff;
     int16_t positionPermille = 500;
@@ -31,6 +47,9 @@ struct ChannelOptions {
     float heldMillivoltsAtTip = 0;
     Grade grade = Grade::Off;
     uint8_t gradeColor = InheritColor; // Mono's colour: the channel's own, else a ColorCatalog swatch.
+    // Its trace's shade (Brightness, GitHub #86): trace, Peak Hold, Persistence, Glow, X-Y and
+    // density alike; opacity stays the older see-through alpha of the settings file.
+    uint8_t brightness = Brightness::Full;
     bool graded() const { return grade != Grade::Off; }
 };
 struct CursorOptions {
@@ -62,6 +81,7 @@ struct Options {
     static constexpr int32_t PanFull = 1000000000;
     // zoomOut views more than one screen of a longer record. Zoom & Pan keeps one of zoom/zoomOut at 1 (ViewZoom).
     uint8_t averaging = 1, zoomOut = 1;
+    uint8_t gridBrightness = Brightness::Full; // Brightness, GitHub #86.
     static constexpr uint16_t MaximumZoom = 256;
     static constexpr uint8_t MaximumZoomOut = 64;
     bool lockTrigger = true, showTrigger = true, showZero = true, glow = false, peakHold = false,

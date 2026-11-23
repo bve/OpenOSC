@@ -46,11 +46,16 @@ struct DensityTask {
     uint16_t ink[16]{};
     uint16_t mono = 0; // Mono's colour.
 
-    // Out of line: done before the task is queued, its frame never under render's.
-    [[gnu::noinline]] void palette(Grade grade, uint32_t rgb, uint8_t opacity, unsigned peak, uint32_t plot) {
+    // Out of line: done before the task is queued, its frame never under render's. The brightness
+    // (GitHub #86) shades the colours here towards the plot's background, so Colors stays opaque
+    // stores and Mono its blends: nothing a pixel more, and at 100 % the colours are as before.
+    [[gnu::noinline]] void palette(const ChannelOptions &channel, uint32_t rgb, unsigned peak, uint32_t plot) {
         static constexpr auto Heat = heatPalette();
-        colors = grade == Grade::Colors;
-        mono = rgb565(rgb);
+        const unsigned opacity = channel.opacity;
+        colors = channel.grade == Grade::Colors;
+        mono = rgb565(ColorShade::toward(rgb, plot, channel.brightness));
+        const uint8_t heat = uint8_t((channel.brightness * 255U + 50) / 100); // Colors: LVGL's mix towards the background.
+        const uint16_t base = rgb565(plot);
         opaque = colors && opacity == 255;
         for (unsigned level = 1; level < 16; ++level) {
             // Levels 1..peak over the whole scale, the same number of colours a doubling of the count.
@@ -58,10 +63,10 @@ struct DensityTask {
             // Mono: the colour's intensity from a faint 48 to full; Colors: opaque, as the trace.
             const unsigned shade = colors ? 255 : 48 + (shown - 1) * 207 / 14;
             alpha[level] = uint8_t(shade * opacity / 255);
-            ink[level] = Heat[shown];
+            ink[level] = lv_color_16_16_mix_inlined(Heat[shown], base, heat); // 255: Heat[shown] itself.
         }
         if (!colors)
-            for (unsigned level = 0; level < 16; ++level) ink[level] = blend(level, rgb565(plot));
+            for (unsigned level = 0; level < 16; ++level) ink[level] = blend(level, base);
     }
     // LVGL's own mix: alpha 0 keeps the pixel, 255 takes the colour. A leaf call, as before: the
     // pairs over the background, the most common case, never need it.
@@ -160,7 +165,7 @@ void Painter::density(unsigned c) {
     task.width = uint16_t(view.width);
     task.height = uint16_t(view.height);
     const uint32_t mono = o.gradeColor == ChannelOptions::InheritColor ? palette_.channels[c] : ColorCatalog::swatch(o.gradeColor).rgb;
-    task.palette(o.grade, mono, o.opacity, model_.storage().persistence.peak(c), palette_.background);
+    task.palette(o, mono, model_.storage().persistence.peak(c), palette_.background);
     task.descriptor.base.dsc_size = sizeof(task);
     task.descriptor.render = task.opaque ? DensityTask::render<true> : DensityTask::render<false>;
     lv_draw_sw_callback(layer_, &area_, &task.descriptor);

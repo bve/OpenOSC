@@ -152,6 +152,10 @@ Captured on a ZT703S running OpenOSC.
   Density defaults to **Off**. Its history follows **Analyze → Display → History → Persistence**.
   Density uses a 1 s history with Persistence Off. **Infinite** keeps every observed path, and
   **Clear history and reference** starts a new accumulation
+- Grid brightness (**Analyze → Display → View → Grid brightness**, 0–100 %) and a separate trace
+  brightness for CH1 and CH2 (**Channel → Trace brightness**, 10–100 %). Both dim towards the plot
+  background on dark and light schemes. Trace brightness also applies to Peak Hold, Persistence, Glow,
+  X-Y (CH1) and Density. Channel colors, labels and markers keep full contrast
 - FFT up to 2048 points with four window functions, dBFS or linear scale
 - Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view, event detail; decoded data saved as CSV

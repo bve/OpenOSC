@@ -29,6 +29,7 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case View: std::snprintf(text, capacity, "View"); break;
     case TraceStyle: std::snprintf(text, capacity, "Trace"); break;
     case GridStyle: std::snprintf(text, capacity, "Grid"); break;
+    case GridBrightness: std::snprintf(text, capacity, "Grid brightness"); break;
     case Persistence: std::snprintf(text, capacity, "Persistence"); break;
     case Average: std::snprintf(text, capacity, "Average"); break;
     case PeakHold: std::snprintf(text, capacity, "Peak hold"); break;
@@ -68,6 +69,7 @@ unsigned Controls::choices(unsigned row) const {
     case View: case GridStyle: case Average: case FftWindow: return 4;
     case TraceStyle: case MathTrace: case TraceInterpolation: case SampleReduction: case CounterSource: case CounterAverage: return 3;
     case Persistence: return sizeof Persistences / sizeof *Persistences;
+    case GridBrightness: return Brightness::choices(Brightness::LowestGrid);
     case Zoom: return sizeof Zooms / sizeof *Zooms;
     default: return kind(row) == Kind::Toggle ? 2 : 0;
     }
@@ -81,6 +83,7 @@ unsigned Controls::choice(unsigned row) const {
     case View: return unsigned(o.mode);
     case TraceStyle: return unsigned(o.style);
     case GridStyle: return unsigned(o.grid);
+    case GridBrightness: return Brightness::choice(o.gridBrightness, Brightness::LowestGrid);
     case Persistence: return indexOf(o.persistenceMs, Persistences);
     case Average: return indexOf(o.averaging, Averages);
     case Zoom: return o.zoomOut > 1 ? choices(row) : indexOf(o.zoom, Zooms); // Below 1x: none of the list.
@@ -128,6 +131,9 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
         else std::snprintf(text, capacity, "%u ms", i < choices(row) ? Persistences[i] : options.persistenceMs);
         break;
     case Average: std::snprintf(text, capacity, "%u", i < choices(row) ? Averages[i] : options.averaging); break;
+    case GridBrightness: // A value between the steps (choices()) as it is.
+        std::snprintf(text, capacity, "%u%%", i < choices(row) ? Brightness::percent(i, Brightness::LowestGrid) : options.gridBrightness);
+        break;
     case Zoom:
         if (i < choices(row)) std::snprintf(text, capacity, "%ux", Zooms[i]);
         else ViewZoom::factor(options, text, capacity); // Zoom & Pan's own factor (below 1x).

@@ -26,6 +26,7 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     root["glow"] = o.glow;
     root["peak_hold"] = o.peakHold;
     root["show_scale"] = o.showScale;
+    root["grid_brightness"] = o.gridBrightness;
     auto spectrum=root.createNestedObject("fft");
     constexpr const char *windows[]={"rectangular","hann","hamming","blackman"};
     spectrum["channel"]=o.spectrum.channel;
@@ -43,6 +44,7 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
         item["opacity"] = c.opacity;
         item["visible"] = c.visible;
         item["invert"] = c.invert;
+        item["trace_brightness"] = c.brightness;
         static constexpr const char *grades[] = {"off", "colors", "mono"};
         item["grade"] = grades[unsigned(c.grade) % 3];
         if (c.gradeColor != plot::ChannelOptions::InheritColor) item["grade_color"] = ColorCatalog::swatch(c.gradeColor).key;

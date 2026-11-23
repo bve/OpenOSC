@@ -68,7 +68,8 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
         !integer(object, "persistence_ms", o.persistenceMs) || !integer(object, "averaging", o.averaging) ||
         !flag(object, "lock_trigger", o.lockTrigger) || !flag(object, "show_trigger", o.showTrigger) ||
         !flag(object, "show_zero", o.showZero) || !flag(object, "glow", o.glow) ||
-        !flag(object, "peak_hold", o.peakHold) || !flag(object, "show_scale", o.showScale))
+        !flag(object, "peak_hold", o.peakHold) || !flag(object, "show_scale", o.showScale) ||
+        !integer(object, "grid_brightness", o.gridBrightness)) // GitHub #86: absent in older themes (100).
         return false;
     if (object.containsKey("fft")) {
         if (!object["fft"].is<JsonObjectConst>()) return false;
@@ -94,7 +95,7 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
             if (!integer(input, "position_permille", c.positionPermille) ||
                 !integer(input, "gain_percent", c.gainPercent) || !integer(input, "width", c.width) ||
                 !integer(input, "opacity", c.opacity) || !flag(input, "visible", c.visible) ||
-                !flag(input, "invert", c.invert))
+                !flag(input, "invert", c.invert) || !integer(input, "trace_brightness", c.brightness))
                 return false;
             // GitHub #85: absent in older themes (Off, the channel's colour).
             static constexpr const char *grades[] = {"off", "colors", "mono"};

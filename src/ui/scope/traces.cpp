@@ -27,7 +27,7 @@ void Painter::traces() {
             return;
         }
         if (o.glow) glow(0);
-        xy(s.xy, model_.xyCount(), palette_.channels[0], o.channels[0].opacity, o.channels[0].width, o.style);
+        xy(s.xy, model_.xyCount(), traceColor(0), o.channels[0].opacity, o.channels[0].width, o.style); // CH1's trace.
         return;
     }
     if (model_.hasReference())
@@ -39,12 +39,13 @@ void Painter::traces() {
             if (!densityShown(c)) glow(c);
     for (const unsigned c : order) {
         const auto &channel = o.channels[c];
+        const uint32_t color = traceColor(c);
         if (o.peakHold)
-            trace(s.peaks[c], palette_.channels[c], 65U * channel.opacity / 255, 1, Style::Envelope);
+            trace(s.peaks[c], color, 65U * channel.opacity / 255, 1, Style::Envelope);
         // A graded channel is its density, the newest record included; with none yet (cleared by a
         // change of the view, or held before a record), its trace.
         if (densityShown(c)) density(c);
-        else trace(s.traces[c], palette_.channels[c], channel.opacity, channel.width, o.style);
+        else trace(s.traces[c], color, channel.opacity, channel.width, o.style);
     }
     if (o.math != Math::Off) {
         trace(s.traces[2], palette_.math, 220, 1, o.style);

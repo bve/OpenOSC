@@ -40,6 +40,7 @@ public:
         CounterSource,
         CounterAverage,
         CounterPpm,
+        GridBrightness,
         Section,
         Count
     };

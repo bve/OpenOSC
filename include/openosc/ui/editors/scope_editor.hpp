@@ -22,8 +22,9 @@ protected:
 };
 class ChannelEditor final : public ScopeEditor {
 public:
-    // Density and its colour (GitHub #85) are the view's, as Invert; the colour row only for Mono.
-    enum Row : unsigned { Channel, Enabled, Coupling, Probe, Scale, Zero, Invert, Density, DensityColor, Fields };
+    // Trace brightness (GitHub #86), Density and its colour (GitHub #85) are the view's, as Invert;
+    // the colour row only for Mono.
+    enum Row : unsigned { Channel, Enabled, Coupling, Probe, Scale, Zero, Invert, TraceBrightness, Density, DensityColor, Fields };
     const char *title() const override { return "CHANNEL"; }
     void value(unsigned row, char *output, size_t capacity) const override;
     unsigned options(unsigned row) const override;

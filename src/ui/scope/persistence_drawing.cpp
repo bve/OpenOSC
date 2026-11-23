@@ -55,7 +55,7 @@ void Painter::persistence() {
         if (o.mode==Mode::XY && c!=0) continue;
         if (c<2 && (!o.channels[c].visible || bitmap.graded(c))) continue; // A density plane: Painter::density.
         if (c==2 && (o.math==Math::Off || !infinite)) continue;
-        const auto color=c<2 ? palette_.channels[c] : palette_.math;
+        const auto color=c<2 ? traceColor(c) : palette_.math;
         const unsigned opacity=c<2 ? o.channels[c].opacity : 255;
         if (!opacity) continue;
         Path trails[] = {

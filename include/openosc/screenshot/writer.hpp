@@ -16,15 +16,18 @@ public:
     unsigned percent() const { return position_ * 100ULL / BmpImage::FileBytes; }
     const char* error() const { return error_; }
     const char* path() const { return final_; }
+    // Read the sequence prefix of a filename in the screenshot namespace, or return 0.
+    static uint32_t number(const char* name);
 private:
     bool fail(const char* message);
+    bool highestNumber(uint32_t& highest); // Over the screenshot folder; false: it cannot be read.
     Filesystem& fs_;
     BmpImage image_{nullptr};
     FIL file_{};
     bool open_ = false, complete_ = false;
     uint32_t position_ = 0, nextId_ = 1;
     const char* error_ = nullptr;
-    char temporary_[40]{}, final_[40]{};
+    char temporary_[40]{}, final_[48]{}; // "/openosc/SCREENSHOTS/SCR00001-0123ABCD.BMP": 42.
     alignas(4) uint8_t buffer_[4096];
 };
 }
