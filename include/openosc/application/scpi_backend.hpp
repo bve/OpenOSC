@@ -1,4 +1,5 @@
 #pragma once
+#include "ff.h"
 #include "openosc/scpi/backend.hpp"
 #include "openosc/acquisition/mailbox.hpp"
 #include "openosc/decode/record_key.hpp"
@@ -75,6 +76,13 @@ public:
     uint32_t coreMhz() const override;
     int coreMhz(uint32_t mhz) override;
     bool counter(unsigned channel,scope::CounterReading &reading) const override;
+    bool idleSettings(IdleSettings &) const override;
+    int setIdle(const IdleSettings &) override;
+    int fileList(const char *folder, uint32_t start, char *out, size_t size, uint32_t &count, uint32_t &total) override;
+    int fileOpen(const char *path, uint32_t &bytes) override;
+    size_t fileRead(uint32_t at, uint8_t *out, size_t size) override;
+    void fileClose() override;
+    int fileDelete(const char *path) override;
     scope::CaptureProgress captureProgress() const override;
     const char *serial() const override { return serial_; }
     const char *version() const override;
@@ -92,5 +100,8 @@ private:
     bool freshFrame_ = false;
     mutable dmm::Result reading_;
     char serial_[25]{};
+    FIL file_{};
+    bool fileOpen_ = false;
+    static inline unsigned openFiles_ = 0; // MMEM:DATA? streams of every session (TMC, CDC).
 };
 } // namespace openosc

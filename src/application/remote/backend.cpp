@@ -7,6 +7,7 @@
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/clocks.hpp"
 #include <cstdio>
+#include <strings.h>
 
 namespace openosc {
 InstrumentBackend::InstrumentBackend(ApplicationController &application)
@@ -225,6 +226,57 @@ int InstrumentBackend::coreMhz(uint32_t mhz) {
     case RunModeSwitch::Outcome::Refused: return -221;    // Busy: nothing changed.
     default: return -200;                                  // Not applied, or users not restarted: query says what runs.
     }
+}
+bool InstrumentBackend::idleSettings(IdleSettings &settings) const { settings = application_.prefs_.idle; return true; }
+int InstrumentBackend::setIdle(const IdleSettings &settings) {
+    auto &a = application_;
+    if (!settings.valid()) return -222;
+    auto chosen = a.prefs_; chosen.idle = settings;
+    a.applySettings(chosen, Board::milliseconds());
+    if (a.state_.settingsOpen) { a.navigator_.reset(a.navigator_.row()); a.showSettings(); } // An edit in progress ends.
+    return 0;
+}
+int InstrumentBackend::fileList(const char *folder, uint32_t start, char *out, size_t size, uint32_t &count, uint32_t &total) {
+    count = total = 0; if (size) *out = 0;
+    if (!application_.fs_.mounted()) return -250;
+    DIR dir{}; FILINFO info{};
+    if (const FRESULT opened = f_opendir(&dir, folder); opened != FR_OK) return opened == FR_NO_PATH ? 0 : -256; // Not made yet: empty.
+    size_t used = 0; bool full = false;
+    FRESULT result;
+    while ((result = f_readdir(&dir, &info)) == FR_OK && info.fname[0]) {
+        if (info.fattrib & (AM_DIR | AM_HID | AM_SYS)) continue;
+        const char *dot = std::strrchr(info.fname, '.');
+        if (dot && !strcasecmp(dot, ".TMP")) continue; // Still written.
+        if (total++ < start || full) continue;
+        const int n = std::snprintf(out + used, size - used, "%s\"%s\",%lu", used ? "," : "", info.fname, (unsigned long)info.fsize);
+        if (n < 0 || size_t(n) >= size - used) { out[used] = 0; full = true; continue; }
+        used += size_t(n); ++count;
+    }
+    f_closedir(&dir);
+    return result == FR_OK ? 0 : -250;
+}
+int InstrumentBackend::fileOpen(const char *path, uint32_t &bytes) {
+    fileClose();
+    if (!application_.fs_.mounted()) return -250;
+    const FRESULT result = f_open(&file_, path, FA_READ);
+    if (result != FR_OK) return result == FR_NO_FILE || result == FR_NO_PATH ? -256 : -250;
+    fileOpen_ = true; ++openFiles_; bytes = uint32_t(f_size(&file_));
+    return 0;
+}
+size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
+    UINT n = 0;
+    if (!fileOpen_ || (f_tell(&file_) != at && f_lseek(&file_, at) != FR_OK) || f_read(&file_, out, UINT(size), &n) != FR_OK) return 0;
+    return n;
+}
+void InstrumentBackend::fileClose() { if (fileOpen_) { f_close(&file_); --openFiles_; } fileOpen_ = false; }
+int InstrumentBackend::fileDelete(const char *path) {
+    if (!application_.fs_.mounted()) return -250;
+    const auto &a = application_;
+    const bool shots = !std::strncmp(path, storage::Layout::Screenshots, std::strlen(storage::Layout::Screenshots));
+    if (openFiles_ || (shots && (a.imageReader_.busy() || a.images_.clearing() || a.panel_ == ApplicationController::Panel::Images ||
+        (a.panel_ == ApplicationController::Panel::Confirmation && a.confirmationImages_)))) return -221; // Being read or browsed.
+    const FRESULT result = f_unlink(path);
+    return result == FR_OK ? 0 : result == FR_NO_FILE || result == FR_NO_PATH ? -256 : -250;
 }
 bool InstrumentBackend::counter(unsigned channel,scope::CounterReading &reading) const {
     if (channel>1 || application_.data_.zeroBusy()) return false;

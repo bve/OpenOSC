@@ -28,6 +28,9 @@ const char *ErrorQueue::message(int16_t code) {
     case -230: return "Data unavailable or invalid";
     case -240: return "Hardware error";
     case -241: return "Hardware missing";
+    case -250: return "Mass storage error";
+    case -256: return "File name not found";
+    case -257: return "File name error";
     case -350: return "Queue overflow";
     case -363: return "Input buffer overrun";
     case -410: return "Query interrupted";

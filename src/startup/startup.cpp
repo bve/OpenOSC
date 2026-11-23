@@ -10,7 +10,7 @@ extern uint32_t _sidma_data, _sdma_data, _edma_data;
 // ITCM workspaces using 64-bit ECC words.
 extern uint64_t _sdecode_workspace, _edecode_workspace, _susb_trace, _eusb_trace;
 extern uint64_t _sscope_glow, _escope_glow;
-extern uint64_t _sbode, _ebode;
+extern uint64_t _sbode, _ebode, _sscpi_measure, _escpi_measure;
 #endif
 void Reset_Handler();
 void Bootstrap_Fault();
@@ -63,6 +63,7 @@ void Reset_Handler() {
     for (auto* p = &_susb_trace; p < &_eusb_trace; ++p) *p = 0;
     for (auto* p = &_sscope_glow; p < &_escope_glow; ++p) *p = 0;
     for (auto* p = &_sbode; p < &_ebode; ++p) *p = 0;
+    for (auto* p = &_sscpi_measure; p < &_escpi_measure; ++p) *p = 0;
     __DSB();
 #endif
     for (unsigned i = 0; i < 171; ++i)

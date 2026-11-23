@@ -59,6 +59,8 @@ SECTIONS {
     /* The frequency response session (GitHub #72, both boards: its settings, sweep and 256 points), zeroed
        at reset in 64-bit ECC words, built in place on first use. */
     .bode (NOLOAD) : { . = ALIGN(8); _sbode = .; KEEP(*(.bode)) . = ALIGN(8); _ebode = .; } > ITCM
+    /* SCPI WAV:MEAS? RECord's one record-readouts job (any session), zeroed at reset, built in place on first use. */
+    .scpi_measure (NOLOAD) : { . = ALIGN(8); _sscpi_measure = .; KEEP(*(.scpi_measure)) . = ALIGN(8); _escpi_measure = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")
     ASSERT(ADDR(.framebuffer) == 0x24000000, "Panel framebuffer address changed")
@@ -68,8 +70,8 @@ SECTIONS {
     ASSERT(SIZEOF(.capture_arena) == 393216, "Record banks 1-3 must be 384 KiB of AXI SRAM")
     ASSERT(SIZEOF(.acquisition) == 131072, "Record bank 0 must be the 128 KiB AHB SRAM")
     ASSERT(SIZEOF(.decode_workspace) <= 40960, "Decoder workspace exceeds its 40 KiB plan")
-    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) + SIZEOF(.scope_glow) + SIZEOF(.bode) <= LENGTH(ITCM),
-           "ITCM: decoder, trace ring, Glow silhouette and Bode session exceed usable RAM")
+    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) + SIZEOF(.scope_glow) + SIZEOF(.bode) + SIZEOF(.scpi_measure) <= LENGTH(ITCM),
+           "ITCM: decoder, trace ring, Glow silhouette, Bode session and SCPI measure exceed usable RAM")
     ASSERT(SIZEOF(.capture_trial) == 16384, "The AutoSetup trial area must be AXI SRAM")
     ASSERT(SIZEOF(.capture_nodes) == 960, "MDMA history nodes must be AXI SRAM")
     ASSERT(LOADADDR(.dma_data) + SIZEOF(.dma_data) <= __openosc_flash_end, "Application exceeds Flash reservation")
