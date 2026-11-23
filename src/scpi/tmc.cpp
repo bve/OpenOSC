@@ -88,7 +88,12 @@ size_t Tmc::packet(uint8_t *output, size_t capacity) {
         const size_t want = std::min<size_t>(transfer_, early ? 64 - (used & 63) : capacity - used);
         const size_t count = engine_.read(output + used, want);
         transfer_ -= count; used += count; inData_ += count;
-        if (!count || !(used & 63)) break;
+        if (!count) { // The engine dropped its output (reset, -410): zeros end the announced transfer.
+            const size_t zeros = std::min<size_t>(transfer_, capacity - used);
+            std::memset(output + used, 0, zeros); transfer_ -= zeros; used += zeros; inData_ += zeros;
+            break;
+        }
+        if (!(used & 63)) break;
         early = early || count < want;
     }
     while (!transfer_ && outputPadding_ && used < capacity) { output[used++] = 0; --outputPadding_; }

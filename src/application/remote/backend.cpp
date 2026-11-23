@@ -288,7 +288,7 @@ int InstrumentBackend::fileDelete(const char *path) {
     if (storage::openReaders || (shots && (a.imageReader_.busy() || a.images_.clearing() || a.panel_ == ApplicationController::Panel::Images ||
         (a.panel_ == ApplicationController::Panel::Confirmation && a.confirmationImages_)))) return -221; // Being read or browsed.
     const FRESULT result = f_unlink(path);
-    return result == FR_OK ? 0 : result == FR_NO_FILE || result == FR_NO_PATH ? -256 : -250;
+    return result == FR_OK ? 0 : result == FR_NO_FILE || result == FR_NO_PATH ? -256 : result == FR_INVALID_NAME ? -257 : -250;
 }
 bool InstrumentBackend::counter(unsigned channel,scope::CounterReading &reading) const {
     if (channel>1 || application_.data_.zeroBusy()) return false;
