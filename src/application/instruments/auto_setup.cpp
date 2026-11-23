@@ -3,13 +3,13 @@
 namespace openosc {
 void ApplicationController::startAuto(uint32_t now) {
     if (data_.scopeRecording()) {
-        if (uiReady_) view_.notify("Finish waveform save first", now);
+        if (uiReady_) view_.notify(Tooltip::Unavailable, "Finish waveform save first", now);
         return;
     }
     autoWasHeld_ = data_.scopeHeld();
     // The frame on show stays where it is (no copy) for HOLD to return to; trials use their own area.
     if (!data_.retainScope()) {
-        if (uiReady_) view_.notify("Cannot retain HOLD frame: release USB waveform",now);
+        if (uiReady_) view_.notify(Tooltip::Unavailable, "Cannot retain HOLD frame: release USB waveform",now);
         return;
     }
     autoCancelled_=false; autoStep_ = 0;
@@ -17,10 +17,15 @@ void ApplicationController::startAuto(uint32_t now) {
     data_.holdScope(false);
     autoSetup_.begin(data_.scopeRequest(), selectedChannel_, now);
     if (!data_.configureScope(autoSetup_.request())) autoSetup_.fail();
-    if (uiReady_) view_.notify("Auto setup...", now);
+    if (uiReady_) view_.notify(Tooltip::Progress, "Auto setup...", now);
 }
 bool ApplicationController::restoreAuto() {
-    if (autoWasHeld_) return data_.restoreHeldScope(autoSetup_.original());
+    if (autoWasHeld_) {
+        if (!data_.restoreHeldScope(autoSetup_.original())) return false;
+        // This release was only for the Auto trials. The same HOLD view stays open.
+        if (heldViewActive_) heldViewRelease_ = data_.scopeHoldReleases();
+        return true;
+    }
     data_.releaseRetained(); // Running again: the record on show from before is not needed.
     return data_.configureScope(autoSetup_.original());
 }
@@ -29,11 +34,11 @@ bool ApplicationController::cancelAuto(uint32_t now,bool hold) {
     if (hold) autoWasHeld_=true;
     autoCancelled_=true; autoSetup_.fail();
     if (!restoreAuto()) {
-        if (uiReady_) view_.notify("Release USB waveform to restore",now);
+        if (uiReady_) view_.notify(Tooltip::Critical, "Release USB waveform to restore",now);
         return false; // Keep the original request/record until its reader releases.
     }
     data_.releaseRetained(); autoSetup_.reset(); dataRefresh_ = true;
-    if (uiReady_) view_.notify("Auto cancelled", now);
+    if (uiReady_) view_.notify(Tooltip::Done, "Auto cancelled", now);
     finishAutoStep(now); // A Scale arrow that cancelled it: its step, now that the restore succeeded.
     return true;
 }
@@ -55,6 +60,7 @@ void ApplicationController::serviceAuto(uint32_t now) {
     if (result == State::Complete) {
         data_.scopeTrials(false); // The found settings capture records again.
         if (!applyFound(autoSetup_.request(), now)) { data_.scopeTrials(true); autoSetup_.fail(); result = State::ApplyError; }
+        else homeZoom(now); // Issue #111: the signal it found, whole (Quick tap and Classic hold); a cancel or failure keeps the view.
     }
     if (result != State::Complete) {
         if (!restoreAuto()) return;
@@ -62,7 +68,10 @@ void ApplicationController::serviceAuto(uint32_t now) {
     const char *message = autoCancelled_ ? "Auto cancelled" : result == State::Complete ? "Auto setup complete" : result == State::NoSignal ? "Auto: no signal" :
         result == State::Clipped ? "Auto: signal outside range" : result == State::Timeout ? "Auto: no stable capture / timeout" :
         result == State::Uncalibrated ? "Auto needs factory calibration" : "Auto: cannot apply acquisition";
-    if (uiReady_) view_.notify(message, now);
+    // Done or cancelled; a signal Auto could not set up for; no calibration, or a setup not applied.
+    const Tooltip kind = autoCancelled_ || result == State::Complete ? Tooltip::Done
+        : result == State::NoSignal || result == State::Clipped || result == State::Timeout ? Tooltip::Advisory : Tooltip::Critical;
+    if (uiReady_) view_.notify(kind, message, now);
     data_.releaseRetained(); autoSetup_.reset(); dataRefresh_ = true;
     finishAutoStep(now); // A Scale arrow that cancelled it: its step, now that the restore succeeded.
 }

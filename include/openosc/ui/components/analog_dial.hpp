@@ -42,7 +42,13 @@ public:
     void marking(const char *text);
     const char *marking() const { return marking_; }
     lv_area_t markingArea() const;           // Its text's extent on the screen (empty text: zero width).
+    // A number's label box (its text's width and line height, drawn centred) and the ink of its glyphs
+    // in it (GitHub #112). The ink stays inside the face and outside clearRadius(): clear of the arc,
+    // the overload zone, the ticks and the needle's whole sweep, whatever the label's length or font.
     lv_area_t numberArea(int major, const lv_area_t &face) const;
+    lv_area_t numberInk(int major, const lv_area_t &face) const;
+    float clearRadius() const;               // From the pivot: the stroke and the needle's tip, plus a gap.
+    static constexpr int LabelGap = 2;       // Ink to the arc's outer edge or the needle's tip.
     bool service(uint32_t now); // True if a redraw was requested.
     const NeedleMotion &motion() const { return motion_; }
     State state() const { return state_; }
@@ -56,6 +62,10 @@ public:
 private:
     struct Geometry { float px, py, radius; };
     Geometry geometry() const;
+    // Single-line labels use the 12 px fonts. Even the longest formatted number is under
+    // 128 px wide, so its width and glyph bounds fit in bytes.
+    struct Extent { uint8_t width = 0; int8_t x1 = 0, y1 = 0, x2 = -1, y2 = -1; };
+    void measure();
     lv_area_t needleArea(float fraction) const; // Screen coordinates.
     static void draw(lv_event_t *event);
     void paint(lv_layer_t *layer) const;
@@ -69,7 +79,9 @@ private:
     float drawn_ = 0;     // The position last painted.
     unsigned decimals_ = 256; // Nothing labelled yet.
     dmm::CountScale counts_ = dmm::BoardScale;
-    char labels_[dmm::MaxScaleLabels][16]{}, legend_[16]{}, marking_[24]{};
+    // The supported counts and up to six decimal places fit within ten characters, including a sign.
+    char labels_[dmm::MaxScaleLabels][11]{}, legend_[16]{}, marking_[24]{};
+    Extent extents_[dmm::MaxScaleLabels]{};
     uint32_t drawnAt_ = 0;
 };
 } // namespace openosc::ui

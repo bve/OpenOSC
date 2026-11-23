@@ -3,6 +3,7 @@
 #include "openosc/ui/scope/format.hpp"
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/view_zoom.hpp"
+#include "openosc/ui/scope/plot_frame.hpp"
 #include "openosc/acquisition/readouts.hpp"
 #include <cstdio>
 #include <cstring>
@@ -45,22 +46,34 @@ void ScopeScreen::select(unsigned channel) {
     host_.waveform().frontChannel(channel_);
 }
 // The generator running beside the capture; while its DAC stream loads the bus, ", ADC max /2": the
-// next captures' maximum sample rate is halved (a held record stays as it was captured).
+// next captures' maximum sample rate is halved (a held record stays as it was captured). A view away
+// from home (zoom, pan) keeps its marker in front of it (issue #111), in the GEN note's colour when
+// both are on; a GEN note too wide for the plot beside it leaves out the ADC remark, then the shape.
 void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved) {
     if (focus_ == plot::Focus::Zoom) { zoomNote(); return; }
-    char text[64] = "", frequency[24];
-    if (output.enabled && output.applied.actualHz.valid() && plot::Format::quantity(output.applied.actualHz.value(), "Hz", frequency, sizeof frequency, 3)) {
-        const unsigned shape = unsigned(output.requested.shape);
-        std::snprintf(text, sizeof text, "GEN %s %s%s", shape < 6 ? generator::ShapeNames[shape] : "?", frequency,
-                      captureHalved ? ", ADC max /2" : "");
+    auto &widget = host_.waveform();
+    char text[64], frequency[24]; // The view marker first, the GEN note after it: no buffer of its own (stack).
+    plot::ViewZoom::marker(widget.options(), widget.model(), text, sizeof text);
+    const size_t view = std::strlen(text);
+    const bool gen = output.enabled && output.applied.actualHz.valid() &&
+                     plot::Format::quantity(output.applied.actualHz.value(), "Hz", frequency, sizeof frequency, 3);
+    const unsigned shape = unsigned(output.requested.shape);
+    // The note's room: the plot left of its anchor 30 px inside the right margin, less its padding.
+    const int width = widget.model().viewport().width ? int(widget.model().viewport().width) : plot::PlotFrame::PlotWidth;
+    const int room = width - (plot::PlotFrame::Right + 30) - plot::PlotFrame::Left - 4;
+    for (unsigned detail = 3; detail-- > 0;) { // GEN as it is, without ", ADC max /2", without the shape.
+        if (!gen) break;
+        std::snprintf(text + view, sizeof text - view, "%sGEN %s%s%s%s", view ? "  " : "", detail < 1 ? "" : shape < 6 ? generator::ShapeNames[shape] : "?",
+                      detail >= 1 ? " " : "", frequency, detail >= 2 && captureHalved ? ", ADC max /2" : "");
+        if (!view || Elements::textWidth(text, 12) <= room) break;
     }
-    host_.waveform().note(text, host_.theme().generator);
+    widget.note(text, gen ? host_.theme().generator : host_.theme().cursor);
 }
 // Zoom & Pan (issue #96): its factor and what the arrows do, in place of the GEN note.
 void ScopeScreen::zoomNote() {
     auto &widget = host_.waveform();
     char factor[16], text[64];
-    plot::ViewZoom::factor(widget.options(), factor, sizeof factor);
+    plot::ViewZoom::shownFactor(widget.options(), widget.model(), factor, sizeof factor);
     std::snprintf(text, sizeof text, "ZOOM %s  Up/Dn zoom  L/R %s", factor, panReverse_ ? "later/earlier" : "earlier/later");
     widget.note(text, host_.theme().cursor);
 }
@@ -121,7 +134,7 @@ void ScopeScreen::cards() {
     bar.item(2, "Trigger", value);
     if (focus_ == plot::Focus::Zoom) { // Zoom & Pan: F4 goes back to the card it came from.
         char factor[16];
-        plot::ViewZoom::factor(widget.options(), factor, sizeof factor);
+        plot::ViewZoom::shownFactor(widget.options(), model, factor, sizeof factor);
         std::snprintf(value, sizeof value, "Zoom %s", factor);
         bar.item(3, "Back", value);
     } else if (focus_ == plot::Focus::Cursor && model.cursorFocus() != plot::CursorLine::None)
@@ -156,6 +169,7 @@ void ScopeScreen::update(const scope::FrameView &frame, bool held, unsigned sele
 
     host_.scopeFooter().frame(widget.model()); // Every preset: the footer's six readouts (Legacy too).
     cards();
+    if (focus_ == plot::Focus::Zoom) zoomNote(); // With the Back card: the factor this record shows.
     if (valid_ && held_ == held && channel_ == selected) return;
     valid_ = true;
     held_ = held;

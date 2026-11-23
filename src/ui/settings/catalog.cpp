@@ -19,6 +19,7 @@ constexpr SettingsEntry display[] = {
     {"Pan direction", Action::PanDirection},
     {"Scope shortcuts", Action::None, Page::ScopeKeys},
     {"Generator layout", Action::GeneratorLayout},
+    {"Tooltips", Action::None, Page::Tooltips},
     {"Appearance", Action::None, Page::Appearance},
     {"Back", Action::Back},
 };
@@ -27,6 +28,16 @@ constexpr SettingsEntry scopeKeys[] = {
     {"AUTO key", Action::AutoKey},
     {"F2 hold", Action::ResetHold},
     {"F4 hold", Action::ShortcutHold},
+    {"Back", Action::Back},
+};
+// The transient notices each kind of Tooltip shows (GitHub #108); critical ones always show.
+constexpr SettingsEntry tooltips[] = {
+    {"Usage tips", Action::TooltipUsage},
+    {"Action unavailable", Action::TooltipUnavailable},
+    {"Progress", Action::TooltipProgress},
+    {"Completions", Action::TooltipDone},
+    {"Advisory warnings", Action::TooltipAdvisory},
+    {"Critical alerts", Action::TooltipCritical},
     {"Back", Action::Back},
 };
 constexpr SettingsEntry appearance[] = {
@@ -72,6 +83,8 @@ constexpr SettingsEntry power[] = {
     {"Auto power off",Action::PowerOffTimeout},
     {"Power-off hold",Action::HoldTime},
     {"Generator at startup",Action::GeneratorStartup},
+    {"Battery gain",Action::BatteryGain},     // The battery display trim (GitHub #107).
+    {"Battery offset",Action::BatteryOffset},
     {"Back",Action::Back},
 };
 constexpr SettingsEntry calibration[] = {
@@ -120,6 +133,7 @@ constexpr SettingsEntry interleave[] = {
 template <size_t N>
 constexpr SettingsPageDefinition page(const char *title, const char *path, Page parent,
                                       const SettingsEntry (&entries)[N]) {
+    static_assert(N <= UINT8_MAX + 1U); // SettingsMenu stores one row index per page.
     return {title, path, parent, entries, N};
 }
 constexpr SettingsPageDefinition pages[] = {
@@ -140,6 +154,7 @@ constexpr SettingsPageDefinition pages[] = {
     page("GAIN","Settings / Device / Scope calibration / Gain",Page::Calibration,gain),
     page("INTERLEAVE OFFSET","Settings / Device / Scope calibration / Interleave",Page::Calibration,interleave),
     page("SCOPE SHORTCUTS", "Settings / Display / Scope shortcuts", Page::Display, scopeKeys),
+    page("TOOLTIPS", "Settings / Display / Tooltips", Page::Display, tooltips),
 };
 static_assert(sizeof pages / sizeof *pages == unsigned(Page::Count));
 }

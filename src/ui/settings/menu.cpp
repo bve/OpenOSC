@@ -12,12 +12,12 @@ void SettingsMenu::open(SettingsPage page, SettingsAction action) {
         const auto parent = definition(child).parent;
         const auto &above = definition(parent);
         for (unsigned i = 0; i < above.count; ++i)
-            if (above.entries[i].child == child) selected_[unsigned(parent)] = i;
+            if (above.entries[i].child == child) selected_[unsigned(parent)] = uint8_t(i);
         child = parent;
     }
     page_ = page < SettingsPage::Count ? page : SettingsPage::Root;
     for (unsigned i = 0; i < count(); ++i)
-        if (entry(i).action == action) selected_[unsigned(page_)] = i;
+        if (entry(i).action == action) selected_[unsigned(page_)] = uint8_t(i);
 }
 bool SettingsMenu::back() {
     if (page_ == SettingsPage::Root) return false;

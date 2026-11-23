@@ -5,18 +5,22 @@ namespace openosc {
 void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t now) {
     switch (action) {
     case ui::SettingsAction::CalibrateHardwareZero:
-        if (data_.measurementMode()!=MeasurementMode::Oscilloscope) { view_.notify("Select Scope first",now); break; }
+        if (data_.measurementMode()!=MeasurementMode::Oscilloscope) { view_.notify(Tooltip::Unavailable, "Select Scope first",now); break; }
         confirmOperation(ui::Confirmation("GROUND BOTH SCOPE INPUTS?","Stop GEN / set offset PWM","Any DC on an input is taken as offset"),&ApplicationController::beginHardwareZero);
         break;
     case ui::SettingsAction::CalibrateZero:
-        if (data_.measurementMode()!=MeasurementMode::Oscilloscope) { view_.notify("Select Scope first",now); break; }
+        if (data_.measurementMode()!=MeasurementMode::Oscilloscope) { view_.notify(Tooltip::Unavailable, "Select Scope first",now); break; }
         confirmOperation(ui::Confirmation("DISCONNECT SCOPE INPUTS?","Stop GEN / calibrate","Checks CH1/CH2 across all ranges"),&ApplicationController::beginSoftwareZero);
         break;
     case ui::SettingsAction::ReloadZero:
-        view_.notify(data_.reloadCalibration() ? data_.zeroFile().repaired() || data_.pwmFile().repaired() || data_.gainFile().repaired() ||
-                     data_.interleaveFile().repaired() ? "Calibration JSON repaired" : "Calibration loaded for new captures" :
-            "Cannot load calibration JSON",now);
+    {
+        const bool loaded = data_.reloadCalibration(); // Repaired or unread: the calibration in force changed.
+        const bool repaired = data_.zeroFile().repaired() || data_.pwmFile().repaired() || data_.gainFile().repaired() || data_.interleaveFile().repaired();
+        const char *notice = !loaded ? "Cannot load calibration JSON" :
+                             repaired ? "Calibration JSON repaired" : "Calibration loaded for new captures";
+        view_.notify(loaded && !repaired ? Tooltip::Done : Tooltip::Critical, notice, now);
         break;
+    }
     case ui::SettingsAction::CalibrateGain: confirmGain(now); break;
     case ui::SettingsAction::MatchGain: openGainMatch(now); break;
     case ui::SettingsAction::FactoryGain:
@@ -32,7 +36,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
     case ui::SettingsAction::ReloadPreferences: {
         const bool discarded = saves_.settingsPending() || saves_.themePending();
         if (!preferences_.load()) {
-            view_.notify(preferences_.error(), now);
+            view_.notify(Tooltip::Critical, preferences_.error(), now);
             break;
         }
         saves_.dropTheme();
@@ -46,7 +50,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         char result[112]; applied.text(result, sizeof result);
         char text[160];
         std::snprintf(text, sizeof text, "%s%s", discarded ? "Unsaved changes discarded. " : "", result);
-        view_.notify(text, now);
+        view_.notify(!applied.ok() ? Tooltip::Critical : discarded ? Tooltip::Advisory : Tooltip::Done, text, now);
         break;
     }
     case ui::SettingsAction::ReloadTheme:
@@ -57,8 +61,9 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
             changed(now);
             buildView();
             const char *notice = ThemeNotice::text(themes_);
-            view_.notify(notice ? notice : discarded ? "Theme loaded; plot changes discarded" : "Theme loaded", now);
-        } else view_.notify(themes_.error(), now);
+            view_.notify(notice ? Tooltip::Critical : discarded ? Tooltip::Advisory : Tooltip::Done, // A notice: a repaired theme.
+                         notice ? notice : discarded ? "Theme loaded; plot changes discarded" : "Theme loaded", now);
+        } else view_.notify(Tooltip::Critical, themes_.error(), now);
         break;
     case ui::SettingsAction::BuiltinTheme:
         saves_.dropTheme();
@@ -78,13 +83,13 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         break;
     case ui::SettingsAction::Images: openImages(now); break;
     case ui::SettingsAction::ClearImages:
-        if (shots_.busy()) { view_.notify("Finish screenshot first",now); break; }
+        if (shots_.busy()) { view_.notify(Tooltip::Unavailable, "Finish screenshot first",now); break; }
         confirmOperation(ui::Confirmation("CLEAR SCREENSHOTS?","Delete all BMP images"),&ApplicationController::clearImages);
         break;
     case ui::SettingsAction::UsbRemote:
-        if (!prefs_.usbController) view_.notify("Enable USB controller first", now); // No link to be remote over.
-        else if (!setRemote(true)) view_.notify("Finish active operations first",now);
-        else view_.notify("USB Remote: hold MENU to exit",now);
+        if (!prefs_.usbController) view_.notify(Tooltip::Unavailable, "Enable USB controller first", now); // No link to be remote over.
+        else if (!setRemote(true)) view_.notify(Tooltip::Unavailable, "Finish active operations first",now);
+        else view_.notify(Tooltip::Critical, "USB Remote: hold MENU to exit",now);
         break;
     case ui::SettingsAction::CalibrateInterleave: interleaveOffsetAction(now); break; // ZT703S.
 #if OPENOSC_BOARD == 703

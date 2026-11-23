@@ -16,7 +16,7 @@ bool ApplicationController::servicePower(uint32_t keys,uint32_t now) {
     if (keys) idle_.activity(now);
     if (shutdown_!=Shutdown::None) return wake;
     const auto low=lowBattery_.poll(battery_.state(),now);
-    if (low.warning && uiReady_) view_.notify("Low battery: power off in 20 seconds",now);
+    if (low.warning && uiReady_) view_.notify(Tooltip::Critical, "Low battery: power off in 20 seconds",now);
     if (low.powerOff) {
         confirmAction_=ShutdownAction::PowerOff; requestShutdown(now); return wake;
     }
@@ -31,7 +31,7 @@ bool ApplicationController::servicePower(uint32_t keys,uint32_t now) {
         dimmed_=state.dimmed;
         applyBrightness();
     }
-    if (state.warning && uiReady_) view_.notify("Idle power off in 20 seconds",now);
+    if (state.warning && uiReady_) view_.notify(Tooltip::Critical, "Idle power off in 20 seconds",now);
     if (state.powerOff) { confirmAction_=ShutdownAction::PowerOff; requestShutdown(now); }
     return wake;
 }

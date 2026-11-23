@@ -7,6 +7,8 @@
 #include "openosc/settings/instrument_preferences.hpp"
 #include "openosc/generator/capabilities.hpp"
 #include "openosc/platform/idle_policy.hpp"
+#include "openosc/power/battery.hpp"
+#include "openosc/settings/tooltips.hpp"
 #include <cstdint>
 
 namespace openosc {
@@ -15,7 +17,15 @@ struct Preferences {
     uint64_t timebaseNs = 1000000;
     uint32_t millivolts[2] = {500, 500}, meterFunction = 0;
     uint32_t useBuiltinTheme = 0;
-    uint32_t showFps = 1, batteryDisplay = 0; // showFps: 0 off, 1 FPS, 2 sample rate (scope). batteryDisplay: 0 icon, 1 volts, 2 percent.
+    uint8_t showFps = 1; // 0 off, 1 FPS, 2 sample rate (scope).
+    // Settings > Display > Tooltips (GitHub #108): the kinds hidden, a bit each (Tooltips); 0 (older
+    // files) shows all. In showFps's word: the layout keeps its size.
+    uint8_t tooltipsHidden = 0;
+    uint8_t batteryDisplay = 0; // 0 icon, 1 volts, 2 percent.
+    // The battery display trim (power::BatteryGauge::trim, GitHub #107), per instrument: gain in 0.1 %
+    // steps and offset in mV; zero (older files) shows the factory scale. One word with batteryDisplay.
+    int8_t batteryGainPermille = 0;
+    int16_t batteryOffsetMv = 0;
     uint32_t panReverse = 0;                  // Left/Right pan: 0 moves the view, 1 the waveform.
     uint32_t clockIndicator = 0;              // Scope top bar L/M/H run profile glyph: 0 off (older files), 1 on.
     uint32_t holdTime = 2;                    // REL power-off hold: HoldTimes index.
@@ -41,7 +51,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 2 && batteryDisplay < 3 && panReverse < 2 && clockIndicator <= 1 && holdTime < 3 && usbController <= 1 &&
+               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && holdTime < 3 && usbController <= 1 &&
                generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&

@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/settings/preferences.hpp"
+#include "openosc/settings/tooltips.hpp"
 #include "openosc/ui/components/profile_glyph.hpp"
 #include "openosc/ui/components/bode_view.hpp"
 #include "openosc/settings/scope_appearance.hpp"
@@ -115,9 +116,14 @@ public:
     void information(const ui::SettingsMenu &menu, const DeviceInfo &info);
     void images(const ui::ImageList &images);
     void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
+    // Notice: which notice is on show, for the screenshot's own (dismissed before the next capture).
     enum class Notice : uint8_t { None, General, ScreenshotSaved };
-    void notify(const char *text, uint32_t now, Notice kind = Notice::General);
+    // A transient notice of its kind (GitHub #108): nothing at all when Settings hides that kind.
+    void notify(Tooltip kind, const char *text, uint32_t now, Notice notice = Notice::General);
     void dismissNotice(Notice kind);
+    // The kinds Settings > Display > Tooltips hides (Tooltips): from now on, and a notice of a kind
+    // just hidden goes at once.
+    void tooltips(uint8_t hidden);
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
     const char *toast() const { return toastShowing() ? lv_label_get_text(toast_) : ""; } // On show now.
     bool toastShowing() const { return notice_ != Notice::None; } // A notice is on show (store(): none over another).
@@ -186,6 +192,8 @@ private:
     uint32_t toastUntil_ = 0;
     bool generatorOn_ = false;
     Notice notice_ = Notice::None;
+    Tooltip noticeKind_ = Tooltip::Critical; // The kind of the notice on show.
+    uint8_t tooltipsHidden_ = 0;
     bool usbConnected_ = false;
     MeasurementMode mode_ = MeasurementMode::Oscilloscope;
     uint32_t menuAccent_ = 0x38bdf8;

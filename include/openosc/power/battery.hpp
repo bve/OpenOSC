@@ -6,7 +6,7 @@ struct BatteryState {
     uint8_t bars=0;
     bool valid=false,low=false,external=false;
     bool full=false; // Digital charge status HIGH while PC9 is HIGH, independent of the measured level.
-    uint16_t millivolts=0; // On the factory ADC scale, so an estimate rather than a calibrated reading.
+    uint16_t millivolts=0; // The factory ADC scale with the instrument's trim (BatteryGauge::trim): an estimate.
     uint8_t percent=0;
     bool measured=false;
 };
@@ -17,6 +17,10 @@ struct BatteryState {
 // - the low verdict (LowBatteryPolicy's input) takes LowWindows consecutive raw windows under LowMv,
 //   and clears after LowWindows consecutive ones at LowMv + HysteresisMv or more. A start-up sag of one
 //   window, or the filter still settling from it, never makes the battery low.
+// The instrument's display trim (Settings > Device > Power, GitHub #107) corrects the filtered value
+// for bars, volts and percent: shown = factory * (1000 + gain) / 1000 + offset. Set it against an
+// external meter to account for the PC4 divider and power path. The low verdict stays on the factory
+// scale: no trim moves the automatic shutdown.
 class BatteryGauge {
 public:
     static constexpr uint16_t BarMv[4] = {3650, 3730, 3820, 3950}; // At or above: 2, 3, 4, 5 bars.
@@ -26,8 +30,20 @@ public:
     static constexpr uint16_t ShownStepMv = 20; // Display deadband, except at the full-charge boundary.
     static constexpr unsigned Window = 20;      // Samples per average: 2 s at the 100 ms poll.
     static constexpr uint8_t LowWindows = 3;   // 6 s of consecutive raw windows for a low verdict (and to clear it).
+    static constexpr int TrimGainPermille = 100, TrimOffsetMv = 250; // The trim's bounds: +-10.0 %, +-250 mV.
+    static constexpr bool trimValid(int gainPermille, int offsetMv) {
+        return gainPermille >= -TrimGainPermille && gainPermille <= TrimGainPermille &&
+               offsetMv >= -TrimOffsetMv && offsetMv <= TrimOffsetMv;
+    }
 
     const BatteryState &state() const { return state_; }
+    // A new trim shows at once on a measured level (no deadband, no new window); out of bounds: none.
+    void trim(int gainPermille, int offsetMv) {
+        if (!trimValid(gainPermille, offsetMv)) gainPermille = offsetMv = 0;
+        if (gainPermille == gain_ && offsetMv == offset_) return;
+        gain_ = int8_t(gainPermille); offset_ = int16_t(offsetMv);
+        if (state_.measured) show(uint16_t((filtered_+8)/16), true);
+    }
     void digital(bool external,bool chargeStatusHigh) {
         const uint8_t bits=uint8_t(external)|(uint8_t(chargeStatusHigh)<<1);
         if (bits!=candidate_) { candidate_=bits; stable_=1; }
@@ -48,7 +64,7 @@ public:
         filtered_=state_.measured ? filtered_+(mv*16-filtered_)/4 : mv*16; // 1/16 mV; about 8 s to settle.
         if (!state_.measured) { lowRun_=clearRun_=0; low_=false; }
         if (!state_.external) qualify(mv);
-        update(uint16_t((filtered_+8)/16));
+        show(uint16_t((filtered_+8)/16), !state_.valid || !state_.measured);
     }
     static uint8_t percent(uint32_t millivolts) {
         static constexpr struct { uint16_t mv; uint8_t pct; } curve[]={
@@ -75,9 +91,15 @@ private:
         if (lowRun_>=LowWindows) low_=true;
         else if (clearRun_>=LowWindows) low_=false;
     }
-    void update(uint16_t mv) {
-        if (mv == FullCodeMv) mv = FullMv;
-        if (!state_.valid || !state_.measured) {
+    uint16_t corrected(uint16_t factory) const {
+        const int32_t mv = (int32_t(factory) * (1000 + gain_) + 500) / 1000 + offset_;
+        return uint16_t(mv < 0 ? 0 : mv);
+    }
+    // `factory`: the filtered level on the factory scale; fresh: shown as it is (a first level, a new trim).
+    void show(uint16_t factory, bool fresh) {
+        if (factory == FullCodeMv) factory = FullMv;
+        const uint16_t mv = corrected(factory);
+        if (fresh) {
             state_.bars=level(mv);
             state_.millivolts=mv;
         } else {
@@ -93,6 +115,8 @@ private:
     }
     BatteryState state_;
     uint8_t candidate_=0,stable_=0,averaged_=0;
+    int8_t gain_=0;
+    int16_t offset_=0;
     uint32_t sum_=0;
     int32_t filtered_=0;
     uint8_t lowRun_=0,clearRun_=0;

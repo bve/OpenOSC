@@ -17,7 +17,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         view_.waveform().cursorLines(cursors); queuePlotSave(now);
         syncCursorFocus();
         if (cursors.time || cursors.voltage) {
-            if (shown.mode == plot::Mode::XY) view_.notify("Cursors need a Y-T or FFT view", now);
+            if (shown.mode == plot::Mode::XY) view_.notify(Tooltip::Unavailable, "Cursors need a Y-T or FFT view", now);
             else enterCursors(now); // The menu stays; the arrows move the cursors once it closes.
         }
         view_.properties(Actions(view_.waveform().options()), navigator_);
@@ -74,15 +74,15 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         break;
     case Actions::ArmSingle: {
         auto request = data_.scopeRequest(); request.trigger.mode = scope::TriggerMode::Single;
-        if (!applyScope(request, now, ScopeApply::Resume)) { view_.notify("Cannot arm single capture", now); return; }
+        if (!applyScope(request, now, ScopeApply::Resume)) { view_.notify(Tooltip::Unavailable, "Cannot arm single capture", now); return; }
         break;
     }
     case Actions::SaveRaw:
     case Actions::SaveCsv:
         if (!data_.recordScope(row == Actions::SaveRaw ? ScopeRecorder::Format::Raw : ScopeRecorder::Format::Csv)) {
-            view_.notify("Cannot start waveform save", now); return;
+            view_.notify(Tooltip::Critical, "Cannot start waveform save", now); return;
         }
-        view_.notify("Saving waveform...", now);
+        view_.notify(Tooltip::Progress, "Saving waveform...", now);
         recordWatched_ = true;
         break;
     default: return;
@@ -109,7 +109,7 @@ bool ApplicationController::centerChannels(uint32_t now) {
     } else {
         auto request=data_.scopeRequest();
         request.frontend.position[0]=request.frontend.position[1]=80;
-        if (!applyEdited(request,now)) { view_.notify("Finish data transfer first",now); return false; }
+        if (!applyEdited(request,now)) { view_.notify(Tooltip::Unavailable, "Finish data transfer first",now); return false; }
         options.channels[0].positionPermille=options.channels[1].positionPermille=500;
     }
     view_.waveform().configure(options); queuePlotSave(now);

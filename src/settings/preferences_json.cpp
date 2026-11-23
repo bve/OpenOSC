@@ -40,7 +40,8 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         return false;
     JsonObjectConst root = lease->as<JsonObjectConst>();
     if (!root["schema"].is<unsigned>() || root["schema"].as<unsigned>() != 1 || !section(root, "display") ||
-        !section(root, "scope") || !section(root, "multimeter") || !section(root, "generator") || !section(root, "usb"))
+        !section(root, "scope") || !section(root, "multimeter") || !section(root, "generator") || !section(root, "usb") ||
+        !section(root, "power"))
         return false;
     Preferences candidate;
     if (!number(root["display"], "brightness", candidate.brightness) ||
@@ -61,6 +62,10 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["clock_indicator"].is<bool>()) return false;
         candidate.clockIndicator = indicators["clock_indicator"].as<bool>();
     }
+    if (indicators.containsKey("tooltips_off")) { // GitHub #108; absent in older files: every kind shown.
+        if (!indicators["tooltips_off"].is<unsigned>() || !Tooltips::valid(indicators["tooltips_off"].as<unsigned>())) return false;
+        candidate.tooltipsHidden = uint8_t(indicators["tooltips_off"].as<unsigned>());
+    }
     if (indicators.containsKey("pan_moves_waveform")) {
         if (!indicators["pan_moves_waveform"].is<bool>()) return false;
         candidate.panReverse = indicators["pan_moves_waveform"].as<bool>();
@@ -79,6 +84,13 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         while (index < 3 && std::strcmp(name, batteryDisplays[index])) ++index;
         if (index == 3) return false;
         candidate.batteryDisplay = index;
+    }
+    { // power: the battery display trim (GitHub #107); absent in older files: none.
+        int gain = 0, offset = 0;
+        const auto power = root["power"].as<JsonObjectConst>();
+        if (!number(power, "battery_gain_permille", gain) || !number(power, "battery_offset_mv", offset) ||
+            !power::BatteryGauge::trimValid(gain, offset)) return false;
+        candidate.batteryGainPermille = int8_t(gain); candidate.batteryOffsetMv = int16_t(offset);
     }
     const auto usb = root["usb"].as<JsonObjectConst>();
     if (usb.containsKey("controller")) {
@@ -209,9 +221,12 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["show_fps"] = values.showFps == 1;
     document["display"]["show_sample_rate"] = values.showFps == 2;
     document["display"]["pan_moves_waveform"] = values.panReverse == 1;
+    document["display"]["tooltips_off"] = unsigned(values.tooltipsHidden); // A bit per kind hidden (Tooltips).
     document["display"]["clock_indicator"] = values.clockIndicator == 1;
     document["hold_ms"] = values.holdMs();
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
+    document["power"]["battery_gain_permille"] = int(values.batteryGainPermille);
+    document["power"]["battery_offset_mv"] = int(values.batteryOffsetMv);
     document["usb"]["controller"] = usbControllers[values.usbController];
     document["scope"]["timebase_ns"] = values.timebaseNs;
     auto channels = document["scope"].createNestedArray("millivolts_per_division");

@@ -12,10 +12,10 @@ void ApplicationController::showImages() {
     view_.images(list);
 }
 void ApplicationController::openImages(uint32_t now) {
-    if (shots_.busy()) { view_.notify("Finish screenshot first",now); return; }
+    if (shots_.busy()) { view_.notify(Tooltip::Unavailable, "Finish screenshot first",now); return; }
     if (!cancelAuto(now)) return;
     state_.settingsOpen=false; panel_=Panel::Images; imageShowing_=false; imageFullSize_=false;
-    if (!images_.refresh()) view_.notify(images_.error(),now);
+    if (!images_.refresh()) view_.notify(Tooltip::Critical, images_.error(),now);
     showImages();
 }
 void ApplicationController::closeImages() {
@@ -28,13 +28,13 @@ void ApplicationController::loadImage(uint32_t now) {
     char path[screenshot::ImageCatalog::PathBytes];
     imageReader_.cancel(); imageShowing_=false;
     if (!images_.path(path,sizeof path)) return;
-    if (screenLease_.busy(now)) { showImages(); view_.notify("Image: USB screen transfer in progress",now); return; }
+    if (screenLease_.busy(now)) { showImages(); view_.notify(Tooltip::Unavailable, "Image: USB screen transfer in progress",now); return; }
     screenLease_.revoke();
     if (!imageReader_.start(path,screenshot::previewMemory(),imageFullSize_)) {
-        showImages(); view_.notify(imageReader_.error(),now); return;
+        showImages(); view_.notify(Tooltip::Critical, imageReader_.error(),now); return;
     }
     imageProgress_=0;
-    view_.notify("Loading image...",now);
+    view_.notify(Tooltip::Progress, "Loading image...",now);
 }
 void ApplicationController::imageKeys(uint32_t keys,uint32_t now) {
     if (!keys) return;
@@ -57,7 +57,7 @@ void ApplicationController::imageKeys(uint32_t keys,uint32_t now) {
     const bool previous=keys&(Keypad::Up|Keypad::Left),next=keys&(Keypad::Down|Keypad::Right);
     if (previous || next) {
         imageReader_.cancel();
-        if (!images_.move(next ? 1 : -1) && images_.error()) view_.notify(images_.error(),now);
+        if (!images_.move(next ? 1 : -1) && images_.error()) view_.notify(Tooltip::Critical, images_.error(),now);
         if (viewing) loadImage(now);
         else showImages();
     }
@@ -68,13 +68,13 @@ void ApplicationController::imageKeys(uint32_t keys,uint32_t now) {
 }
 void ApplicationController::deleteImage(uint32_t now) {
     confirmationHandler_=nullptr; panel_=Panel::Images; imageShowing_=false;
-    if (!images_.eraseSelected()) view_.notify(images_.error() ? images_.error() : "No image selected",now);
+    if (!images_.eraseSelected()) view_.notify(images_.error() ? Tooltip::Critical : Tooltip::Unavailable, images_.error() ? images_.error() : "No image selected",now);
     showImages();
 }
 void ApplicationController::clearImages(uint32_t now) {
     confirmationHandler_=nullptr; panel_=Panel::Images; imageShowing_=false;
     imageReader_.cancel();
-    if (!images_.beginClear()) view_.notify(images_.error(),now);
+    if (!images_.beginClear()) view_.notify(Tooltip::Critical, images_.error(),now);
     showImages(); imageProgress_=0;
 }
 void ApplicationController::serviceImages(uint32_t now) {
@@ -82,7 +82,7 @@ void ApplicationController::serviceImages(uint32_t now) {
     if (images_.clearing()) {
         const unsigned total=images_.count();
         if (!images_.clearStep()) {
-            const char *error=images_.error(); images_.refresh(); showImages(); view_.notify(error,now);
+            const char *error=images_.error(); images_.refresh(); showImages(); view_.notify(Tooltip::Critical, error,now);
         }
         else if (!images_.clearing() || images_.erased()!=imageProgress_) {
             const bool complete=!images_.clearing();
@@ -91,7 +91,7 @@ void ApplicationController::serviceImages(uint32_t now) {
             char progress[48];
             std::snprintf(progress,sizeof progress,"%s: %u/%u",complete ? "Screenshots cleared" : "Deleting images",
                           imageProgress_,total);
-            view_.notify(progress,now);
+            view_.notify(complete ? Tooltip::Done : Tooltip::Progress, progress,now);
         }
     }
     if (!imageReader_.busy()) return;
@@ -101,6 +101,6 @@ void ApplicationController::serviceImages(uint32_t now) {
         imageShowing_=true;
         char keys[64]; imageSoftKeys().line(keys,sizeof keys);
         view_.imagePreview(images_.name(),screenshot::previewMemory(),imageFullSize_,keys);
-    } else { showImages(); view_.notify(imageReader_.error(),now); }
+    } else { showImages(); view_.notify(Tooltip::Critical, imageReader_.error(),now); }
 }
 } // namespace openosc

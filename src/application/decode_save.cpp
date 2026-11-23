@@ -16,18 +16,18 @@ int16_t ApplicationController::saveDecoderCsv(uint32_t now) {
     const auto *result = decoder_.results().published();
     const uint32_t ticket = csv.begin(decoding::CsvExport::Owner::File, decoder_.results(), decoder_.settings(), "OpenOSC " OPENOSC_VERSION);
     if (!ticket) {
-        if (uiReady_) view_.notify(csv.refusal() == decoding::CsvExport::Refusal::Busy ? "Decoded CSV busy: an export runs" : "No finished decode to save", now);
+        if (uiReady_) view_.notify(Tooltip::Unavailable, csv.refusal() == decoding::CsvExport::Refusal::Busy ? "Decoded CSV busy: an export runs" : "No finished decode to save", now);
         return csv.refusal() == decoding::CsvExport::Refusal::Busy ? -200 : -230;
     }
     if (!file.start(csv, ticket, fs_)) { // It ended the export.
-        if (uiReady_) view_.notify(file.error(), now);
+        if (uiReady_) view_.notify(Tooltip::Critical, file.error(), now);
         return -200;
     }
     if (uiReady_) {
         char text[72];
         std::snprintf(text, sizeof text, "Saving CSV: %s %u ev, record %lu", decoding::Protocols::name(result->protocol()), result->count(),
                       static_cast<unsigned long>(result->key().sequence));
-        view_.notify(text, now);
+        view_.notify(Tooltip::Progress, text, now);
     }
     return 0;
 }
@@ -37,7 +37,7 @@ void ApplicationController::serviceDecoderCsv(uint32_t now) {
     // A shutdown never shares the volume with a writer (prepare() has ended it; this keeps it so).
     if (shutdownSequence_.active()) { file.cancel("DECODE CSV CANCELLED: SHUTDOWN"); return; }
     file.service();
-    if (!file.busy() && uiReady_) view_.notify(file.succeeded() ? file.path() : file.error(), now);
+    if (!file.busy() && uiReady_) view_.notify(file.succeeded() ? Tooltip::Done : Tooltip::Critical, file.succeeded() ? file.path() : file.error(), now);
 }
 const char *ApplicationController::decoderCsvSaved() const {
     const auto &file = decodeCsvFile();

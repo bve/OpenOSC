@@ -91,11 +91,12 @@ private:
 
 void ApplicationController::openInterleaveMatch(uint32_t now) {
     if (autoBusy() || state_.mode != MeasurementMode::Oscilloscope) {
-        view_.notify("Select Scope before calibration", now); return;
+        view_.notify(Tooltip::Unavailable, "Select Scope before calibration", now); return;
     }
     const auto ready = data_.interleaveMatchReady();
     if (ready != DataStatus::Ok) {
-        view_.notify(ready == DataStatus::Uncalibrated && data_.scopeNominal() ? "Factory calibration required" : readiness(ready), now);
+        view_.notify(ready == DataStatus::Uncalibrated || ready == DataStatus::IoError ? Tooltip::Critical : Tooltip::Unavailable,
+                     ready == DataStatus::Uncalibrated && data_.scopeNominal() ? "Factory calibration required" : readiness(ready), now);
         return;
     }
     data_.interleaveMatchCalibrating(true);
@@ -109,7 +110,7 @@ void ApplicationController::showInterleaveMatch() {
     navigator_.reset(step == Step::Measuring || step == Step::Failed ? Rows::Cancel : Rows::Primary);
     view_.properties(Rows(interleaveMatch_), navigator_);
 }
-void ApplicationController::finishInterleaveMatch(uint32_t now, const char *notice, bool returnToSettings) {
+void ApplicationController::finishInterleaveMatch(uint32_t now, Tooltip kind, const char *notice, bool returnToSettings) {
     data_.interleaveMatchCalibrating(false);
     panel_ = Panel::None;
     if (returnToSettings) {
@@ -117,14 +118,14 @@ void ApplicationController::finishInterleaveMatch(uint32_t now, const char *noti
         navigator_.reset(settingsMenu_.selected());
         showSettings();
     }
-    if (notice) view_.notify(notice, now);
+    if (notice) view_.notify(kind, notice, now);
 }
 void ApplicationController::interleaveMatchKeys(uint32_t keys, uint32_t now) {
     MatchRows rows(interleaveMatch_);
     using Outcome = ui::PropertyNavigator::Outcome;
     const auto action = (keys & Keypad::Mode) ? Outcome::Back : navigator_.keys(keys, rows);
     if (action == Outcome::Back || (action == Outcome::Activate && navigator_.row() == MatchRows::Cancel)) {
-        finishInterleaveMatch(now, "Interleave calibration cancelled"); return;
+        finishInterleaveMatch(now, Tooltip::Done, "Interleave calibration cancelled"); return;
     }
     if (action == Outcome::Activate && navigator_.row() == MatchRows::Primary) {
         if (interleaveMatch_.step() == Step::Reference) {
@@ -135,8 +136,9 @@ void ApplicationController::interleaveMatchKeys(uint32_t keys, uint32_t now) {
         if (interleaveMatch_.step() == Step::Review) {
             const auto status = data_.saveInterleaveMatch(interleaveMatch_.clockHz(), interleaveMatch_.rate(),
                                                           interleaveMatch_.channel(), interleaveMatch_.filter());
-            if (status == DataStatus::Ok) finishInterleaveMatch(now, "Profile saved. Restart to apply.");
-            else view_.notify(status == DataStatus::NoSpace ? "All four profile slots are used" :
+            if (status == DataStatus::Ok) finishInterleaveMatch(now, Tooltip::Done, "Profile saved. Restart to apply.");
+            else view_.notify(status == DataStatus::NoSpace ? Tooltip::Unavailable : Tooltip::Critical,
+                              status == DataStatus::NoSpace ? "All four profile slots are used" :
                               status == DataStatus::InvalidPacket ? "Profile file invalid" :
                               "Cannot save profile. Retry.", now);
             return;
@@ -146,10 +148,10 @@ void ApplicationController::interleaveMatchKeys(uint32_t keys, uint32_t now) {
 }
 void ApplicationController::serviceInterleaveMatchUi(uint32_t now) {
     if (panel_ != Panel::InterleaveMatch) return;
-    if (shutdown_ != Shutdown::None || recoveryPending_) { finishInterleaveMatch(now, nullptr, false); return; }
+    if (shutdown_ != Shutdown::None || recoveryPending_) { finishInterleaveMatch(now, Tooltip::Done, nullptr, false); return; }
     if (data_.interleaveMatchReady() != DataStatus::Ok ||
         !interleaveMatch_.sameSetup(coreHz(), data_.scopeMetadata())) {
-        finishInterleaveMatch(now, "Capture settings changed. Start again."); return;
+        finishInterleaveMatch(now, Tooltip::Advisory, "Capture settings changed. Start again."); return;
     }
     if (interleaveMatch_.step() != Step::Measuring || !interleaveMatch_.settled(now)) return;
     {

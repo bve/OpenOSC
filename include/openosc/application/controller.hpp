@@ -136,13 +136,13 @@ private:
     // Out of line: its rows would grow onKeys' frame on the deepest key chain (stack budget).
     [[gnu::noinline]] void gainMatchKeys(uint32_t keys, uint32_t now);
     void serviceGainMatchUi(uint32_t now);
-    void finishGainMatch(uint32_t now, const char *notice, bool returnToSettings = true);
+    void finishGainMatch(uint32_t now, Tooltip kind, const char *notice, bool returnToSettings = true);
     void showGainMatch();
 #if OPENOSC_BOARD == 703
     void openInterleaveMatch(uint32_t now);
     void interleaveMatchKeys(uint32_t keys, uint32_t now);
     void serviceInterleaveMatchUi(uint32_t now);
-    void finishInterleaveMatch(uint32_t now, const char *notice, bool returnToSettings = true);
+    void finishInterleaveMatch(uint32_t now, Tooltip kind, const char *notice, bool returnToSettings = true);
     void showInterleaveMatch();
     calibration::InterleaveMatchWizard interleaveMatch_;
 #endif
@@ -153,7 +153,7 @@ private:
     void saveBodeCsv(uint32_t now); // Setup's Save CSV: the last run as it ran (BodeCsvFile).
     void bodeKeys(const KeyEvents &events, uint32_t keys, uint32_t now);
     void serviceBode(uint32_t now);
-    void finishBode(uint32_t now, const char *notice); // Cancel, restore the instrument, close the panel.
+    void finishBode(uint32_t now, Tooltip kind, const char *notice); // Cancel, restore the instrument, close the panel.
     void showBode(bool plot);
     bool bodeRunning() const;
     bool bodeOwns() const; // The sweep's settings in force: running, or their restore pending (SCPI refused).
@@ -219,6 +219,8 @@ private:
     void beginHeldView();
     void followNextCapture(); // A held record is shown at the next capture's time/div and V/div (issues #7, #93).
     void moveTrace(uint32_t keys, uint32_t now, bool fine);
+    // Pan and zoom change the view of the Y-T record on show: false when no view of it can follow.
+    bool viewFollows() const;
     void resetPan(uint32_t now); // In HOLD the explored view only, as moveTrace: RUN restores, nothing saved.
     // The Scope waveform screen in front with its own keys: no panel, Settings, decoder screen, Remote,
     // Bode restore, shutdown or Recovery handoff. AUTO and the F1-F4 holds act only there (issue #96).
@@ -236,6 +238,8 @@ private:
     void openProbe(uint32_t now);    // F1 hold: the selected channel's Probe choices.
     void openShortcut(uint32_t now); // F4 hold: the saved destination's editor, nothing changed by opening it.
     bool resetView(uint32_t now);    // F2 hold: Home view or Reset zoom & pan; explicit, so RUN keeps it.
+    // Zoom 1x and the pan at the trigger reference, saved; also in the view RUN returns to from HOLD.
+    void homeZoom(uint32_t now);
     // Zoom & Pan (issue #96, ViewZoom): a focus of its own; F4 returns to the card it came from.
     void enterZoom(uint32_t now);
     void leaveZoom();

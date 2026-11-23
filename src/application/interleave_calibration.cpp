@@ -10,8 +10,8 @@ namespace openosc {
 // cancelled.
 void ApplicationController::interleaveOffsetAction(uint32_t now) {
     if (data_.interleaveMeasurement().active()) { data_.cancelInterleaveOffset(); showSettings(); return; }
-    if (!prefs_.scope.interleave) { view_.notify("Turn Interleave CH1 on first (Performance)", now); return; }
-    if (data_.interleaveBlockers()) { view_.notify("Needs CH1 alone at 10/25 ns, no Roll/GEN", now); return; }
+    if (!prefs_.scope.interleave) { view_.notify(Tooltip::Unavailable, "Turn Interleave CH1 on first (Performance)", now); return; }
+    if (data_.interleaveBlockers()) { view_.notify(Tooltip::Unavailable, "Needs CH1 alone at 10/25 ns, no Roll/GEN", now); return; }
     confirmOperation(ui::Confirmation("GROUND CH1?","Measure interleave offset","Steady input; this clock only"),
                      &ApplicationController::beginInterleaveOffset);
 }
@@ -20,11 +20,11 @@ void ApplicationController::interleaveOffsetAction(uint32_t now) {
 void ApplicationController::beginInterleaveOffset(uint32_t now) {
     leaveConfirmation(now);
     switch (data_.beginInterleaveOffset(now)) {
-    case DataStatus::Ok: interleaveWatched_ = true; view_.notify("Measuring interleave offset...", now); break;
-    case DataStatus::Uncalibrated: view_.notify("Factory calibration required", now); break;
-    case DataStatus::InvalidArgument: view_.notify("Needs Interleave active and trigger Auto", now); break;
-    case DataStatus::Unsupported: view_.notify("No interleave offset on this model", now); break;
-    default: view_.notify("Finish HOLD, calibration or recording first", now); break;
+    case DataStatus::Ok: interleaveWatched_ = true; view_.notify(Tooltip::Progress, "Measuring interleave offset...", now); break;
+    case DataStatus::Uncalibrated: view_.notify(Tooltip::Critical, "Factory calibration required", now); break;
+    case DataStatus::InvalidArgument: view_.notify(Tooltip::Unavailable, "Needs Interleave active and trigger Auto", now); break;
+    case DataStatus::Unsupported: view_.notify(Tooltip::Unavailable, "No interleave offset on this model", now); break;
+    default: view_.notify(Tooltip::Unavailable, "Finish HOLD, calibration or recording first", now); break;
     }
     if (state_.settingsOpen) showSettings();
 }
@@ -51,7 +51,12 @@ void ApplicationController::serviceInterleaveOffsetUi(uint32_t now) {
     case Result::Cancelled: std::snprintf(text, sizeof text, "Interleave offset cancelled"); break;
     default: std::snprintf(text, sizeof text, "Interleave offset interrupted: not saved"); break;
     }
-    view_.notify(text, now);
+    // Saved or cancelled as asked; an input or a run it refused (nothing saved, the previous offset
+    // stays); a save that failed or a measurement interrupted.
+    const auto result = m.result();
+    view_.notify(result == Result::Measured || result == Result::Cancelled ? Tooltip::Done
+                 : result == Result::NotQuiet || result == Result::Clipped || result == Result::OutOfRange || result == Result::Timeout
+                 ? Tooltip::Advisory : Tooltip::Critical, text, now);
     if (state_.settingsOpen && !settingsMenu_.information()) showSettings();
 }
 } // namespace openosc

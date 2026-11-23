@@ -40,6 +40,7 @@ void AnalogDial::visible(bool value) {
 void AnalogDial::palette(const MeterLook &look) {
     if (look == look_) return;
     look_ = look;
+    measure(); // The numbers' font may have changed.
     if (object_) lv_obj_invalidate(object_);
 }
 void AnalogDial::reading(const dmm::BarReading &value, bool held, bool reposition) {
@@ -84,9 +85,11 @@ bool AnalogDial::scale(unsigned decimals, const char *unit, dmm::CountScale coun
         while (digits && fraction % 10 == 0) { fraction /= 10; --digits; } // 0.50 -> 0.5, 1.000 -> 1
         const char *suffix = "";
         if (!digits && whole >= 10000 && whole % 1000 == 0) { whole /= 1000; suffix = "k"; }
-        if (digits) std::snprintf(labels_[i], sizeof labels_[i], "%s%lu.%0*lu%s", sign, whole, digits, fraction, suffix);
-        else std::snprintf(labels_[i], sizeof labels_[i], "%s%lu%s", sign, whole, suffix);
+        const int written = digits ? std::snprintf(labels_[i], sizeof labels_[i], "%s%lu.%0*lu%s", sign, whole, digits, fraction, suffix)
+                                   : std::snprintf(labels_[i], sizeof labels_[i], "%s%lu%s", sign, whole, suffix);
+        if (written < 0 || size_t(written) >= sizeof labels_[i]) labels_[i][0] = 0; // Never a cut number.
     }
+    measure();
     if (shown()) lv_obj_invalidate(object_);
     return true;
 }
@@ -102,15 +105,66 @@ lv_area_t AnalogDial::markingArea() const {
     lv_text_get_size(&size, marking_, look_.text(MeterRole::Details, MarkingFont), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     return {area.x2 - size.x + 1, area.y1 + MarkingY, area.x2, area.y1 + MarkingY + MarkingHeight - 1};
 }
-lv_area_t AnalogDial::numberArea(int major, const lv_area_t &face) const {
-    constexpr int32_t halfLabel = 20;
+void AnalogDial::measure() {
+    const lv_font_t *font = look_.text(MeterRole::ScaleNumbers, 12);
+    for (int i = 0; i < counts_.labels() && i < dmm::MaxScaleLabels; ++i) {
+        auto &e = extents_[i];
+        lv_point_t size;
+        lv_text_get_size(&size, labels_[i], font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        e = Extent{uint8_t(size.x)};
+        int32_t pen = 0, x1 = INT32_MAX, y1 = INT32_MAX, x2 = INT32_MIN, y2 = INT32_MIN;
+        for (const char *c = labels_[i]; *c; ++c) { // The labels are ASCII: digits, '.', '-', 'k'.
+            lv_font_glyph_dsc_t g;
+            if (!lv_font_get_glyph_dsc(font, &g, uint8_t(*c), uint8_t(c[1]))) continue;
+            if (g.box_w && g.box_h) { // As lv_draw_label places a letter.
+                const int32_t left = pen + g.ofs_x, top = font->line_height - font->base_line - g.box_h - g.ofs_y;
+                x1 = std::min(x1, left); x2 = std::max(x2, left + int32_t(g.box_w) - 1);
+                y1 = std::min(y1, top); y2 = std::max(y2, top + int32_t(g.box_h) - 1);
+            }
+            pen += g.adv_w;
+        }
+        if (x1 <= x2) { e.x1 = int8_t(x1); e.y1 = int8_t(y1); e.x2 = int8_t(x2); e.y2 = int8_t(y2); }
+    }
+}
+float AnalogDial::clearRadius() const {
+    // The arc's stroke, the overload zone's (4 px) and the needle's round tip at radius + 2.
+    const float reach = std::max({look_.arcWidth / 2.f, 2.f, 2.f + look_.needleWidth / 2.f});
+    return geometry().radius + reach + LabelGap;
+}
+// Where it always was (centred LabelOffset past the arc) while that is clear; otherwise outward along
+// its radius by its own half extents, kept inside the face and lifted off the arc's circle there.
+[[gnu::noinline]] lv_area_t AnalogDial::numberArea(int major, const lv_area_t &face) const {
+    const auto &e = extents_[std::clamp(major, 0, dmm::MaxScaleLabels - 1)];
     const auto g = geometry();
-    const float a = angle(float(major * counts_.major) / counts_.ticks()) * Degree;
-    const float r = g.radius + LabelOffset;
-    const int32_t x = int32_t(std::lround(g.px + std::sin(a) * r));
-    const int32_t y = int32_t(std::lround(g.py - std::cos(a) * r));
-    const int32_t left = std::clamp(x - halfLabel, face.x1, std::max(face.x1, face.x2 - 2 * halfLabel));
-    return {left, y - 7, std::min(face.x2, left + 2 * halfLabel), y + 7};
+    const float a = angle(float(major * counts_.major) / counts_.ticks()) * Degree, s = std::sin(a), c = std::cos(a);
+    const float clear = clearRadius();
+    // The ink at a box's top left (x, y) lies inside the face (1 px margin) and `away` from the pivot.
+    const auto fits = [&](int32_t x, int32_t y, float away) {
+        const float l = float(x + e.x1), r = float(x + e.x2 + 1), t = float(y + e.y1), b = float(y + e.y2 + 1);
+        const float dx = std::max({l - g.px, g.px - r, 0.f}), dy = std::max({t - g.py, g.py - b, 0.f});
+        return dx * dx + dy * dy >= away * away && x + e.x1 > face.x1 && x + e.x2 < face.x2 && y + e.y1 > face.y1;
+    };
+    const auto box = [&](int32_t x, int32_t y) {
+        const int height = look_.text(MeterRole::ScaleNumbers, 12)->line_height;
+        return lv_area_t{x, y, x + e.width - 1, y + height - 1};
+    };
+    const float r = g.radius + LabelOffset; // The legacy place: its line box centred there, 7 px above.
+    const int32_t legacyX = int32_t(std::lround(g.px + s * r)) - e.width / 2, legacyY = int32_t(std::lround(g.py - c * r)) - 7;
+    // Kept there while its ink touches nothing (1 px apart); a new place keeps the whole LabelGap.
+    if (fits(legacyX, legacyY, clear - (LabelGap - 1)) || e.x1 > e.x2) return box(legacyX, legacyY);
+    // The ink's centre on the radius, far enough out that its nearest corner clears the circle.
+    const float hw = (e.x2 - e.x1 + 1) / 2.f, hh = (e.y2 - e.y1 + 1) / 2.f;
+    const float d = clear + hw * std::fabs(s) + hh * std::fabs(c);
+    int32_t x = int32_t(std::lround(g.px + s * d - hw)) - e.x1, y = int32_t(std::lround(g.py - c * d - hh)) - e.y1;
+    x = std::clamp(x, face.x1 + 1 - e.x1, std::max(face.x1 + 1 - e.x1, face.x2 - 1 - e.x2)); // Inside the face.
+    // Rounded, or clamped towards the pivot: lifted until its ink clears the circle (never above the face).
+    while (!fits(x, y, clear) && y + e.y1 > face.y1 + 1) --y;
+    return box(x, y);
+}
+lv_area_t AnalogDial::numberInk(int major, const lv_area_t &face) const {
+    const auto &e = extents_[std::clamp(major, 0, dmm::MaxScaleLabels - 1)];
+    const auto b = numberArea(major, face);
+    return {b.x1 + e.x1, b.y1 + e.y1, b.x1 + e.x2, b.y1 + e.y2};
 }
 AnalogDial::Geometry AnalogDial::geometry() const {
     lv_area_t area;

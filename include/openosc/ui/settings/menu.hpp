@@ -3,7 +3,7 @@
 #include <cstdint>
 
 namespace openosc::ui {
-enum class SettingsPage : uint8_t { Root, Display, Appearance, Files, Device, About, Storage, Performance, Power, Calibration, Gain, Interleave, ScopeKeys, Count };
+enum class SettingsPage : uint8_t { Root, Display, Appearance, Files, Device, About, Storage, Performance, Power, Calibration, Gain, Interleave, ScopeKeys, Tooltips, Count };
 enum class SettingsAction : uint8_t {
     None, Close, Back, Brightness, ReloadPreferences, ReloadTheme, BuiltinTheme, About, Storage, Recovery, UsbRemote,
     RunProfile, Restart, BacklightTimeout, BacklightIdleLevel, PowerOffTimeout, RestoreSettings, Images, ClearImages,
@@ -11,7 +11,9 @@ enum class SettingsAction : uint8_t {
     GainChannel,GainRange,GainReference,GainReferenceStep,GainProbe,GainSpan,GainInForce,CalibrateGain,FactoryGain,
     InterleaveOffset,InterleaveInForce,InterleaveSaved,SaveInterleave,CancelInterleave,ResetInterleave,
     GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch, ClockIndicator,
-    GainFactory, MatchGain, AutoKey, ResetHold, ShortcutHold
+    GainFactory, MatchGain, AutoKey, ResetHold, ShortcutHold, BatteryGain, BatteryOffset,
+    // Settings > Display > Tooltips (GitHub #108): a row each, in Tooltip order, then the critical ones (always on).
+    TooltipUsage, TooltipUnavailable, TooltipProgress, TooltipDone, TooltipAdvisory, TooltipCritical
 };
 struct SettingsEntry {
     const char *name;
@@ -30,7 +32,7 @@ public:
     void open();
     // Opened straight on `page` at the row of `action` (a Scope shortcut); Back climbs its parents.
     void open(SettingsPage page, SettingsAction action);
-    void select(unsigned row) { if (row < count()) selected_[unsigned(page_)] = row; }
+    void select(unsigned row) { if (row < count()) selected_[unsigned(page_)] = uint8_t(row); }
     bool back(); // False at the root: return to the instrument.
     // Opens the row's page (if it has one) and returns its action (None for a plain page).
     SettingsAction enter(unsigned row);
@@ -47,6 +49,6 @@ private:
     static const SettingsPageDefinition &definition(SettingsPage page);
     const SettingsPageDefinition &definition() const { return definition(page_); }
     SettingsPage page_ = SettingsPage::Root;
-    unsigned selected_[unsigned(SettingsPage::Count)]{};
+    uint8_t selected_[unsigned(SettingsPage::Count)]{};
 };
 } // namespace openosc::ui

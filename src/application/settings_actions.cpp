@@ -89,27 +89,34 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
             std::snprintf(text, sizeof text, "%s: %lu MHz", RunModeSwitch::describe(result.outcome),
                           static_cast<unsigned long>(RunModes[result.active].coreHz / 1000000));
         else std::snprintf(text, sizeof text, "%s", RunModeSwitch::describe(result.outcome));
-        view_.notify(text, now);
+        using Outcome = RunModeSwitch::Outcome;
+        const auto kind = result.outcome == Outcome::Refused ? Tooltip::Unavailable :
+                          !RemoteClock::settled(result) ? Tooltip::Critical :
+                          result.outcome == Outcome::Applied && result.active == OverclockedRunMode ? Tooltip::Advisory : Tooltip::Done;
+        view_.notify(kind, text, now);
     }
     if (chosen.scope.recordPoints != prefs_.scope.recordPoints) {
         auto request = data_.scopeRequest();
         request.recordPoints = chosen.scope.recordPoints;
-        if (!applyEdited(request, now)) view_.notify("Finish data transfer first", now);
+        if (!applyEdited(request, now)) view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
     }
     if (chosen.usbController != prefs_.usbController) { // At once: off stops the controller, on attaches it.
         prefs_.usbController = chosen.usbController;
         if (usb_) usb_->enable(prefs_.usbController != 0, now);
-        view_.notify(prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
+        view_.notify(Tooltip::Done, prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
     }
     if (chosen.scope.interleave != prefs_.scope.interleave) selectInterleave(scope::InterleaveMode(chosen.scope.interleave), now);
     if (chosen.showFps != prefs_.showFps) counterStale_ = true; // Redrawn on the next display pass.
     const bool idle = chosen.idle.backlightSeconds != prefs_.idle.backlightSeconds || chosen.idle.dimPercent != prefs_.idle.dimPercent ||
                       chosen.idle.powerOffMinutes != prefs_.idle.powerOffMinutes;
     prefs_.brightness = chosen.brightness; prefs_.showFps = chosen.showFps; prefs_.batteryDisplay = chosen.batteryDisplay;
+    prefs_.batteryGainPermille = chosen.batteryGainPermille; prefs_.batteryOffsetMv = chosen.batteryOffsetMv;
+    battery_.trim(prefs_.batteryGainPermille, prefs_.batteryOffsetMv); // Shown at once, the low verdict untouched.
     prefs_.idle = chosen.idle;
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
+    prefs_.tooltipsHidden = chosen.tooltipsHidden; view_.tooltips(prefs_.tooltipsHidden); // A notice of a kind hidden goes now.
     prefs_.scope.keys = chosen.scope.keys; // Read by the next AUTO, F2 or F4 stroke.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();

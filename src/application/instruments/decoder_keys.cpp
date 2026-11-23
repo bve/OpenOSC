@@ -30,13 +30,13 @@ void ApplicationController::baudAction(uint32_t now) {
         applyDecoder(settings, now); // A new hash: the hint is stale now (never applied twice).
         char text[64];
         std::snprintf(text, sizeof text, "UART %lu bd applied (%u ok, %u bad)", static_cast<unsigned long>(settings.uart.baud), valid, invalid);
-        view_.notify(text, now);
+        view_.notify(Tooltip::Done, text, now);
         return;
     }
-    if (decoder_.running()) { view_.notify("Detect baud: decoder busy", now); return; }
+    if (decoder_.running()) { view_.notify(Tooltip::Unavailable, "Detect baud: decoder busy", now); return; }
     scope::FrameLease held;
-    if (!data_.scopeHeld() || !data_.acquireScope(held)) { view_.notify("Detect baud needs HOLD (the record to measure)", now); return; }
-    if (!decoder_.searchBaud(held)) view_.notify("Detect baud: no usable UART record (source, scale)", now);
+    if (!data_.scopeHeld() || !data_.acquireScope(held)) { view_.notify(Tooltip::Unavailable, "Detect baud needs HOLD (the record to measure)", now); return; }
+    if (!decoder_.searchBaud(held)) view_.notify(Tooltip::Unavailable, "Detect baud: no usable UART record (source, scale)", now);
 }
 void ApplicationController::baudHintText(char *out, size_t capacity) const {
     using State = decoding::DecodeJob::BaudSearch::State;
@@ -142,7 +142,7 @@ void ApplicationController::jumpToEvent(uint32_t now) {
     if (!shown || decoderRow_ >= shown->count()) return;
     scope::FrameLease held;
     if (!data_.scopeHeld() || !data_.acquireScope(held) || !decoder_.shows(held.view().metadata())) {
-        view_.notify("RAW UNAVAILABLE: Jump needs the decoded record held", now);
+        view_.notify(Tooltip::Unavailable, "RAW UNAVAILABLE: Jump needs the decoded record held", now);
         return;
     }
     const auto &m = held.view().metadata();

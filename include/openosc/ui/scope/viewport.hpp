@@ -21,6 +21,10 @@ struct Viewport {
     // `phaseQ16` (TriggerPhase::before): how far before triggerIndex the drawn curve crosses the
     // level. A phased() window is placed by that crossing instead of the index; any other ignores it.
     bool calculate(const scope::FrameMetadata &frame, const Options &options, unsigned w, unsigned h, uint32_t phaseQ16 = 0);
+    // The span `options` asks for on `frame` before any bound (calculate then bounds a zoomed-out one
+    // by the record): ten divisions at the shown time/div and the record's actual sample rate, times
+    // zoomOut / zoom; at least one sample interval. 0 for a frame calculate refuses.
+    static uint64_t requestedSpanQ16(const scope::FrameMetadata &frame, const Options &options);
     // A trigger-locked Time or Y-T+FFT window that draws the curve between its points (fewer points
     // than columns): the only one a crossing between points places (an aggregating window keeps the
     // index: a fraction of a point moves its columns by less than one). After calculate().

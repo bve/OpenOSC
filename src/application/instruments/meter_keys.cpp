@@ -10,7 +10,7 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     const bool ranged = data_.dmmRanged();
     if (ranged && (keys & (Keypad::Up | Keypad::Down)) && data_.meter().latest().range == dmm::RangeMode::Manual &&
         !meterCommand(data_.stepDmmRange(keys & Keypad::Up ? 1 : -1)))
-        view_.notify("Range command busy", now);
+        view_.notify(Tooltip::Unavailable, "Range command busy", now);
     if (keys & (Keypad::Left | Keypad::Right)) {
         constexpr uint32_t n = MeterPreferences::Displays;
         prefs_.meter.display = (prefs_.meter.display + (keys & Keypad::Right ? 1 : n - 1)) % n;
@@ -18,7 +18,7 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     }
     if (keys & Keypad::Relative) {
         const bool enabled = !(data_.meter().relative().active() || data_.meter().latest().peerRelative);
-        if (!data_.relativeMeter(enabled)) view_.notify("REL needs a valid current reading", now);
+        if (!data_.relativeMeter(enabled)) view_.notify(Tooltip::Unavailable, "REL needs a valid current reading", now);
         dataRefresh_ = true;
     }
     if (keys & Keypad::Menu) {
@@ -35,8 +35,8 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
         auto next = F::MillivoltsDc;
         if (current == F::MillivoltsDc) next = F::MillivoltsAc;
         if (current == F::MillivoltsAc && !needsJunction) next = F::Temperature;
-        if (!meterCommand(data_.selectDmmFunction(next))) view_.notify("Measurement command busy", now);
-        else if (needsJunction) view_.notify("Type K: set Manual junction in MENU", now);
+        if (!meterCommand(data_.selectDmmFunction(next))) view_.notify(Tooltip::Unavailable, "Measurement command busy", now);
+        else if (needsJunction) view_.notify(Tooltip::Usage, "Type K: set Manual junction in MENU", now);
         return;
     }
     dmm::CommandGroup group = dmm::CommandGroup::Voltage;
@@ -45,7 +45,7 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     if (keys & Keypad::F4)
         group = meter.latest().currentInput ? dmm::CommandGroup::Milliamps : dmm::CommandGroup::Millivolts;
     if ((keys & (Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4)) && !meterCommand(data_.sendDmmGroup(group)))
-        view_.notify("Measurement command busy", now);
+        view_.notify(Tooltip::Unavailable, "Measurement command busy", now);
 }
 // AUTO/RANGE qualified press (~50 ms): the factory's 20 20 (703S 08044274, 706S 08044BE4) opens the
 // stroke; busy: said once here, its release and hold then do nothing. Not on another screen or panel,
@@ -55,7 +55,7 @@ bool ApplicationController::meterRangeContext() const {
 }
 void ApplicationController::meterRangePress(uint32_t now) {
     if (!meterRangeContext() || !data_.dmmRanged()) return;
-    if (!meterCommand(data_.pressDmmRange())) view_.notify("Range command busy", now);
+    if (!meterCommand(data_.pressDmmRange())) view_.notify(Tooltip::Unavailable, "Range command busy", now);
 }
 // The physical AUTO/RANGE in the DMM as the factory's KEY5 (KeyGestures' own events, 703S 080459F4 /
 // 706S 08046390): the qualified press its 20; the release within 500 ms its 21 (slot0 080442B8 /
@@ -134,7 +134,7 @@ void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
         const auto action = appearanceEditor_.at(navigator_.row());
         const char *done = appearanceEditor_.reset(action);
         navigator_.reset(appearanceEditor_.index(action));
-        if (done) view_.notify(done, now);
+        if (done) view_.notify(Tooltip::Done, done, now);
     }
     if (outcome == Outcome::Changed || outcome == Outcome::Activate) {
         auto &meter = prefs_.meter;
@@ -155,28 +155,28 @@ void ApplicationController::meterAppearanceKeys(uint32_t keys, uint32_t now) {
 void ApplicationController::meterChanged(unsigned row, uint32_t now) {
     using Row = ui::MeterProperties::Row;
     const auto &meter=data_.meter();
-    const auto refused = [&](const char *why) { view_.notify(why, now); meterEditor_ = meterProperties(); };
+    const auto refused = [&](Tooltip kind, const char *why) { view_.notify(kind, why, now); meterEditor_ = meterProperties(); };
     switch (row) {
     case Row::Range: // Already so: nothing (not even the hold mode's window restarts).
         if (meterEditor_.automatic() != (meter.latest().range == dmm::RangeMode::Auto) &&
             !meterCommand(data_.setDmmAuto(meterEditor_.automatic())))
-            return refused("Range command busy");
+            return refused(Tooltip::Unavailable, "Range command busy");
         return;
     case Row::Relative: // A REL command restarts the statistics: only when it changes REL.
         if (meterEditor_.relative() != (meter.relative().active() || meter.latest().peerRelative) &&
             !data_.relativeMeter(meterEditor_.relative()))
-            return refused("REL needs a valid current reading");
+            return refused(Tooltip::Unavailable, "REL needs a valid current reading");
         return;
     case Row::Logging: {
         auto &logger=data_.meterLogger();
         if (meterEditor_.logging() == logger.active()) return;
         if (logger.active()) logger.finish();
-        else if (!logger.begin(1024*1024)) return refused("Cannot start CSV logging");
+        else if (!logger.begin(1024*1024)) return refused(Tooltip::Critical, "Cannot start CSV logging");
         return;
     }
     case Row::SerialOutput:
         if (meterEditor_.serial() == data_.meterSerial().enabled()) return;
-        if (!data_.serialMeter(meterEditor_.serial())) return refused("Serial output busy; turn GEN off");
+        if (!data_.serialMeter(meterEditor_.serial())) return refused(Tooltip::Unavailable, "Serial output busy; turn GEN off");
         serialWatched_=data_.meterSerial().enabled();
         return;
     case Row::Display: prefs_.meter.display=meterEditor_.display(); break;

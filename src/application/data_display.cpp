@@ -130,7 +130,7 @@ void ApplicationController::nominalNotice(uint32_t now) {
     if (!scope) nominalNoticeDue_ = false;
     scopeShown_ = scope;
     if (!nominalNoticeDue_ || !uiReady_ || view_.toastShowing()) return;
-    view_.notify("Factory calibration unavailable\nScope readings use approximate defaults", now);
+    view_.notify(Tooltip::Critical, "Factory calibration unavailable\nScope readings use approximate defaults", now);
     nominalNoticeDue_ = false;
 }
 void ApplicationController::displayData(uint32_t now) {
@@ -159,7 +159,7 @@ void ApplicationController::displayData(uint32_t now) {
     // a Dedicated square below 1 kHz, a startup restore); the Scope's GEN note keeps ", ADC max /2".
     const bool captureHalved = data_.generatorLoadsBus();
     if (captureHalved && !captureHalvedNoticed_ && uiReady_ && panel_ != Panel::Bode)
-        view_.notify("GEN on DAC: Scope max sample rate /2 while it runs", now);
+        view_.notify(Tooltip::Advisory, "GEN on DAC: Scope max sample rate /2 while it runs", now);
     captureHalvedNoticed_ = captureHalved;
     if (state_.mode == MeasurementMode::Oscilloscope && panel_ != Panel::Bode) {
         view_.scopeTriggerState(data_.scopeRequest().trigger.mode, data_.scopeWaiting());
@@ -197,11 +197,14 @@ void ApplicationController::displayData(uint32_t now) {
     }
     if (state_.mode == MeasurementMode::Oscilloscope) {
         auto options=view_.waveform().options();
-        if (heldViewActive_ && data_.scopeHoldReleases()!=heldViewRelease_) { // HOLD explores one record.
-            options.restoreHeldView(heldView_);
-            view_.waveform().configure(options); heldViewActive_=false; dataRefresh_=true;
+        // Auto trials briefly release HOLD. Keep its view until Auto succeeds or returns to it.
+        if (!(heldViewActive_ && autoBusy())) {
+            if (heldViewActive_ && data_.scopeHoldReleases()!=heldViewRelease_) {
+                options.restoreHeldView(heldView_);
+                view_.waveform().configure(options); heldViewActive_=false; dataRefresh_=true;
+            }
+            followNextCapture(); // A timebase or channel change staged by keys, a menu or a host.
         }
-        followNextCapture(); // Whoever staged it (keys, Timebase or Channel menu, a host): one place.
         options=view_.waveform().options();
         // The next capture's settings do not change what a held record contains.
         if (!channelShown(options.spectrum.channel)) {
@@ -215,7 +218,7 @@ void ApplicationController::displayData(uint32_t now) {
         followShownChannel();
         if (options.mode==plot::Mode::XY && (!channelShown(0) || !channelShown(1))) {
             options.mode=plot::Mode::Time; view_.waveform().configure(options);
-            view_.notify("XY needs CH1 + CH2; Y-T active",now);
+            view_.notify(Tooltip::Advisory, "XY needs CH1 + CH2; Y-T active",now);
         }
         if (dataRefresh_) {
             auto next = data_.scopeMetadata();

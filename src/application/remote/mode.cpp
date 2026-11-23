@@ -11,7 +11,7 @@ bool ApplicationController::setRemote(bool enabled, const char *left) {
     if (enabled == remote_ && (enabled || uiReady_)) return true;
     if (shots_.busy() || data_.scopeRecording() || data_.dmmBusy() || data_.zeroBusy() || panel_ == Panel::InterleaveMatch) return false;
     const auto now = Board::milliseconds(); if (!cancelAuto(now)) return false;
-    if (enabled && panel_ == Panel::Bode) finishBode(now, nullptr); // Restored before the clock and the host change.
+    if (enabled && panel_ == Panel::Bode) finishBode(now, Tooltip::Done, nullptr); // Restored before the clock and the host change.
     if (enabled && bodeOwns()) return false; // Its restore refused (busy) or unconfirmed: tried again, then Remote.
     if (enabled) {
         if (images_.clearing()) return false;
@@ -43,8 +43,8 @@ bool ApplicationController::setRemote(bool enabled, const char *left) {
         applyBrightness();
         dataRefresh_ = true; view_.measurement(state_);
         if (!RemoteClock::settled(clock) || clock.active != prefs_.scope.runMode)
-            view_.notify(RunModeSwitch::describe(clock.outcome), now); // Also ResumeFailed at the saved profile.
-        else if (left) view_.notify(left, now);
+            view_.notify(Tooltip::Critical, RunModeSwitch::describe(clock.outcome), now); // Also ResumeFailed at the saved profile.
+        else if (left) view_.notify(Tooltip::Done, left, now);
     }
     return true;
 }

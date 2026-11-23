@@ -418,13 +418,13 @@ void ApplicationController::openBode(uint32_t now) {
         : !request.frontend.enabled[0] || !request.frontend.enabled[1] ? "Enable CH1 and CH2 for Bode"
         : data_.scopeMetadata().layout == scope::Layout::InterleavedCh1 ? "Turn Interleave CH1 off for Bode"
         : data_.scopeRecording() || data_.zeroBusy() || autoBusy() ? "Finish the running operation first"
-        : data_.generator().status() == DataStatus::HardwareError ? "Generator fault: switch it off and on"
-        : data_.generator().busy() ? "Generator busy: try again when GEN is set" // A ZT706S frame on its way.
         : nullptr;
-    if (why) { view_.notify(why, now); return; }
+    if (why) { view_.notify(Tooltip::Unavailable, why, now); return; }
+    if (data_.generator().status() == DataStatus::HardwareError) { view_.notify(Tooltip::Critical, "Generator fault: switch it off and on", now); return; }
+    if (data_.generator().busy()) { view_.notify(Tooltip::Unavailable, "Generator busy: try again when GEN is set", now); return; } // A ZT706S frame on its way.
     auto &s = session();
-    if (!restore(data_, s, now)) { view_.notify("Bode: the last sweep's restore is pending", now); return; } // Never two sessions' originals.
-    if (!readClock(data_, s)) { view_.notify("Generator clock unknown: switch GEN on and off", now); return; }
+    if (!restore(data_, s, now)) { view_.notify(Tooltip::Unavailable, "Bode: the last sweep's restore is pending", now); return; } // Never two sessions' originals.
+    if (!readClock(data_, s)) { view_.notify(Tooltip::Critical, "Generator clock unknown: switch GEN on and off", now); return; }
     limit(s, data_.generator().settings());
     panel_ = Panel::Bode;
     s.cursor.table = false; s.cursor.marker = scope::BodeMarkers::None; s.results = false; // The plot first.
@@ -450,37 +450,40 @@ void ApplicationController::showBode(bool plot) {
     d.startHz = s.sweep.grid().start / 1000.0; d.stopHz = s.sweep.grid().stop / 1000.0;
     view_.bodePlot(d); // The host's overlay: nothing of the Scope drawn under it.
 }
-void ApplicationController::finishBode(uint32_t now, const char *notice) {
+void ApplicationController::finishBode(uint32_t now, Tooltip kind, const char *notice) {
     if (panel_ != Panel::Bode) return;
     // Not whole yet: serviceBode polls a confirmation (a ZT706S acknowledge) or tries a refusal again.
-    if (!restore(data_, session(), now)) notice = session().asked ? "Bode closed: restoring GEN" : "Bode: instrument busy, restoring";
+    if (!restore(data_, session(), now)) { // The restore goes on (serviceBode): what the output does now matters.
+        notice = session().asked ? "Bode closed: restoring GEN" : "Bode: instrument busy, restoring";
+        kind = Tooltip::Critical;
+    }
     view_.bode().hide();
     closePanel();
     dataRefresh_ = true;
-    if (notice) view_.notify(notice, now);
+    if (notice) view_.notify(kind, notice, now);
 }
 void ApplicationController::startBodeSweep(uint32_t now) {
     auto &s = session();
-    if (s.saving || bodeCsvFile().busy()) { view_.notify("Bode: saving the CSV, the next sweep after it", now); return; }
+    if (s.saving || bodeCsvFile().busy()) { view_.notify(Tooltip::Unavailable, "Bode: saving the CSV, the next sweep after it", now); return; }
     // The DAC clock and the generator's level (amplitude) as they are now (a host may have changed either
     // since the setup opened, e.g. over SCPI while the result showed): the limit, then the grid, from them.
-    if (!readClock(data_, s)) { view_.notify("Generator clock unknown: switch GEN on and off", now); return; }
+    if (!readClock(data_, s)) { view_.notify(Tooltip::Critical, "Generator clock unknown: switch GEN on and off", now); return; }
     limit(s, data_.generator().settings());
     const auto grid = scope::BodeGrid::of(s.settings, 1000, s.maximum);
-    if (!grid.valid()) { view_.notify("Bode: Stop must be above Start", now); return; }
-    if (!restore(data_, s, now)) { view_.notify("Bode: the last sweep's restore is pending", now); return; }
+    if (!grid.valid()) { view_.notify(Tooltip::Unavailable, "Bode: Stop must be above Start", now); return; }
+    if (!restore(data_, s, now)) { view_.notify(Tooltip::Unavailable, "Bode: the last sweep's restore is pending", now); return; }
     // The originals only from a settled generator: a ZT706S frame still on its way (the user's, or a
     // recovery round) would make enabled() an intent, not the state the restore must return to.
     const auto &output = data_.generator();
     const auto original = confirmation(output, output.enabled());
-    if (original == Confirmation::Pending) { view_.notify("Generator busy: try again when GEN is set", now); return; }
-    if (original == Confirmation::Failed) { view_.notify("Generator state unconfirmed: set output in GEN", now); return; }
+    if (original == Confirmation::Pending) { view_.notify(Tooltip::Unavailable, "Generator busy: try again when GEN is set", now); return; }
+    if (original == Confirmation::Failed) { view_.notify(Tooltip::Critical, "Generator state unconfirmed: set output in GEN", now); return; }
     s.original = data_.scopeRequest();
     s.generator = output.settings();
     s.generatorOn = output.enabled();
     const auto excitation = excitationOf(s, s.generator);
-    if (const char *why = Drives::refusal(excitation)) { view_.notify(why, now); return; }
-    if (!s.sweep.start(s.settings, grid, s.original, s.points)) { view_.notify("Bode: cannot start", now); return; }
+    if (const char *why = Drives::refusal(excitation)) { view_.notify(Tooltip::Unavailable, why, now); return; }
+    if (!s.sweep.start(s.settings, grid, s.original, s.points)) { view_.notify(Tooltip::Unavailable, "Bode: cannot start", now); return; }
     s.run = s.settings; s.excitation = excitation; s.runDrive = s.drive; // The run as it runs.
     s.analysis = {};
     // A and B at the first point, B active: B follows the sweep, B - A from its start (GitHub #79).
@@ -493,23 +496,23 @@ void ApplicationController::saveBodeCsv(uint32_t now) {
     auto &s = session();
     auto &csv = bodeCsvFile();
     // No new file once a power off, restart or Recovery is under way (or queued): as saveDecoderCsv.
-    if (shutdown_ != Shutdown::None || shutdownSequence_.active() || recoveryPending_) { view_.notify("Bode: no CSV while shutting down", now); return; }
-    if (csv.busy()) { view_.notify("Bode: a CSV is being saved", now); return; }
-    if (s.sweep.running() || !s.measured) { view_.notify("Bode: nothing finished to save", now); return; }
+    if (shutdown_ != Shutdown::None || shutdownSequence_.active() || recoveryPending_) { view_.notify(Tooltip::Unavailable, "Bode: no CSV while shutting down", now); return; }
+    if (csv.busy()) { view_.notify(Tooltip::Unavailable, "Bode: a CSV is being saved", now); return; }
+    if (s.sweep.running() || !s.measured) { view_.notify(Tooltip::Unavailable, "Bode: nothing finished to save", now); return; }
     BodeCsvRun run;
     run.settings = s.run; run.grid = s.sweep.grid(); run.excitation = s.excitation;
     run.points = s.points; run.count = s.measured; run.complete = s.sweep.state() == Sweep::State::Done && s.measured == s.sweep.count();
     if (!csv.start(fs_, run)) {
         char text[64]; std::snprintf(text, sizeof text, "Bode CSV not saved: %s", csv.error() ? csv.error() : "refused");
-        view_.notify(text, now);
+        view_.notify(Tooltip::Critical, text, now);
         return;
     }
     s.saving = true;
-    view_.notify("Bode: saving CSV...", now);
+    view_.notify(Tooltip::Progress, "Bode: saving CSV...", now);
 }
 void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uint32_t now) {
     auto &s = session();
-    if (events.shortPress & Keypad::Mode) { finishBode(now, "Bode closed, Scope restored"); return; }
+    if (events.shortPress & Keypad::Mode) { finishBode(now, Tooltip::Done, "Bode closed, Scope restored"); return; }
     // HOLD/SAVE held: the screenshot, as on every screen (GitHub #76), from the setup, plot, table or results;
     // the sweep goes on (its CSV waits while the image is written). A short HOLD stays as it was: nothing here.
     if (events.longPress & Keypad::HoldSave) { startScreenshot(now); return; }
@@ -534,7 +537,7 @@ void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uin
     }
     // The result: F1 Run/Stop, F2 setup, F3 the view (nextView), F4 exit; MENU swaps the active cursor (A/B);
     // Left/Right move it one point; Up/Down the named markers of the graphs shown (Plot) or a page (Table).
-    if (keys & Keypad::F4) { finishBode(now, "Bode closed, Scope restored"); return; }
+    if (keys & Keypad::F4) { finishBode(now, Tooltip::Done, "Bode closed, Scope restored"); return; }
     if (keys & Keypad::F1) {
         if (bodeRunning()) {
             restore(data_, s, now);
@@ -555,7 +558,7 @@ void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uin
         if (keys & (Keypad::Up | Keypad::Down)) {
             const bool up = keys & Keypad::Up;
             if (cursor.table) cursor.page(up ? -1 : 1, s.measured);
-            else if (!jumpShown(cursor, up, s)) view_.notify("No markers in this sweep yet", now);
+            else if (!jumpShown(cursor, up, s)) view_.notify(Tooltip::Unavailable, "No markers in this sweep yet", now);
         }
     }
     showBode(true);
@@ -571,23 +574,23 @@ void ApplicationController::serviceBode(uint32_t now) {
         char text[64];
         if (csv.savedPath()) std::snprintf(text, sizeof text, "Bode CSV saved: %s", csv.savedPath());
         else std::snprintf(text, sizeof text, "Bode CSV not saved: %s", csv.error() ? csv.error() : "cancelled");
-        view_.notify(text, now);
+        view_.notify(csv.savedPath() ? Tooltip::Done : Tooltip::Critical, text, now);
     }
     // A refused restore again (after the panel went too: a path that closed it); not while the instrument
     // shuts down (it stops everything itself and keeps the user's preferences, which the sweep never changed).
     // A confirmation still pending (the ZT706S module's acknowledge) is polled every pass, nothing sent.
     const bool retry = s.touched && !s.sweep.running() && int32_t(now - s.retryAt) >= 0 && shutdown_ == Shutdown::None;
     if (retry && restore(data_, s, now)) dataRefresh_ = true; // Whole: Run is offered again.
-    if (s.abandoned) { view_.notify(s.abandoned, now); s.abandoned = nullptr; }
+    if (s.abandoned) { view_.notify(Tooltip::Critical, s.abandoned, now); s.abandoned = nullptr; }
     if (panel_ != Panel::Bode) return;
     const char *taken = shutdown_ != Shutdown::None || recoveryPending_ ? "" : remote_ ? "Bode stopped: USB Remote"
         : state_.mode != MeasurementMode::Oscilloscope ? "" : nullptr;
-    if (taken) { finishBode(now, *taken ? taken : nullptr); return; }
+    if (taken) { finishBode(now, Tooltip::Advisory, *taken ? taken : nullptr); return; }
     if (!s.sweep.running()) return;
     if (data_.scopeHeld() || data_.scopeRecording() || data_.zeroBusy() || autoBusy()) {
         restore(data_, s, now);
         ended(s, "Stop");
-        view_.notify("Bode stopped: the capture was taken over", now);
+        view_.notify(Tooltip::Advisory, "Bode stopped: the capture was taken over", now);
         showBode(true);
         return;
     }
@@ -610,7 +613,7 @@ void ApplicationController::serviceBode(uint32_t now) {
         const auto f = s.sweep.failure();
         restore(data_, s, now);
         ended(s, "Fail");
-        view_.notify(failure(f), now);
+        view_.notify(Tooltip::Critical, failure(f), now);
         showBode(true);
     }
 }

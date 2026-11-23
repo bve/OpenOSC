@@ -13,7 +13,7 @@ void ApplicationController::generatorKeys(uint32_t keys, uint32_t now) {
     if (keys & (Keypad::F4 | Keypad::HoldSave)) view_.focusParameter(3);
     if (keys & (Keypad::F2 | Keypad::Menu)) { openFrequencyEditor(); return; }
     if (keys & (Keypad::HoldSave | Keypad::F4)) {
-        if (!requestGeneratorOutput(!output.enabled(), now) && !output.enabled()) view_.notify("Cannot enable output", now);
+        if (!requestGeneratorOutput(!output.enabled(), now) && !output.enabled()) view_.notify(Tooltip::Critical, "Cannot enable output", now);
     }
     auto settings = output.settings();
     uint64_t frequency = prefs_.generatorMillihertz;
@@ -40,7 +40,7 @@ void ApplicationController::generatorKeys(uint32_t keys, uint32_t now) {
     }
     if (Caps::Amplitude) settings.amplitudeMillivolts = std::min(settings.amplitudeMillivolts, Caps::amplitudeLimitMillivolts(settings.shape, frequency));
     if (keys & (Keypad::Left | Keypad::Right | Keypad::Up | Keypad::Down)) {
-        if (!applyGenerator(settings, now)) view_.notify("Unsupported output settings", now);
+        if (!applyGenerator(settings, now)) view_.notify(Tooltip::Unavailable, "Unsupported output settings", now);
     }
 }
 } // namespace openosc

@@ -19,7 +19,7 @@ void ApplicationController::confirmShutdown(ShutdownAction action) {
 // Headless (no LVGL: the REL/Power hold works there too) nothing is drawn; a refused restart then
 // shows only in its result (still running, USB back).
 void ApplicationController::shutdownNotice(const char *text, uint32_t now) {
-    if (uiReady_ && text) view_.notify(text, now);
+    if (uiReady_ && text) view_.notify(Tooltip::Critical, text, now);
 }
 // The controller's side of ShutdownSequence: what each step does on this instrument.
 class ApplicationController::ShutdownSteps final : public ShutdownSequence::Steps {
@@ -102,7 +102,7 @@ bool ApplicationController::ShutdownSteps::resume() {
     return result.resumed;
 }
 void ApplicationController::requestShutdown(uint32_t now) {
-    if (panel_ == Panel::Bode) finishBode(now, nullptr); // Every source of a shutdown: the sweep ends, restored.
+    if (panel_ == Panel::Bode) finishBode(now, Tooltip::Done, nullptr); // Every source of a shutdown: the sweep ends, restored.
     ShutdownSteps steps(*this);
     shutdownSequence_.begin(confirmAction_, now, steps);
     shutdown_ = shutdownSequence_.action();

@@ -33,7 +33,7 @@ ApplicationController::FieldKey ApplicationController::fieldKeys(uint32_t keys, 
     if (!keys) return FieldKey::None;
     using Outcome = ui::PropertyNavigator::Outcome;
     const auto outcome = navigator_.keys(keys, list);
-    if (outcome == Outcome::Refused && list.notice()) view_.notify(list.notice(), now);
+    if (outcome == Outcome::Refused && list.notice()) view_.notify(Tooltip::Unavailable, list.notice(), now);
     if (outcome == Outcome::Back) { backPanel(); return FieldKey::Closed; }
     if (outcome == Outcome::Changed) return FieldKey::Committed;
     if (outcome == Outcome::Activate) return FieldKey::Action;
@@ -46,7 +46,7 @@ void ApplicationController::commitTrigger(uint32_t now, bool level) {
     auto request = data_.scopeRequest();
     request.trigger = triggerEditor_.settings();
     if (request.same(data_.scopeRequest())) { if (level) triggerFollow_.forget(); } // Nothing to apply: set as it is.
-    else if (!applyEdited(request, now, level ? LevelIntent::Set : LevelIntent::Follow)) view_.notify("Finish data transfer first", now);
+    else if (!applyEdited(request, now, level ? LevelIntent::Set : LevelIntent::Follow)) view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
     triggerEditor_.begin(data_.scopeRequest().trigger);
     view_.properties(triggerEditor_, navigator_);
 }
@@ -77,7 +77,7 @@ void ApplicationController::triggerModeStep(uint32_t now) {
     plot::XyMode::constrain(view_.waveform().options(), request);
     const ScopeApply mode = data_.scopeHeld() ? ScopeApply::StageIfHeld
                           : request.trigger.mode == scope::TriggerMode::Single ? ScopeApply::Resume : ScopeApply::Configure;
-    if (!applyFollowing(request, now, mode)) { view_.notify("Finish data transfer first", now); return; }
+    if (!applyFollowing(request, now, mode)) { view_.notify(Tooltip::Unavailable, "Finish data transfer first", now); return; }
     dataRefresh_ = true;
 }
 void ApplicationController::frequencyKeys(uint32_t keys, uint32_t now) {
@@ -97,7 +97,7 @@ void ApplicationController::frequencyPanelKeys(uint32_t keys, uint32_t now) {
         auto settings = data_.generator().settings();
         settings.frequencyHz = generator::Frequency::rational(frequencyEditor_.value());
         if (!applyGenerator(settings, now)) {
-            view_.notify("Unsupported output frequency", now);
+            view_.notify(Tooltip::Unavailable, "Unsupported output frequency", now);
             return;
         }
         closePanel();

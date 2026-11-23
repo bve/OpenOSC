@@ -18,7 +18,7 @@ void ApplicationController::commitScopeEditor(ui::ScopeEditor &editor, uint32_t 
     }
     const bool changedRequest = !editor.request().same(data_.scopeRequest());
     if (changedRequest && !applyEdited(editor.request(), now)) {
-        view_.notify("Finish data transfer first", now);
+        view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
         editor.begin(data_.scopeRequest(), view_.waveform().options(), editor.channel());
         view_.properties(editor, navigator_);
         return;

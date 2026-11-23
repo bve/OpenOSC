@@ -10,7 +10,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         const auto generator = data_.generator().snapshot();
         if (generator.faults != generatorFaults_) {
             generatorFaults_ = generator.faults;
-            if (uiReady_) { view_.notify(generator::faultText(generator.fault), now); dataRefresh_ = true; }
+            if (uiReady_) { view_.notify(Tooltip::Critical, generator::faultText(generator.fault), now); dataRefresh_ = true; }
         }
     }
     const bool visible = uiReady_;
@@ -18,7 +18,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         dmmRestarts_ = data_.dmmRestarts();
         if (data_.measurementMode() == MeasurementMode::Multimeter) {
             meterRestore_.arm(data_.selectDmmFunction(dmm::Function(prefs_.meterFunction)));
-            if (visible) view_.notify("DMM stopped responding: restarted", now);
+            if (visible) view_.notify(Tooltip::Critical, "DMM stopped responding: restarted", now);
         }
     }
     if (data_.dmmReselects() != dmmReselects_) {
@@ -28,7 +28,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
     }
     const auto selection = data_.dmmCommandStatus();
     if (serialWatched_ && !data_.meterSerial().enabled()) {
-        if (visible && data_.meterSerial().status()!=DataStatus::Ok) view_.notify("Serial output failed",now);
+        if (visible && data_.meterSerial().status()!=DataStatus::Ok) view_.notify(Tooltip::Critical, "Serial output failed",now);
         serialWatched_=false;
         if (visible) refreshMeterPanel();
     }
@@ -36,10 +36,10 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         if (visible && (selection == DataStatus::Timeout || selection == DataStatus::HardwareError)) {
             char text[64];
             std::snprintf(text, sizeof text, "Multimeter %s command was not confirmed", data_.dmmCommandName());
-            view_.notify(text, now);
+            view_.notify(Tooltip::Critical, text, now);
         }
         // One RANGE press answered by packets without MANU (KeyCommand, RangeSelector): no second press.
-        if (visible && selection == DataStatus::Unsupported) view_.notify("Meter did not report a manual range", now);
+        if (visible && selection == DataStatus::Unsupported) view_.notify(Tooltip::Advisory, "Meter did not report a manual range", now);
         lastSelection_ = selection;
         if (visible) refreshMeterPanel();
     }
@@ -52,7 +52,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         if (restoreDue) { // Another or an unknown function: restores() is false, nothing is sent, prefs stay.
             if (MeterRangeMemory::restores(prefs_.meter, prefs_.meterFunction, function, result.range)) {
                 const bool accepted = prefs_.meter.automatic ? data_.setDmmAuto(true) : data_.setDmmRange(prefs_.meter.range);
-                if (!accepted && visible) view_.notify("Saved DMM range could not be applied",now);
+                if (!accepted && visible) view_.notify(Tooltip::Critical, "Saved DMM range could not be applied",now);
                 if (accepted) return;
             }
         }
@@ -67,7 +67,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
     }
     if (recordWatched_ && !data_.scopeRecording()) {
         const auto status = data_.scopeRecordStatus();
-        if (visible) view_.notify(status == DataStatus::Ok ? data_.scopeRecorder().path() :
+        if (visible) view_.notify(status == DataStatus::Ok ? Tooltip::Done : Tooltip::Critical, status == DataStatus::Ok ? data_.scopeRecorder().path() :
                      status == DataStatus::NoSpace ? "Not enough free space for this record" :
                      "Waveform save failed / no completed capture", now);
         recordWatched_ = false;
@@ -75,7 +75,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
     auto &logger = data_.meterLogger();
     if (logger.active()) loggerWatched_ = true;
     else if (loggerWatched_) {
-        if (visible) view_.notify(logger.status() == DataStatus::Ok ? logger.path() : "CSV logging failed", now);
+        if (visible) view_.notify(logger.status() == DataStatus::Ok ? Tooltip::Done : Tooltip::Critical, logger.status() == DataStatus::Ok ? logger.path() : "CSV logging failed", now);
         loggerWatched_ = false;
         if (visible) refreshMeterPanel();
     }

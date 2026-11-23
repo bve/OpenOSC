@@ -18,7 +18,7 @@ void ApplicationController::generatorPanelKeys(uint32_t keys, uint32_t now) {
         openGeneratorLayout(false); return;
     }
     if (key != FieldKey::Committed) return;
-    if (!applyGenerator(generatorEditor_.settings(), now)) view_.notify("Unsupported waveform/frequency/duty", now);
+    if (!applyGenerator(generatorEditor_.settings(), now)) view_.notify(Tooltip::Unavailable, "Unsupported waveform/frequency/duty", now);
     generatorEditor_.begin(data_.generator().settings(), generatorEditor_.wave(), data_.generator().snapshot().timerHz);
     view_.properties(generatorEditor_, navigator_);
 }
@@ -48,7 +48,7 @@ bool ApplicationController::finishGeneratorField(uint32_t now) {
         if (generator::Frequency::millihertz(frequency) == generator::Frequency::millihertz(settings.frequencyHz)) return true;
         settings.frequencyHz = frequency;
         if (applyGenerator(settings, now)) return true;
-        view_.notify("Not applied: unsupported output frequency", now);
+        view_.notify(Tooltip::Unavailable, "Not applied: unsupported output frequency", now);
         view_.frequencyEditor(frequencyEditor_);
         return false;
     }
@@ -59,11 +59,11 @@ bool ApplicationController::finishGeneratorField(uint32_t now) {
     auto navigator = navigator_;
     if (navigator.mode() != ui::PropertyNavigator::Mode::Browse &&
         navigator.keys(Keypad::Menu, editor) == ui::PropertyNavigator::Outcome::Refused) {
-        view_.notify(editor.notice() ? editor.notice() : "Not applied", now);
+        view_.notify(Tooltip::Unavailable, editor.notice() ? editor.notice() : "Not applied", now);
         return false;
     }
     if (editor.settings().same(data_.generator().settings()) || applyGenerator(editor.settings(), now)) return true;
-    view_.notify("Not applied: unsupported waveform/frequency/duty", now);
+    view_.notify(Tooltip::Unavailable, "Not applied: unsupported waveform/frequency/duty", now);
     return false;
 }
 bool ApplicationController::switchGeneratorPanel(uint32_t keys, uint32_t now) {

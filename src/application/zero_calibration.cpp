@@ -13,7 +13,8 @@ void ApplicationController::beginZero(uint32_t now,bool hardware) {
     if (!data_.calibrateZero(now,hardware)) {
         using Result=calibration::ZeroOperation::Result;
         const auto result=data_.zeroOperation().result();
-        view_.notify(result==Result::Uncalibrated ? "Factory calibration unavailable" :
+        view_.notify(result==Result::Uncalibrated || result==Result::IoError || result==Result::HardwareError ? Tooltip::Critical : Tooltip::Unavailable,
+            result==Result::Uncalibrated ? "Factory calibration unavailable" :
             result==Result::IoError ? "Calibration disk unavailable" :
             result==Result::Shadowed ? "Hardware zero in force: use factory zero first" : result==Result::HardwareError ?
             "Cannot stop generator" : "Zero calibration unavailable / busy",now);
@@ -28,7 +29,8 @@ void ApplicationController::disableZero(uint32_t now) {
     using Result=calibration::ZeroSelection::Result;
     const auto result=data_.factoryZero();
     view_.measurement(state_); dataRefresh_=true;
-    view_.notify(result==Result::Factory ? "Factory zero applies to new captures" :
+    view_.notify(result==Result::Factory || result==Result::HardwareKept ? Tooltip::Done : result==Result::Unchanged ? Tooltip::Critical : Tooltip::Unavailable,
+        result==Result::Factory ? "Factory zero applies to new captures" :
         result==Result::Unread ? "Zero JSON unread: Reload zero JSON first" :
         result==Result::Unchanged ? "Cannot save zero selection; unchanged" :
         result==Result::HardwareKept ? "Software zero off; hardware zero kept" : "Zero selection unavailable / busy",now);
@@ -58,11 +60,11 @@ void ApplicationController::gainKeys(uint32_t keys,uint32_t now) {
     serviceZeroUi(now); // Redraws for a new row or step (both are part of what it shows).
 }
 void ApplicationController::confirmGain(uint32_t now) {
-    if (data_.measurementMode()!=MeasurementMode::Oscilloscope) { view_.notify("Select Scope first",now); return; }
+    if (data_.measurementMode()!=MeasurementMode::Oscilloscope) { view_.notify(Tooltip::Unavailable, "Select Scope first",now); return; }
     const auto &d=calibrationDraft_;
     double span=0;
     if (!data_.gainSpan(d.channel,d.range,d.referenceMillivolts/1000.0,span) || !calibration::GainCalibration::spanAllowed(span)) {
-        view_.notify("Expected span must be 40..110 codes",now); return;
+        view_.notify(Tooltip::Unavailable, "Expected span must be 40..110 codes",now); return;
     }
     char volts[20];
     plot::Format::exactMillivolts(d.referenceMillivolts,volts,sizeof volts);
@@ -77,7 +79,9 @@ void ApplicationController::beginGain(uint32_t now) {
     if (status!=DataStatus::Ok) {
         using Result=calibration::ZeroOperation::Result;
         const auto result=data_.zeroOperation().result();
-        view_.notify(status==DataStatus::InvalidArgument ? "Expected span must be 40..110 codes" :
+        view_.notify(status==DataStatus::InvalidArgument ? Tooltip::Unavailable : status==DataStatus::Uncalibrated || result==Result::Uncalibrated ||
+            result==Result::IoError || result==Result::HardwareError ? Tooltip::Critical : Tooltip::Unavailable,
+            status==DataStatus::InvalidArgument ? "Expected span must be 40..110 codes" :
             status==DataStatus::Uncalibrated || result==Result::Uncalibrated ? "Factory calibration unavailable" :
             result==Result::IoError ? "Gain JSON unread or disk unavailable" : result==Result::HardwareError ? "Cannot stop generator" :
             "Gain calibration unavailable / busy",now);
@@ -91,7 +95,7 @@ void ApplicationController::disableGain(uint32_t now) {
     confirmationHandler_=nullptr; panel_=Panel::None;
     const bool success=data_.factoryGain();
     view_.measurement(state_); dataRefresh_=true;
-    view_.notify(success ? "Factory gain applies to new captures" : "Gain JSON unread or not saved; unchanged",now);
+    view_.notify(success ? Tooltip::Done : Tooltip::Critical, success ? "Factory gain applies to new captures" : "Gain JSON unread or not saved; unchanged",now);
 }
 // InterleaveOffset: its finished edit, in force for new records (a preview, not saved); Save,
 // Cancel (back to the saved one) and Reset to factory are the profile's own actions. Afterwards
@@ -101,7 +105,9 @@ void ApplicationController::interleaveAction(ui::SettingsAction action,uint32_t 
     const auto status=action==A::InterleaveOffset ? data_.applyInterleave(calibrationDraft_.interleaveTenths/10.0f) :
         action==A::SaveInterleave ? data_.saveInterleave() : action==A::CancelInterleave ? data_.cancelInterleave() : data_.resetInterleave();
     calibrationDraft_.interleaveTenths=int32_t(std::lround(data_.interleaveOffset()*10));
-    view_.notify(status==DataStatus::Ok ? (action==A::InterleaveOffset ? "Offset in force for new records (not saved)" :
+    view_.notify(status==DataStatus::Ok ? Tooltip::Done : status==DataStatus::Unsupported || status==DataStatus::Busy ||
+                 status==DataStatus::InvalidArgument ? Tooltip::Unavailable : Tooltip::Critical,
+                 status==DataStatus::Ok ? (action==A::InterleaveOffset ? "Offset in force for new records (not saved)" :
                                            action==A::SaveInterleave ? "Interleave offset saved" :
                                            action==A::CancelInterleave ? "Saved interleave offset in force" : "Factory interleave offset saved") :
                  status==DataStatus::Unsupported ? "No interleaved capture on this model" :
@@ -142,6 +148,8 @@ void ApplicationController::serviceZeroUi(uint32_t now) {
         result==Result::RestoreFailed ? "done; capture restore failed: RUN or restart" : "failed";
     char message[80];
     std::snprintf(message,sizeof message,"%s %s",operation.calibration().name(),outcome);
-    view_.notify(message,now);
+    // Saved or cancelled as asked; a run without a usable input (nothing saved); otherwise a failure.
+    view_.notify(result==Result::Complete || result==Result::Cancelled ? Tooltip::Done : result==Result::InvalidInput ||
+                 result==Result::Timeout ? Tooltip::Advisory : Tooltip::Critical, message, now);
 }
 } // namespace openosc

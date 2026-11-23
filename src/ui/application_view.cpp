@@ -305,14 +305,20 @@ void ApplicationView::usbConnected(bool connected) {
     usbConnected_ = connected; lv_obj_set_hidden(usbIndicator_,!connected);
     if (connected) lv_obj_move_foreground(usbIndicator_);
 }
-void ApplicationView::notify(const char *text, uint32_t now, Notice kind) {
+void ApplicationView::notify(Tooltip kind, const char *text, uint32_t now, Notice notice) {
+    if (!Tooltips::shown(tooltipsHidden_, kind)) return; // Before LVGL: a hidden kind costs nothing.
     const uint32_t current=lv_tick_get();
     if (int32_t(current-now)>0) now=current; // A file operation may have outlived the caller's tick.
     lv_label_set_text(toast_, text);
     lv_obj_set_hidden(toast_, false);
     lv_obj_move_foreground(toast_);
     toastUntil_ = now + 3000;
-    notice_ = kind;
+    notice_ = notice;
+    noticeKind_ = kind;
+}
+void ApplicationView::tooltips(uint8_t hidden) {
+    tooltipsHidden_ = hidden;
+    if (toastShowing() && !Tooltips::shown(hidden, noticeKind_)) dismissNotice(notice_);
 }
 void ApplicationView::dismissNotice(Notice kind) {
     if (!toastShowing() || notice_ != kind) return;

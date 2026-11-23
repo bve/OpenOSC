@@ -7,7 +7,7 @@
 namespace openosc::ui {
 // The rows of the open Settings page as properties: pages, actions, and the settings themselves as
 // choices (battery, run mode, record memory, backlight, idle level, auto power off), a toggle (FPS)
-// and a number (brightness). Choosing changes a copy of the preferences (preferences()); the
+// and numbers (brightness, the battery display trim). Choosing changes a copy of the preferences (preferences()); the
 // controller takes what changed and applies it. An old auto power off value stays as it is, shown,
 // until another one is chosen.
 class SettingsProperties final : public PropertyList {
@@ -33,6 +33,7 @@ public:
     void optionName(unsigned row, unsigned index, char *output, size_t capacity) const override;
     bool choose(unsigned row, unsigned index) override;
     void adjust(unsigned row, int direction) override;
+    int coarseStep(unsigned row) const override;
     int32_t number(unsigned row) const override;
     void setNumber(unsigned row, int32_t value) override;
     bool range(unsigned row, int32_t &minimum, int32_t &maximum) const override;

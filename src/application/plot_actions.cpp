@@ -45,7 +45,7 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         return centered;
     }
     const auto refuse = [&](const char *why) {
-        view_.notify(why, now);
+        view_.notify(Tooltip::Unavailable, why, now);
         plotControls_.options = view_.waveform().options();
         return false;
     };
@@ -53,7 +53,7 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
     if (row == plot::Controls::Clear) {
         widget.clearHistory();
         widget.clearReference();
-        view_.notify("History and reference cleared", now);
+        view_.notify(Tooltip::Done, "History and reference cleared", now);
         return true;
     }
     if (row == plot::Controls::Reference) {
@@ -66,7 +66,7 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         if (!data_.acquireScopeWait(frame)) return refuse("Reference needs a completed frame");
         widget.setFrame(frame.view());
         if (!widget.captureReference(channel)) return refuse(VisibleTrace);
-        view_.notify(channel ? "CH2 reference captured" : "CH1 reference captured", now);
+        view_.notify(Tooltip::Done, channel ? "CH2 reference captured" : "CH1 reference captured", now);
         return true;
     }
     const auto &frontend=data_.scopeRequest().frontend;

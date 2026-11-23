@@ -87,15 +87,15 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         buildView(); view_.measurement(state_);
         applyBrightness();
         char result[112]; applied.text(result,sizeof result);
-        if (bootStart_.notice) view_.notify(bootStart_.notice, Board::milliseconds());
-        else if (!applied.ok()) view_.notify(result,Board::milliseconds());
-        else if (preferences_.error()) view_.notify(preferences_.error(), Board::milliseconds());
-        else if (preferences_.repaired() && preferences_.restored()) view_.notify("Bad settings archived; backup copy restored", Board::milliseconds());
-        else if (preferences_.repaired()) view_.notify("Bad settings archived; defaults written", Board::milliseconds());
-        else if (preferences_.restored()) view_.notify("Settings restored from a backup copy", Board::milliseconds());
-        else if (const char *theme = ThemeNotice::text(themes_)) view_.notify(theme, Board::milliseconds());
-        else if (themes_.error()) view_.notify(themes_.error(), Board::milliseconds());
-        else if (data_.zeroFile().error()) view_.notify(data_.zeroFile().error(),Board::milliseconds());
+        if (bootStart_.notice) view_.notify(Tooltip::Critical, bootStart_.notice, Board::milliseconds());
+        else if (!applied.ok()) view_.notify(Tooltip::Critical, result,Board::milliseconds());
+        else if (preferences_.error()) view_.notify(Tooltip::Critical, preferences_.error(), Board::milliseconds());
+        else if (preferences_.repaired() && preferences_.restored()) view_.notify(Tooltip::Critical, "Bad settings archived; backup copy restored", Board::milliseconds());
+        else if (preferences_.repaired()) view_.notify(Tooltip::Critical, "Bad settings archived; defaults written", Board::milliseconds());
+        else if (preferences_.restored()) view_.notify(Tooltip::Critical, "Settings restored from a backup copy", Board::milliseconds());
+        else if (const char *theme = ThemeNotice::text(themes_)) view_.notify(Tooltip::Critical, theme, Board::milliseconds());
+        else if (themes_.error()) view_.notify(Tooltip::Critical, themes_.error(), Board::milliseconds());
+        else if (data_.zeroFile().error()) view_.notify(Tooltip::Critical, data_.zeroFile().error(),Board::milliseconds());
         else if (const unsigned archived = data_.calibrationArchived()) {
             // Invalid, or bound to another factory record (its identity changed with the record's
             // format): kept as *.bad.NNNN.json, never rebound; those corrections are off now.
@@ -103,9 +103,9 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
             std::snprintf(text, sizeof text, "Calibration JSON archived (*.bad):%s%s%s%s",
                           archived & DataAccess::ZeroJson ? " zero" : "", archived & DataAccess::PwmJson ? " PWM" : "",
                           archived & DataAccess::GainJson ? " gain" : "", archived & DataAccess::InterleaveJson ? " interleave" : "");
-            view_.notify(text, Board::milliseconds());
+            view_.notify(Tooltip::Critical, text, Board::milliseconds());
         }
-        else if (boot_diagnostics.error==4) view_.notify("High unavailable; Normal active",Board::milliseconds());
+        else if (boot_diagnostics.error==4) view_.notify(Tooltip::Critical, "High unavailable; Normal active",Board::milliseconds());
         BootTiming::mark(BootTiming::View);
     } else { // Headless: no UI; Remote (and its 200 MHz) only if that profile really runs.
         boot_diagnostics.error = 2; display_.enabled(false); setRemote(true);
@@ -171,7 +171,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
             InputService::suppress();
             autoKey_.cancel();
             data_.closeDmmRange(); // Its release may be among the lost events.
-            if (uiReady_) view_.notify("Input overflow; press again",now);
+            if (uiReady_) view_.notify(Tooltip::Critical, "Input overflow; press again",now);
         }
         { // The REL/Power hold, from the input sampler's own timing; the long press covers headless.
             uint32_t held = 0;
@@ -193,7 +193,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
             else if (shots_.percent()/5 != shotProgress_/5) {
                 shotProgress_=shots_.percent();
                 char progress[40]; std::snprintf(progress,sizeof progress,"Saving screenshot: %u%%",shotProgress_);
-                view_.notify(progress,now);
+                view_.notify(Tooltip::Progress, progress,now);
             }
             if (uiReady_) { view_.service(now); render(); }
         } else {
@@ -253,6 +253,8 @@ void ApplicationController::applyPreferences() {
     // Only the hold mode and its parameters: a cycle or snapshot never comes back by itself.
     if (data_.meter().holdCycle().settings() != prefs_.meter.hold) data_.configureMeterHold(prefs_.meter.hold);
     idle_.configure(prefs_.idle,Board::milliseconds());
+    battery_.trim(prefs_.batteryGainPermille, prefs_.batteryOffsetMv);
+    view_.tooltips(prefs_.tooltipsHidden); // Boot and Reload settings JSON (GitHub #108).
     dimmed_=false;
     applyBrightness();
     dataRefresh_=true;
@@ -261,9 +263,9 @@ void ApplicationController::powerOff(uint32_t now) {
     if (powerFired_) return; // Once a hold: a refusal is not repeated every pass.
     powerFired_ = true;
     if (panel_==Panel::Zero) data_.cancelZero(now);
-    if (panel_ == Panel::GainMatch) finishGainMatch(now, nullptr, false);
+    if (panel_ == Panel::GainMatch) finishGainMatch(now, Tooltip::Done, nullptr, false);
 #if OPENOSC_BOARD == 703
-    if (panel_ == Panel::InterleaveMatch) finishInterleaveMatch(now, nullptr, false);
+    if (panel_ == Panel::InterleaveMatch) finishInterleaveMatch(now, Tooltip::Done, nullptr, false);
 #endif
     if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
     confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
@@ -305,7 +307,7 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     }
     if ((events.shortPress | events.longPress) & Keypad::Mode) { // A tap: the next of three screens; held: heldMode.
         const auto target = events.shortPress & Keypad::Mode ? nextMode(state_.mode) : heldMode(state_.mode);
-        if (selectMode(target, now) == ModeChange::Refused) view_.notify("Cannot switch measurement hardware",now);
+        if (selectMode(target, now) == ModeChange::Refused) view_.notify(Tooltip::Critical, "Cannot switch measurement hardware",now);
         return;
     }
     if ((events.longPress & Keypad::Menu) && !state_.settingsOpen) {
@@ -387,7 +389,7 @@ void ApplicationController::store(uint32_t now) {
     if (int32_t(now - saveWarnedAt_) > 600000) saveWarnedAt_ = now - 600000; // No int32 wrap on long uptimes.
     const int32_t since = int32_t(now - saveWarnedAt_);
     if (saveProblem_ && !view_.toastShowing() && (since >= 600000 || (saveProblem_ != saveWarned_ && since >= 120000))) {
-        saveWarned_ = saveProblem_; saveWarnedAt_ = now; view_.notify(saveProblem_, now);
+        saveWarned_ = saveProblem_; saveWarnedAt_ = now; view_.notify(Tooltip::Critical, saveProblem_, now);
     }
 }
 void ApplicationController::queuePlotSave(uint32_t now) {

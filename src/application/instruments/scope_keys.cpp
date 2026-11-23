@@ -62,14 +62,14 @@ void ApplicationController::resetPan(uint32_t now) {
 bool ApplicationController::centerTrigger(uint32_t now) {
     auto options = view_.waveform().options();
     if (options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay) {
-        view_.notify("Center trigger needs Y-T", now);
+        view_.notify(Tooltip::Unavailable, "Center trigger needs Y-T", now);
         return false;
     }
     auto request = data_.scopeRequest();
     const bool held = data_.scopeHeld();
     request.trigger.position = 500;
     if (!request.same(data_.scopeRequest()) && !applyScope(request, now, ScopeApply::StageIfHeld)) {
-        view_.notify("Finish data transfer first", now);
+        view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
         return false;
     }
     bool plotChanged = options.panPpb || !options.lockTrigger;
@@ -84,7 +84,7 @@ bool ApplicationController::centerTrigger(uint32_t now) {
     view_.waveform().configure(options);
     if (plotChanged) queuePlotSave(now);
     dataRefresh_ = true;
-    view_.notify("Trigger centered", now); // Also when already centered: the action is done (#65).
+    view_.notify(Tooltip::Done, "Trigger centered", now); // Also when already centered: the action is done (#65).
     return true;
 }
 void ApplicationController::beginHeldView() {
@@ -136,6 +136,15 @@ void ApplicationController::followNextCapture() {
     view_.waveform().configure(options);
     dataRefresh_ = true;
 }
+// A press must not change the view unseen (issue #89): with no record on show, or one whose memory a
+// capture waiting for its trigger (WAIT) took, nothing redraws it. A running capture that waits for
+// no edge brings its next record in the new view, also when it reuses the shown record's memory
+// meanwhile, as a single slot does on the ZT703S (issue #106). Roll redraws itself; HOLD keeps its record.
+bool ApplicationController::viewFollows() const {
+    const auto &model = view_.waveform().model();
+    if (!model.hasFrame()) return false;
+    return model.metadata().rolling || data_.scopeRecordStored() || (!data_.scopeHeld() && !data_.scopeWaiting());
+}
 void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
     const bool held = data_.scopeHeld();
     if (held) beginHeldView();
@@ -149,19 +158,16 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
     panRepeats_ = fine || !sign || sign != panSign_ ? 0 : panRepeats_ + 1;
     panSign_ = sign;
     if (options.mode != plot::Mode::XY) horizontal *= 1 << std::min(3U, panRepeats_ / PanDoubling);
-    // A pan moves the record on show: none, or one whose memory a waiting capture took, has nothing
-    // to move, and a press must not change the view unseen (issue #89).
     const auto &model = view_.waveform().model();
-    if (horizontal && options.mode != plot::Mode::XY &&
-        (!model.hasFrame() || (!model.metadata().rolling && !data_.scopeRecordStored()))) {
-        view_.notify("No record to move", now);
+    if (horizontal && options.mode != plot::Mode::XY && !viewFollows()) {
+        if (fine) view_.notify(Tooltip::Unavailable, "No record to move", now); // Once per press: a held key repeats silently.
         horizontal = 0;
     }
     const auto change = focus_ == plot::Focus::Trigger || focus_ == plot::Focus::Zoom // Pan only: no channel moves.
         ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &model, false)}
         : plot::TraceMove::apply(request, options, selectedChannel_, held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
                                  &model);
-    if (change.request && !applyEdited(request, now)) view_.notify("Finish data transfer first", now);
+    if (change.request && !applyEdited(request, now)) view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
     if (change.view) {
         view_.waveform().configure(options);
         if (!held) queuePlotSave(now);
@@ -170,7 +176,7 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
 bool ApplicationController::holdKeys(uint32_t keys, uint32_t now) {
     if (!(keys & Keypad::HoldSave)) return false;
     if (!data_.scopeHeld()) data_.holdScope(true);
-    else if (!data_.runScope() && uiReady_) view_.notify("Cannot run: the record is in use", now);
+    else if (!data_.runScope() && uiReady_) view_.notify(Tooltip::Unavailable, "Cannot run: the record is in use", now);
     return true;
 }
 void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
@@ -255,7 +261,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
             }
             return;
         }
-        if (!applyEdited(request, now, LevelIntent::Set)) { view_.notify("Finish data transfer first", now); return; }
+        if (!applyEdited(request, now, LevelIntent::Set)) { view_.notify(Tooltip::Unavailable, "Finish data transfer first", now); return; }
         if (request.trigger.level == (delta > 0 ? bounds.high : bounds.low)) pulseTriggerLimit(now); // Each press against it.
         return;
     }
@@ -292,7 +298,7 @@ void ApplicationController::scaleKeys(uint32_t keys, uint32_t now) {
     const auto limits = request.frontend.range[source] == data_.scopeRequest().frontend.range[source]
         ? scope::TriggerLevel::Bounds{} : triggerBounds(request);
     if (!applyFollowing(request, now, held ? ScopeApply::StageIfHeld : ScopeApply::Configure, LevelIntent::Follow, limits)) {
-        view_.notify("Finish data transfer first", now);
+        view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
         return;
     }
     if (held) followNextCapture();
@@ -389,17 +395,23 @@ bool ApplicationController::resetView(uint32_t now) {
     const bool held = data_.scopeHeld();
     if (held) beginHeldView();
     if (home && !centerChannels(now)) return false;
-    auto options = view_.waveform().options();
-    if (plot::ViewZoom::reset(options)) { view_.waveform().configure(options); queuePlotSave(now); }
-    if (held) { heldView_.zoom = heldView_.zoomOut = 1; heldView_.panPpb = 0; }
-    view_.notify(home ? "Home view" : "Zoom and pan reset", now);
+    homeZoom(now);
+    view_.notify(Tooltip::Done, home ? "Home view" : "Zoom and pan reset", now);
     dataRefresh_ = true;
     return true;
+}
+void ApplicationController::homeZoom(uint32_t now) {
+    auto options = view_.waveform().options();
+    bool changed = plot::ViewZoom::reset(options);
+    if (changed) view_.waveform().configure(options);
+    if (heldViewActive_) changed |= plot::ViewZoom::reset(heldView_);
+    if (changed) queuePlotSave(now);
+    dataRefresh_ = true;
 }
 void ApplicationController::enterZoom(uint32_t now) {
     const auto &model = view_.waveform().model();
     if (!plot::ViewZoom::available(view_.waveform().options(), model)) {
-        view_.notify(model.hasFrame() && model.metadata().rolling ? "Zoom & Pan: not in Roll" : "Zoom & Pan needs a Y-T record", now);
+        view_.notify(Tooltip::Unavailable, model.hasFrame() && model.metadata().rolling ? "Zoom & Pan: not in Roll" : "Zoom & Pan needs a Y-T record", now);
         return;
     }
     if (focus_ != plot::Focus::Zoom) zoomReturn_ = focus_;
@@ -418,11 +430,11 @@ void ApplicationController::zoomKeys(uint32_t arrows, uint32_t now, bool fine) {
     const int vertical = axis(arrows, Keypad::Down, Keypad::Up);
     if (!vertical) { moveTrace(arrows, now, fine); return; }
     const auto &model = view_.waveform().model();
-    if (!model.hasFrame() || !data_.scopeRecordStored()) { view_.notify("No record to zoom", now); return; } // As moveTrace (#89).
+    if (!viewFollows()) { if (fine) view_.notify(Tooltip::Unavailable, "No record to zoom", now); return; } // As moveTrace.
     auto options = view_.waveform().options();
     const auto step = plot::ViewZoom::step(options, vertical, model);
-    if (step == plot::ViewZoom::Step::Unavailable) { view_.notify("Zoom & Pan needs a Y-T record", now); return; }
-    if (step == plot::ViewZoom::Step::Limit) { view_.notify(vertical > 0 ? "Maximum zoom" : "Minimum zoom", now); return; }
+    if (step == plot::ViewZoom::Step::Unavailable) { view_.notify(Tooltip::Unavailable, "Zoom & Pan needs a Y-T record", now); return; }
+    if (step == plot::ViewZoom::Step::Limit) { view_.notify(Tooltip::Unavailable, vertical > 0 ? "Maximum zoom" : "Minimum zoom", now); return; }
     const bool held = data_.scopeHeld();
     if (held) beginHeldView(); // Before the change: what RUN returns to.
     view_.waveform().configure(options);

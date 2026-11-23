@@ -52,11 +52,12 @@ PreferencesResult ApplicationController::applyDataPreferences() {
 }
 // The one path of the choice (menu, SCPI): the capture replanned at once, the setting saved, a notice.
 bool ApplicationController::selectInterleave(scope::InterleaveMode mode, uint32_t now) {
-    if (!data_.selectInterleave(mode)) { view_.notify("Cannot change interleave now", now); return false; }
+    if (!data_.selectInterleave(mode)) { view_.notify(Tooltip::Unavailable, "Cannot change interleave now", now); return false; }
     if (prefs_.scope.interleave != unsigned(mode)) {
         prefs_.scope.interleave = unsigned(mode);
         changed(now);
-        view_.notify(mode == scope::InterleaveMode::On ? "Interleave on: CH1 alone"
+        view_.notify(mode == scope::InterleaveMode::On ? Tooltip::Advisory : Tooltip::Done, // On takes CH2 away.
+                     mode == scope::InterleaveMode::On ? "Interleave on: CH1 alone"
                      : mode == scope::InterleaveMode::Auto ? "Interleave auto" : "Interleave off", now);
     }
     return true;
@@ -66,7 +67,7 @@ bool ApplicationController::selectInterleave(scope::InterleaveMode mode, uint32_
 ApplicationController::ModeChange ApplicationController::selectMode(MeasurementMode next, uint32_t now) {
     if (next == state_.mode) return ModeChange::Selected;
     if (!cancelAuto(now)) return ModeChange::Busy;
-    if (panel_ == Panel::Bode) finishBode(now, nullptr); // Any path (SCPI too): the instrument restored first.
+    if (panel_ == Panel::Bode) finishBode(now, Tooltip::Done, nullptr); // Any path (SCPI too): the instrument restored first.
     if (bodeOwns()) return ModeChange::Busy; // Its restore refused (busy) or unconfirmed: tried again, then the mode.
     const auto previousMeasurement = data_.measurementMode();
     if (!data_.select(next)) return ModeChange::Refused; // The menu and its edit stay as they are.
@@ -80,7 +81,7 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     if (state_.mode == MeasurementMode::Multimeter) {
         const bool requested = data_.selectDmmFunction(dmm::Function(prefs_.meterFunction));
         meterRestore_.arm(requested);
-        if (!requested && uiReady_) view_.notify("DMM function selection failed",now);
+        if (!requested && uiReady_) view_.notify(Tooltip::Critical, "DMM function selection failed",now);
     }
     dataRefresh_=true;
     prefs_.mode = uint32_t(state_.mode);
@@ -197,7 +198,7 @@ bool ApplicationController::triggerMidpoint(uint32_t now) {
     scope::FrameLease frame;
     double midpoint;
     if (!data_.acquireScopeWait(frame) || !ui::TriggerEditor::midpoint(frame.view(), request.trigger.channel, midpoint)) {
-        view_.notify("50% needs a completed channel capture",now);
+        view_.notify(Tooltip::Unavailable, "50% needs a completed channel capture",now);
         return false;
     }
     const unsigned source = unsigned(request.trigger.channel);
@@ -206,7 +207,7 @@ bool ApplicationController::triggerMidpoint(uint32_t now) {
     const double exact = scope::TriggerLevel::inFrame(midpoint, record, target);
     frame.release(); // Applying restarts capture, which needs every frame lease back.
     request.trigger.level = triggerBounds(request).nearest(exact);
-    if (!applyEdited(request,now,LevelIntent::Set)) { view_.notify("Finish data transfer first",now); return false; }
+    if (!applyEdited(request,now,LevelIntent::Set)) { view_.notify(Tooltip::Unavailable, "Finish data transfer first",now); return false; }
     const auto place = triggerPlace(data_.scopeRequest());
     const double remainder = exact - place.level;
     const bool limited = std::abs(remainder) > .5;

@@ -7,9 +7,9 @@ namespace openosc {
 void ApplicationController::meterHoldKey(uint32_t now) {
     const auto &meter = data_.meter();
     if (meter.held() || prefs_.meter.hold.mode == dmm::HoldMode::Manual) {
-        if (!data_.holdMeter(!meter.held())) view_.notify("HOLD needs a valid reading", now);
+        if (!data_.holdMeter(!meter.held())) view_.notify(Tooltip::Unavailable, "HOLD needs a valid reading", now);
     } else if (meter.holdCycle().active()) data_.cancelMeterHold();
-    else if (!data_.armMeterHold()) view_.notify("HOLD needs the DMM", now);
+    else if (!data_.armMeterHold()) view_.notify(Tooltip::Unavailable, "HOLD needs the DMM", now);
     dataRefresh_ = true;
 }
 // Each committed field is saved and applied: the detector takes the new settings (a running cycle and

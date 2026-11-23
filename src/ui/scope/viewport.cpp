@@ -4,20 +4,15 @@
 
 namespace openosc::plot {
 bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsigned w, unsigned h, uint32_t phase) {
-    if (!m.valid() || !o.valid() || w < 2 || h < 2 || w > MaximumWidth || h > MaximumHeight)
-        return false;
+    if (w < 2 || h < 2 || w > MaximumWidth || h > MaximumHeight) return false;
+    const uint64_t requested = requestedSpanQ16(m, o);
+    if (!requested) return false;
     width = w;
     height = h;
-    // A held record may be shown at the next capture's time/div (Options::heldTimebaseNs); the
-    // record's own timebase and sample rate stay what they are.
-    const uint64_t timebase = m.timebaseNs && o.heldTimebaseNs ? o.heldTimebaseNs : m.timebaseNs;
-    const uint64_t fullSpan = timebase
-        ? uint64_t(std::llround(timebase/100000000.0*m.samplesPerSecond.value()*65536))
-        : uint64_t(m.samples-1)<<16;
     const uint64_t record = uint64_t(m.samples - 1) << 16;
-    spanQ16 = std::max<uint64_t>(65536, fullSpan * o.zoomOut / o.zoom);
+    spanQ16 = requested;
     if (o.zoomOut > 1) spanQ16 = std::min(spanQ16, record);
-    if (timebase != m.timebaseNs) spanQ16 = std::min(spanQ16, MaximumHeldSpanQ16);
+    if (m.timebaseNs && o.heldTimebaseNs && o.heldTimebaseNs != m.timebaseNs) spanQ16 = std::min(spanQ16, MaximumHeldSpanQ16);
     // A trigger-locked time view of a shifted trigger (FrameMetadata::triggerShift) counts positions
     // from the record as it would be cut at its pretrigger point: pan, the lock and the zoom-out
     // bounds place it as an unshifted record, its missing part outside the record (RecordGaps). Any
@@ -49,6 +44,16 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
     // An explicitly centered held trigger can leave part of the viewport outside the record.
     if (o.zoomOut > 1 && !centered) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
     return true;
+}
+uint64_t Viewport::requestedSpanQ16(const scope::FrameMetadata &m, const Options &o) {
+    if (!m.valid() || !o.valid()) return 0;
+    // A held record may be shown at the next capture's time/div (Options::heldTimebaseNs); the
+    // record's own timebase and sample rate stay what they are.
+    const uint64_t timebase = m.timebaseNs && o.heldTimebaseNs ? o.heldTimebaseNs : m.timebaseNs;
+    const uint64_t fullSpan = timebase
+        ? uint64_t(std::llround(timebase/100000000.0*m.samplesPerSecond.value()*65536))
+        : uint64_t(m.samples-1)<<16;
+    return std::max<uint64_t>(65536, fullSpan * o.zoomOut / o.zoom);
 }
 bool Viewport::phased(const scope::FrameMetadata &m, const Options &o) const {
     return o.lockTrigger && m.triggered && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay) && !aggregates();
