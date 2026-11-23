@@ -79,16 +79,16 @@ size_t Tmc::packet(uint8_t *output, size_t capacity) {
         for (unsigned i = 0; i < 4; ++i) reply_[4+i] = uint8_t(transfer_ >> (8*i));
         reply_[8] = transfer_ == engine_.available();
         outputPadding_ = (4 - (transfer_ & 3)) & 3; total_ = 12 + transfer_ + outputPadding_;
-        replyAt_ = 0; requested_ = 0; active_ = true; ended_ = false; inData_ = 0;
+        replyAt_ = 0; requested_ = 0; generation_ = engine_.outputGeneration(); active_ = true; ended_ = false; inData_ = 0;
     }
     size_t used = 0;
     while (replyAt_ < 12 && used < capacity) output[used++] = reply_[replyAt_++];
     bool early = false; // A short packet ends the host's transfer: after an early stop, read only to the packet's end.
     while (transfer_ && used < capacity) {
         const size_t want = std::min<size_t>(transfer_, early ? 64 - (used & 63) : capacity - used);
-        const size_t count = engine_.read(output + used, want);
+        const size_t count = engine_.outputGeneration() == generation_ ? engine_.read(output + used, want) : 0;
         transfer_ -= count; used += count; inData_ += count;
-        if (!count) { // The engine dropped its output (reset, -410): zeros end the announced transfer.
+        if (!count) { // The engine dropped this reply (reset, -410): zeros end it, never the next reply's bytes.
             const size_t zeros = std::min<size_t>(transfer_, capacity - used);
             std::memset(output + used, 0, zeros); transfer_ -= zeros; used += zeros; inData_ += zeros;
             break;

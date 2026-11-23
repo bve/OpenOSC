@@ -28,6 +28,7 @@ void Engine::endScreen() {
     screenTicket_ = 0;
 }
 void Engine::discardOutput() {
+    ++generation_;
     endMeasure(); backend_.releaseFrame();
     endDecode(); endScreen(); endFile();
     responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = 0;
@@ -35,6 +36,7 @@ void Engine::discardOutput() {
     completion_ = Completion::None;
 }
 void Engine::reset() {
+    ++generation_;
     endMeasure(); parser_.reset(); errors_.clear(); backend_.endSession(); endDecode(); endScreen(); endFile();
     responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = inputPending_ = maxPending_ = false;
@@ -103,7 +105,11 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
 }
 void Engine::poll(uint32_t now) {
     now_ = now;
-    if (profileKnown_ && profile_ != backend_.multimeter()) { reset(); return; }
+    if (profileKnown_ && profile_ != backend_.multimeter()) { // A reply cut short says so (-410).
+        const bool dropped = available() != 0;
+        reset(); if (dropped) errors_.push(-410);
+        return;
+    }
     profile_ = backend_.multimeter(); profileKnown_ = true;
     // A stop the generator made by itself (DAC underrun, a setting above the clock's limit): -240 once
     // when the count moved (at most one a poll, never repeated for a stop already reported).

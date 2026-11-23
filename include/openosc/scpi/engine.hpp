@@ -25,6 +25,7 @@ public:
     void abortInput();
     void discardOutput();
     uint8_t statusByte() const;
+    uint32_t outputGeneration() const { return generation_; } // Moves when pending output is dropped (reset, discard).
 private:
     bool common(const Command &command);
     bool scopeCommand(const Command &command);
@@ -55,6 +56,7 @@ private:
     Backend &backend_;
     Parser parser_;
     ErrorQueue errors_;
+    uint32_t generation_ = 0;
     char response_[256]{};
     size_t responseSize_ = 0, responseAt_ = 0;
     // WAV:DATA?/FRAMe?: a channel's every stride-th point from first, or (peak) a min/max per bucket.
