@@ -59,15 +59,20 @@ void MeterBar::visible(bool value) {
     visible_ = value;
     showTicks();
 }
-// A label every major thousand counts along the bar, the first left-aligned at zero, the last
-// right-aligned at full scale; labels a smaller scale does not use stay hidden.
+// A label every major tick along the bar in thousands of counts (one decimal where a scale's numbers
+// are not whole: the diode's 1.1 V steps), the first left-aligned at zero, the last right-aligned at
+// full scale; labels a smaller scale does not use stay hidden.
 void MeterBar::scale(dmm::CountScale counts, bool temperature) {
     scale_ = counts;
     const int last = counts.labels() - 1;
-    const int labelWidth = temperature ? 38 : TickWidth;
+    const bool tenths = !temperature && (counts.major * counts.tickStep) % 1000;
+    const int labelWidth = temperature || tenths ? 38 : TickWidth;
     const int divisor = temperature ? dmm::TemperatureAxis::CountsPerDegree : 1000;
     for (int i = 0; i <= last; ++i) {
-        char text[12]; std::snprintf(text, sizeof text, "%d", counts.tickValue(i * counts.major) / divisor);
+        const int value = counts.tickValue(i * counts.major);
+        char text[12];
+        if (tenths && value % 1000) std::snprintf(text, sizeof text, "%s%d.%d", value < 0 ? "-" : "", std::abs(value) / 1000, std::abs(value) % 1000 / 100);
+        else std::snprintf(text, sizeof text, "%d", value / divisor);
         const int tick = BarX + i * Segments / last * Pitch;
         const int left = i == last ? tick - labelWidth : i ? tick - labelWidth / 2 : tick;
         auto *label = ticks_[i];

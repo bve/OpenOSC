@@ -6,7 +6,8 @@
 namespace openosc::ui {
 // Segmented bar in the style of a handheld DMM: zero at the left, magnitude to the right, a
 // separate polarity sign and the reading's scale in thousands of counts (dmm::scaleFor: 0-25 on the
-// ZT703S, 0-66 on the ZT706S, 0-10 for capacitance on both). Temperature uses signed degree bands.
+// ZT703S, 0-66 on the ZT706S, 0-10 for capacitance and 0-3.3 V for the diode on both). Temperature
+// uses signed degree bands.
 class MeterBar {
 public:
     void create(lv_obj_t *parent);

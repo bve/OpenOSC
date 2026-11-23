@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/measurement/dmm/ranges.hpp"
 #include "openosc/measurement/dmm/relative.hpp"
 #include "openosc/measurement/dmm/resolution.hpp"
 #include "openosc/measurement/dmm/temperature_axis.hpp"
@@ -8,7 +9,8 @@
 
 namespace openosc::dmm {
 // The magnitude the bar and the dial show, in counts of the reading's own scale (scaleFor: the
-// board's, capacitance its 9999-count one), clamped to its full scale; overload pegs it with its sign.
+// board's, capacitance its 9999-count one, the diode its millivolts), clamped to its full scale;
+// overload pegs it with its sign.
 struct BarReading {
     CountScale scale = BoardScale;
     int counts = 0;
@@ -16,10 +18,22 @@ struct BarReading {
     bool temperature = false;
     // Position within the scale. Temperature counts are measured from its signed lower bound.
     float fraction() const { return float(std::abs(counts)) / float(scale.fullScale); }
+    // The decimals the dial numbers this scale with (AnalogDial::scale; 255: unknown): fixed for the
+    // temperature and the diode, else the reading's layout; an OL, which may omit it (ZT703S, 25 MOhm),
+    // takes its range's.
+    unsigned decimals(const Result &result) const {
+        if (temperature) return TemperatureAxis::Decimals;
+        if (scale == DiodeScale) return DiodeDecimals;
+        if (result.primary.status == DataStatus::Overload)
+            if (const auto *range = Ranges::current(result)) return range->decimals;
+        return result.primary.valid() ? Resolution::decimals(result) : result.decimals;
+    }
+    // The unit of those numbers: the diode's are volts, also before a packet carries its unit.
+    const char *unit(const Result &result) const { return scale == DiodeScale ? "V" : result.unit; }
     static BarReading from(const Result &result, DataStatus health,
                            const RelativeReading *relative = nullptr, TemperatureAxis *axis = nullptr) {
         BarReading bar;
-        bar.scale = scaleFor(result.primary.quantity);
+        bar.scale = scaleFor(result);
         bar.temperature = result.primary.quantity == Quantity::Temperature;
         bar.status = health == DataStatus::Ok ? result.primary.status : health;
         const bool delta = relative && relative->matches(result);
@@ -47,7 +61,12 @@ struct BarReading {
         if (!result.primary.valid()) { bar.status = DataStatus::Unsupported; return bar; }
         double magnitude = result.rawMagnitude;
         bool negative = result.primary.si < 0;
-        if (delta) {
+        if (bar.scale == DiodeScale) { // The physical volts, whatever decimals the display uses.
+            const double volts = delta ? relative->apply(result).si : result.primary.si;
+            negative = volts < 0;
+            static_assert(DiodeDecimals == 3, "millivolt counts");
+            magnitude = std::abs(volts) * 1000;
+        } else if (delta) {
             NumericValue unit;
             const unsigned decimals = Resolution::decimals(result);
             if (decimals > 4 || !UnitParser::parse("1", result.unit, unit) || unit.si <= 0) {

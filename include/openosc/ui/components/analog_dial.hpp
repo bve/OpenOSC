@@ -7,11 +7,11 @@
 namespace openosc::ui {
 // A moving-coil panel meter: a wide arc whose radius follows the face's width (the pivot is below
 // the face), the numbers above it, the reading's scale (thousands of counts of the range,
-// dmm::scaleFor: 0-25 on the ZT703S, 0-66 on the ZT706S, 0-10 for capacitance on both), a needle with
-// NeedleMotion inertia. Temperature uses signed degree bands instead of magnitude. For other
-// readings, like the bar, the needle shows the magnitude and a separate minus at the lower
-// left, before the scale in reading order, marks a negative reading; OL pegs it right in the alert
-// colour; no data lets it fall back to zero; stale and HOLD keep it where it is and say so (after the minus).
+// dmm::scaleFor: 0-25 on the ZT703S, 0-66 on the ZT706S, 0-10 for capacitance and 0-3.3 V for the
+// diode on both), a needle with NeedleMotion inertia. Temperature uses signed degree bands instead
+// of magnitude. For other readings, like the bar, the needle shows the magnitude and a separate
+// minus at the lower left, before the scale in reading order, marks a negative reading; OL pegs it
+// right in the alert colour; no data lets it fall back to zero; stale and HOLD keep it where it is and say so (after the minus).
 // The input jacks (and RMS) are its marking, as on a panel meter's face: right-aligned in the top
 // right corner, which the arc, the ticks and the needle never reach and the numbers leave free.
 // service() advances the needle by the real elapsed time and invalidates only the needle's
