@@ -19,6 +19,7 @@ enum class ScopeRole : uint8_t {
     Secondary,   // Muted text, disabled channels (Theme::muted).
     Grid,        // Graticule, separators.
     Channel1, Channel2, Math, Reference,
+    Meter,       // The Scope's DMM trace: its line, zero tag, cards and footer panel (no Theme field).
     Cursor,      // Cursor lines and their tags.
     Trigger,     // Trigger level/position marks; Inherit: the source channel's colour (as today).
     Selection,   // Softkey/menu selection and focus (Theme::accent).

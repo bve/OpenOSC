@@ -111,7 +111,6 @@ bool DataAccess::activate(MeasurementMode view) {
     captureFailed_ = false;
     measurement_ = view;
     if (view != MeasurementMode::Multimeter) session_.stop(timeUs_, dmm::LogEnd::ModeChange); // Committed by poll().
-    if (view != MeasurementMode::Oscilloscope) meterReadings_.invalidate(); // Back in the Scope, Roll is entered anew.
     if (view == MeasurementMode::Multimeter) meter_.expire(timeUs_); // A reading from before is not current.
     uint32_t remainingMs = 0;
     if (view != MeasurementMode::Multimeter) watchdog_.deactivate();

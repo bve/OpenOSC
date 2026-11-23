@@ -114,7 +114,6 @@ void ParameterBar::palette(const Theme &theme, const ElementStyle &style) {
     muted_ = theme.muted;
     channels_[0] = theme.channel1; channels_[1] = theme.channel2;
     neutral_ = theme.foreground;
-    reference_ = theme.reference;
     selectedText_ = customFont_ = false;
     if (screenSelected_ >= Count) screenSelected_ = 0;
     if (!context_) selected_ = screenSelected_;
@@ -141,7 +140,7 @@ uint32_t ParameterBar::accent(unsigned index) const {
     case Tint::Channel1: return channels_[0];
     case Tint::Channel2: return channels_[1];
     case Tint::Neutral: return neutral_;
-    case Tint::Reference: return reference_;
+    case Tint::Meter: return meter_;
     default: return highlight_;
     }
 }

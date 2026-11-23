@@ -152,9 +152,9 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // Counts each start of the chip under the Scope: it comes up in its default function, so the
     // caller selects the saved one (as on a DMM entry). Restarts after silence: dmmRestarts().
     uint32_t meterTraceStarts() const { return meterTraceStarts_; }
-    // The readings the trace draws in Roll: time on the Roll snapshots' clock (nowUs), the value in SI.
-    // Kept while Roll runs at one time/div (a HOLD freezes them, a restart in between leaves a gap);
-    // restarted when Roll is entered, its time/div changes or the reading's quantity does.
+    // The readings the trace draws: time on the frames' clock (nowUs), the value in SI. Kept through
+    // every capture, timebase and measurement (a HOLD freezes them, a restart in between leaves a gap);
+    // restarted when the reading's quantity changes.
     const dmm::ReadingTrace &meterReadings() const { return meterReadings_; }
     // The newest reading of the running trace, at most ReadingStaleUs old; nullptr without one.
     static constexpr uint64_t ReadingStaleUs = 2000000;
@@ -450,14 +450,14 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool framePacket(uint8_t (&packet)[dmm::Packet::Bytes], unsigned &budget);
     void serviceMeterTrace(uint32_t now);
     void stopMeterTrace();
-    void traceReading(); // The session's newest reading into meterReadings_ (Roll running, not held).
+    void traceReading(); // The session's newest reading into meterReadings_ (not held).
     bool meterTraceAsked_ = false, meterTraceRunning_ = false;
     // Readings were missed since the last one kept (HOLD, a restart): the next is preceded by a gap.
     bool meterGap_ = false;
     uint32_t meterTraceStarts_ = 0;
     uint64_t meterTraceSinceUs_ = 0; // Its last start: an older reading is not this run's.
-    // Valid from a Roll start to the next start of another capture or a measurement change.
-    dmm::ReadingTrace meterReadings_{scope::AcquisitionArena::rollSpare()};
+    static dmm::ReadingTrace::Reading *meterTraceMemory(); // Its ITCM (.meter_trace), or nullptr (meter_trace.cpp).
+    dmm::ReadingTrace meterReadings_{meterTraceMemory()};
     static_assert(dmm::LinkWatchdog::OffMs <= dmm::FunctionSelector::PowerOnWaitMs, "A selection's deadline covers the power-on wait");
     dmm::LinkWatchdog watchdog_; // Silence power-cycles, the minimum off time, the UART's bounded restarts.
     static constexpr uint32_t DmmCloseMs = 500;

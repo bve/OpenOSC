@@ -59,9 +59,9 @@ void WaveformWidget::channelView(const plot::ChannelView &view) {
     palette_.view = view;
     if (object_) lv_obj_invalidate(object_);
 }
-void WaveformWidget::roles(uint32_t trigger, uint32_t tagText, uint32_t readout) {
-    if (palette_.trigger == trigger && palette_.tagText == tagText && palette_.readout == readout) return;
-    palette_.trigger = trigger; palette_.tagText = tagText; palette_.readout = readout;
+void WaveformWidget::roles(uint32_t trigger, uint32_t tagText, uint32_t readout, uint32_t meter) {
+    if (palette_.trigger == trigger && palette_.tagText == tagText && palette_.readout == readout && palette_.meter == meter) return;
+    palette_.trigger = trigger; palette_.tagText = tagText; palette_.readout = readout; palette_.meter = meter;
     if (object_) lv_obj_invalidate(object_);
 }
 bool WaveformWidget::configure(const plot::Options &options) {

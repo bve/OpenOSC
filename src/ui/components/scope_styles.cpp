@@ -7,13 +7,16 @@ using R = ScopeRole;
 constexpr unsigned SchemeRoles = unsigned(R::Selection) + 1; // Background .. Selection; the rest derive.
 // Each scheme's own colours, Background .. Selection (Trigger is always the source's colour).
 // Daylight keeps text, cursors and channels deep enough for a light body (WCAG >= 4.5 on text).
+// The DMM trace's colour stands apart from both channels, Math, Reference and Selection.
 constexpr uint32_t schemes[unsigned(ScopeScheme::Count) - 1][SchemeRoles] = {
     // High contrast
-    {0x000000, 0x141414, 0xffffff, 0xc8c8c8, 0x404040, 0xffff00, 0x00e5ff, 0xff4dff, 0xb8b8ff, 0xffffff, 0, 0x00ff9c},
+    {0x000000, 0x141414, 0xffffff, 0xc8c8c8, 0x404040, 0xffff00, 0x00e5ff, 0xff4dff, 0xb8b8ff, 0xff8c1a, 0xffffff, 0, 0x00ff9c},
     // Daylight
-    {0xf8fafc, 0xe2e8f0, 0x0f172a, 0x475569, 0xcbd5e1, 0xb45309, 0x0369a1, 0x047857, 0x6d28d9, 0x0f172a, 0, 0x1d4ed8},
+    {0xf8fafc, 0xe2e8f0, 0x0f172a, 0x475569, 0xcbd5e1, 0xb45309, 0x0369a1, 0x047857, 0x6d28d9, 0xbe123c, 0x0f172a, 0, 0x1d4ed8},
     // Amber
-    {0x0d0800, 0x1f1405, 0xffc46b, 0xa87a3a, 0x3d2a10, 0xffb238, 0xff6b3d, 0xfde047, 0xe9e3d3, 0xfff1d6, 0, 0xffd27a}};
+    {0x0d0800, 0x1f1405, 0xffc46b, 0xa87a3a, 0x3d2a10, 0xffb238, 0xff6b3d, 0xfde047, 0xe9e3d3, 0xa3e635, 0xfff1d6, 0, 0xffd27a}};
+// Current: the Theme has no DMM colour (its JSON no key for it); ColorCatalog's Green.
+constexpr uint32_t CurrentMeter = 0x4ade80;
 uint32_t themeColor(const Theme &t, R role) {
     switch (role) {
     case R::Background: return t.background;
@@ -25,6 +28,7 @@ uint32_t themeColor(const Theme &t, R role) {
     case R::Channel2: return t.channel2;
     case R::Math: return t.math;
     case R::Reference: return t.reference;
+    case R::Meter: return CurrentMeter;
     case R::Cursor: return t.cursor;
     case R::Selection: return t.accent;
     default: return 0;

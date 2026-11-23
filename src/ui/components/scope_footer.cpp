@@ -69,6 +69,19 @@ void ScopeFooter::view(const plot::ChannelView &view) {
     view_ = view; pages_.view(view);
     paint();
 }
+void ScopeFooter::meter(const plot::MeterReadouts &meter) {
+    if (meter == meter_) return;
+    meter_ = meter;
+    if (replan() || meterShown()) paint();
+}
+bool ScopeFooter::meterShown() const {
+    if (!pages_.count()) return false;
+    if (pages_.kind() == FooterPages::Kind::Scales) return pages_.meterPanel() < Panels;
+    if (pages_.kind() != FooterPages::Kind::Readouts) return false;
+    for (unsigned p = 0; p < Panels; ++p)
+        if (pages_.cell(p * PerChannel).channel == FooterPages::Meter) return true;
+    return false;
+}
 void ScopeFooter::nextPage() {
     pages_.next();
     paint();
@@ -81,12 +94,13 @@ bool ScopeFooter::replan() {
         spectrum = model_->options().mode == plot::Mode::Spectrum;
         scales = model_->options().showScale;
     } else if (countersValid_) for (unsigned c = 0; c < 2; ++c) enabled[c] = counters_.enabled & (1U << c);
-    return pages_.plan(selection_, enabled, spectrum, scales);
+    return pages_.plan(selection_, enabled, spectrum, scales, meter_.shown);
 }
 bool ScopeFooter::enabled(unsigned channel) const {
     return model_ ? model_->metadata().channels[channel].enabled : !countersValid_ || (counters_.enabled & (1U << channel));
 }
 uint32_t ScopeFooter::channelColor(unsigned channel) const {
+    if (channel == FooterPages::Meter) return meterColor_;
     return !enabled(channel) ? theme_->muted : view_.slot(channel) ? theme_->channel2 : theme_->channel1;
 }
 void ScopeFooter::look(unsigned channel, const uint32_t *color) {
@@ -128,10 +142,11 @@ void ScopeFooter::readoutPage() {
     for (unsigned c = 0; c < Panels; ++c) readoutPanel(c);
 }
 // The hardware counter's slots read the last snapshot even before a frame; the computed values
-// wait for a frame and its result.
-// p: the panel; its channel is the cells' (the one channel on fills both).
+// wait for a frame and its result; the DMM trace's are its own (meter()), in its unit.
+// p: the panel; its channel is the cells' (the one channel on fills both; the DMM trace may too).
 void ScopeFooter::readoutPanel(unsigned p) {
     const unsigned c = pages_.cell(p * PerChannel).channel;
+    const bool meter = c == FooterPages::Meter;
     const uint32_t color = channelColor(c);
     look(p, &color);
     if (pages_.cell(p * PerChannel).slot == FooterPages::ChannelOff) {
@@ -139,13 +154,17 @@ void ScopeFooter::readoutPanel(unsigned p) {
         return;
     }
     ReadoutRow::Item items[ReadoutRow::Items];
-    const bool computed = resultValid_ && result_.valid && result_.computed[c];
+    const bool computed = !meter && resultValid_ && result_.valid && result_.computed[c];
     for (unsigned k = 0; k < PerChannel; ++k) {
         const auto place = pages_.cell(p * PerChannel + k);
         if (place.slot == FooterPages::Empty || place.slot == FooterPages::ChannelOff) continue;
         auto &item = items[k];
-        const unsigned kind = selection_.values[c][place.slot];
-        if (kind == unsigned(scope::Measurement::CounterFrequency)) {
+        const unsigned kind = meter ? selection_.meter[place.slot] : selection_.values[c][place.slot];
+        if (meter) {
+            if (!meter_.offers(scope::Measurement(kind))) continue; // RMS of an AC function's readings: its cell stays empty.
+            item.valid = meter_.value(scope::Measurement(kind), item.value);
+            item.unit = meter_.unit;
+        } else if (kind == unsigned(scope::Measurement::CounterFrequency)) {
             if (!countersValid_) continue;
             const auto &reading = counters_.channels[c];
             item.valid = reading.valid && (counters_.enabled & (1U << c));
@@ -169,11 +188,12 @@ void ScopeFooter::readoutPanel(unsigned p) {
     heldChannel_[p] = c;
     ReadoutRow::Placed placed[ReadoutRow::Items];
     ReadoutRow::fit(items, Layout::TextWidth, Layout::CellWidth, placed, &held_[p]);
-    // A stale Full result: both shades go grey; the counter has its own snapshot and keeps its colour.
+    // A stale Full result: both shades go grey; the counter and the DMM trace have their own data and
+    // keep their colour.
     for (unsigned k = 0; k < PerChannel; ++k) {
         if (!placed[k].shown) continue;
-        const bool counter = items[k].kind == unsigned(scope::Measurement::CounterFrequency);
-        const uint32_t value = indicator_.stale && !counter ? theme_->muted : color;
+        const bool apart = meter || items[k].kind == unsigned(scope::Measurement::CounterFrequency);
+        const uint32_t value = indicator_.stale && !apart ? theme_->muted : color;
         const auto &parts = placed[k].parts;
         // A tag is its value's colour dimmed towards a dark background; on a light one it keeps the
         // full (dark) colour, so the names stay as readable as the values.
@@ -181,7 +201,7 @@ void ScopeFooter::readoutPanel(unsigned p) {
         panels_[p].add(placed[k].x + parts.tagWidth, parts.value, value, parts.size);
     }
     // Full: the bottom rail, whole (a first pass: as far as it has come); grey with stale values.
-    if (indicator_.full && model_ && enabled(c))
+    if (indicator_.full && model_ && !meter && enabled(c))
         panels_[p].rail(Layout::rail(int(p)).width * indicator_.percent / 100, indicator_.stale ? theme_->muted : color);
 }
 const char *ScopeFooter::samples(const plot::Model &model, unsigned channel) {
@@ -198,9 +218,15 @@ void ScopeFooter::scalesPage() {
     for (unsigned p = 0; p < 2; ++p) { // A panel per on-screen slot; X and Y stay the inputs' (X-Y).
         const unsigned c = view_.input(p);
         const auto &channel = metadata.channels[c];
+        char text[48], probe[24];
+        if (p == pages_.meterPanel()) { // The DMM trace in the panel of a channel that is off.
+            look(p, &meterColor_);
+            meterScale(text, sizeof text);
+            panels_[p].add(0, text, meterColor_);
+            continue;
+        }
         const uint32_t color = channelColor(c);
         look(p, &color);
-        char text[48], probe[24];
         if (!channel.enabled) std::snprintf(text, sizeof text, "CH%u Off", view_.number(c));
         else {
             const auto scale = plot::DisplayScale::channel(channel, model_->options().channels[c]);
@@ -211,6 +237,15 @@ void ScopeFooter::scalesPage() {
         }
         panels_[p].add(0, text, color);
     }
+}
+// "DMM", its function and units/div, as a channel's coupling, probe and V/div; without the function
+// where that does not fit.
+void ScopeFooter::meterScale(char *text, size_t capacity) const {
+    char tag[40];
+    std::snprintf(tag, sizeof tag, "DMM %s", meter_.function);
+    const bool scaled = meter_.perDivision > 0;
+    if (!ReadoutText::fit(tag, scaled, meter_.perDivision, meter_.unit, Layout::TextWidth, text, capacity))
+        ReadoutText::fit("DMM", scaled, meter_.perDivision, meter_.unit, Layout::TextWidth, text, capacity);
 }
 // The plot's own header names the channel, window and length: the footer adds the peak (in the
 // spectrum channel's panel) and the frequency span of a division (in a plain one).

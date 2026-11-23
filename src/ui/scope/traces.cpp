@@ -1,5 +1,6 @@
 #include "openosc/ui/scope/painter.hpp"
 #include "openosc/measurement/dmm/reading_trace.hpp"
+#include "openosc/ui/scope/meter_readouts.hpp"
 #include "trace_geometry.hpp"
 #include <algorithm>
 #include <cmath>
@@ -63,37 +64,41 @@ void Painter::traces() {
     if (o.averaging > 1)
         text("AVG", 8, model_.viewport().height - 14, palette_.readout, 30);
 }
-// The DMM trace in Roll (Y-T, Y-T+FFT): each reading at its time on the snapshot's axis (the oldest point at
-// metadata.timestampUs, one point per 1 / samplesPerSecond), joined to the next; a reading without a
-// value breaks the line. A capture of another kind started by RenderIdle while a line is drawn gives
-// the readings up: valid() and size() are asked again before each one.
+// The DMM trace (Y-T, Y-T+FFT) at every timebase: each reading at its time on the record's axis
+// (MeterAxis), joined to the next; a reading without a value breaks the line, the one before the
+// window enters it at the left edge. The line ends at the record's last point, the newest reading by
+// then held level up to it: a window shorter than the readings' interval shows the value of its time
+// as a level. Readings after the record are not of it (they came while it was shown).
 void Painter::meterTrace() {
     const auto *readings = meter_;
     const auto &o = model_.options();
-    const auto &m = model_.metadata();
     const auto &view = model_.viewport();
-    const double rate = m.samplesPerSecond.value();
-    if (!readings || !o.meter.shown || !m.rolling || !readings->valid() ||
-        !MeterScale::scaled(readings->quantity()) || rate <= 0 || view.width < 2 || view.height < 2)
+    const MeterAxis axis(model_.metadata());
+    if (!readings || !o.meter.shown || !MeterScale::scaled(readings->quantity()) || !axis.valid() || !view.spanQ16 ||
+        view.width < 2 || view.height < 2)
         return;
     const double perDivision = MeterScale::perDivision(o.meter.scales[MeterScale::index(readings->quantity())]);
-    const double division = double(view.height - 1) / 8;
-    const double zero = double(view.height - 1) / 2 - double(o.meter.position) / MeterTraceOptions::PositionSteps * division;
-    const uint32_t originMs = uint32_t(m.timestampUs / 1000);
-    const double originUs = double(m.timestampUs % 1000);
-    Path path(layer_, area_, palette_.reference, 255, 1, model_.statistics());
-    int leftX = 0, leftY = 0;
-    bool left = false; // The last reading before the window: the line enters from it.
-    for (size_t i = 0; readings->valid() && i < readings->size(); ++i) {
+    const double division = double(view.height - 1) / 8, zero = meterZero();
+    const double start = double(view.startQ16) / 65536, columns = double(view.width - 1) * 65536 / double(view.spanQ16);
+    const auto pixel = [](double v) { return int(std::lround(std::clamp(v, -4096.0, 4096.0))); };
+    Path path(layer_, area_, palette_.meter, 255, 1, model_.statistics());
+    double x0 = 0, y0 = 0;
+    bool line = false; // The last reading taken has a value: the line goes on from (x0, y0).
+    for (size_t i = 0; i < readings->size(); ++i) {
         const auto reading = (*readings)[i];
-        if (!std::isfinite(reading.value)) { path.gap(); left = false; continue; }
-        const double us = double(int32_t(reading.ms - originMs)) * 1000 - originUs;
-        const double sample = std::clamp(us * rate / 1e6, -1e9, 1e9); // Far off the plot either way: positionX stays in int64.
-        const int x = view.positionX(int64_t(sample * 65536));
-        const int y = int(std::clamp(zero - reading.value / perDivision * division, -4096.0, 4096.0));
-        if (x < 0) { leftX = x; leftY = y; left = true; continue; }
-        if (left) { path.vertex(leftX, leftY); left = false; }
-        path.vertex(x, y);
+        const double point = axis.point(reading.ms);
+        if (point > axis.last) break;
+        if (!std::isfinite(reading.value)) { path.gap(); line = false; continue; }
+        const double x = (point - start) * columns, y = zero - reading.value / perDivision * division;
+        if (x >= 0) {
+            if (line && x0 < 0) path.vertex(0, pixel(y0 + (y - y0) * -x0 / (x - x0))); // Where it crosses the left edge.
+            path.vertex(pixel(x), pixel(y));
+        }
+        x0 = x; y0 = y; line = true;
     }
+    const double end = (axis.last - start) * columns;
+    if (!line || end < 0) return;
+    if (x0 < 0) path.vertex(0, pixel(y0));
+    path.vertex(pixel(end), pixel(y0));
 }
 } // namespace openosc::plot

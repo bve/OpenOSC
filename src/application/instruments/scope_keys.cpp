@@ -94,7 +94,8 @@ void ApplicationController::openAnalyze(unsigned row) {
 void ApplicationController::enterCursors(uint32_t now) {
     auto cursors = view_.waveform().options().cursors;
     if (!cursors.time && !cursors.voltage) cursors.time = cursors.voltage = true;
-    cursors.channel = channelShown(selectedChannel_) ? selectedChannel_ : selectedChannel_ ^ 1;
+    // The level cursors on the selection: the DMM trace (F1/F2), else the channel or the other one shown.
+    cursors.channel = uint8_t(meterSelected_ ? plot::CursorOptions::Meter : channelShown(selectedChannel_) ? selectedChannel_ : selectedChannel_ ^ 1);
     view_.waveform().cursorLines(cursors);
     cursors_.enter(cursors);
     setScopeFocus(plot::Focus::Cursor);
@@ -480,7 +481,7 @@ void ApplicationController::openShortcut(uint32_t) {
         for (unsigned c = 0; c < 2; ++c) plotControls_.enabled[c] = channelShown(c);
         plotControls_.view = view_.channelView();
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
-        plotControls_.options.cursors.channel = selectedChannel_;
+        plotControls_.options.cursors.channel = uint8_t(meterSelected_ ? plot::CursorOptions::Meter : selectedChannel_);
         plotControls_.meterFunction = prefs_.meterFunction;
         plotControls_.group = plot::Controls::Group::Cursors; plotControls_.listing = false;
         sectionDirect_ = true; // Back closes the section (analyzeRow_ none).

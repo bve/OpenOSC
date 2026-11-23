@@ -58,8 +58,7 @@ struct CaptureBuffer {
 // words in banks 1-3), which keeps the points of the budget, 256K or 512K, the record asks for. A
 // one-slot capture takes the memory of the frame on show only once that frame has been seen and nobody
 // reads it.
-// Roll takes the whole arena: its DMA ring in bank 0, the history in bank 1, snapshots in bank 2;
-// bank 3, which no Roll part writes, holds the Scope's DMM trace (rollSpare).
+// Roll takes the whole arena: its DMA ring in bank 0, the history in bank 1, snapshots in bank 2.
 // AutoSetup trials and zero calibration capture into a separate trial area, which is how a HOLD
 // record survives an AutoSetup and comes back unchanged when it is cancelled or fails.
 class AcquisitionArena {
@@ -115,7 +114,6 @@ public:
     static bool roll(CaptureBuffer &out, bool interleaved = false);
     static uint16_t *rollHistory();  // RollWindow words.
     static uint16_t *rollSnapshot(); // RollWindow words.
-    static uint16_t *rollSpare();    // Bank 3: no capture writes it while Roll holds the arena; the DMM trace's readings live there.
     // A free slot for a budget, or false while the frame on show, HOLD or Roll hold the memory.
     bool freeSlot(uint32_t budget, unsigned &slot, Geometry geometry = Geometry::Standard) const;
     // Slots exclude Roll and each other; Roll parts exclude every slot; the trial area is apart.
