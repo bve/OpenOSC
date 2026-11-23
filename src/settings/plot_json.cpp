@@ -35,6 +35,12 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     spectrum["remove_dc"]=o.spectrum.removeDc;
     auto counter=root.createNestedObject("counter");
     counter["source"]=o.counter.source; counter["average"]=o.counter.average; counter["ppm"]=o.counter.ppm;
+    auto meter = root.createNestedObject("dmm"); // The DMM trace; older firmware ignores it.
+    meter["shown"] = o.meter.shown;
+    meter["position"] = o.meter.position;
+    auto scales = meter.createNestedObject("per_division"); // Units/div in each quantity's SI unit.
+    for (unsigned i = 0; i < plot::MeterScale::Quantities; ++i)
+        scales[plot::MeterScale::Spans[i].key] = plot::MeterScale::perDivision(o.meter.scales[i]);
     auto channels = root.createNestedArray("channels");
     for (const auto &c : o.channels) {
         auto item = channels.createNestedObject();

@@ -6,6 +6,9 @@
 #include "openosc/ui/scope/record_gaps.hpp"
 #include "openosc/settings/color_value.hpp"
 
+namespace openosc::dmm {
+class ReadingTrace;
+}
 namespace openosc::plot {
 // The plot's colours. trigger: FollowSource draws the trigger marks in the source channel's colour;
 // tagText: Contrast writes on a coloured tag (zero tags, the active cursor's) in the ink that
@@ -32,11 +35,12 @@ struct TriggerMark {
 };
 class Painter {
 public:
-    // frame: the whole waveform object; the plot is frame less the PlotFrame margins.
+    // frame: the whole waveform object; the plot is frame less the PlotFrame margins. meter: the
+    // Scope's DMM trace (Options::meter), drawn in Roll.
     Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette,
-            bool inlineScales = true, TriggerMark trigger = {})
+            bool inlineScales = true, TriggerMark trigger = {}, const dmm::ReadingTrace *meter = nullptr)
         : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), inlineScales_(inlineScales),
-          trigger_(trigger) {}
+          trigger_(trigger), meter_(meter) {}
     void draw();
     static lv_area_t plotArea(const lv_area_t &frame) {
         return {frame.x1 + PlotFrame::Left, frame.y1 + PlotFrame::Top, frame.x2 - PlotFrame::Right, frame.y2 - PlotFrame::Bottom};
@@ -50,6 +54,7 @@ private:
     void recordGaps(const RecordGaps &gaps);      // The window's parts outside the record (record_edges.cpp).
     void recordGapLabels(const RecordGaps &gaps);
     void traces();
+    void meterTrace();
     void glow(unsigned channel);
     void density(unsigned channel); // A graded channel's density plane, from its own palette (GitHub #85).
     bool densityShown(unsigned channel) const; // Graded with levels to draw: no trace, no glow over it.
@@ -76,6 +81,7 @@ private:
     const Palette &palette_;
     bool inlineScales_;
     TriggerMark trigger_;
+    const dmm::ReadingTrace *meter_;
 };
 class Path {
 public:

@@ -49,6 +49,12 @@ public:
     bool scope(const FrontendSettings &settings,int16_t triggerLevel);
     void multimeter(uint16_t generatorBits = 0); // generator::controlBits kept in the DMM word.
     void multimeterOff(); // The DMM chip unpowered, as on MODE to the scope.
+    // The DMM chip powered beside the scope (the Scope's DMM trace): bit 13, the DMM word's own, in
+    // every scope word; written at once while the scope path is in force, else by the next scope().
+    // On the ZT703S the chip then sends its packets and CH1/CH2 keep their offset and noise (HIL
+    // 2026-11-23). multimeter() and multimeterOff() replace the scope word and drop it.
+    static constexpr uint16_t DmmPowerBit = 0x2000;
+    void dmmPower(bool on);
     static bool rangeForMillivolts(uint32_t value, unsigned &index) { return VoltageRanges::index(value, index); }
     static uint32_t millivoltsForRange(unsigned index) { return VoltageRanges::millivolts(index); }
     // The next scope() rewrites the whole path and starts the settle even under the same settings:
@@ -76,5 +82,6 @@ private:
     uint32_t changedAt_ = 0, applies_ = 0;
     FrontendSettings previous_;
     int16_t previousLevel_=0;
+    uint16_t word_ = 0, dmmBits_ = 0; // The scope word last written; DmmPowerBit or 0.
 };
 } // namespace openosc::scope

@@ -172,10 +172,13 @@ bool ApplicationController::channelShown(unsigned channel) {
     return data_.scopeHeld() && model.hasFrame() ? model.metadata().channels[channel].enabled : data_.scopeRequest().frontend.enabled[channel];
 }
 // One rule for the main scale/position selection, whatever changed the channels (panel, SCPI,
-// settings at start-up, a new frame after RUN): it stays on a channel that is shown. The cards
-// and context follow at once, without waiting for a new sequence (a held frame keeps its own).
+// settings at start-up, a new frame after RUN): it stays on a channel that is shown, and on the DMM
+// trace while it is on. The cards and context follow at once, without waiting for a new sequence (a
+// held frame keeps its own).
 bool ApplicationController::followShownChannel() {
-    if (channelShown(selectedChannel_) || !channelShown(selectedChannel_ ^ 1)) return false;
+    const bool meter = meterSelected_ && !view_.waveform().options().meter.shown;
+    if (meter) { meterSelected_ = false; dataRefresh_ = true; }
+    if (channelShown(selectedChannel_) || !channelShown(selectedChannel_ ^ 1)) return meter;
     selectedChannel_ ^= 1;
     dataRefresh_ = true;
     return true;

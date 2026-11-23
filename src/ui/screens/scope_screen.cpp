@@ -41,6 +41,13 @@ void ScopeScreen::context(unsigned channel, plot::Focus focus, bool panReverse) 
     cards();
     if (focus_ == plot::Focus::Zoom) zoomNote();
 }
+void ScopeScreen::meter(const Meter &meter) {
+    if (meter.selected == meter_.selected && meter.perDivision == meter_.perDivision && !std::strcmp(meter.unit, meter_.unit) &&
+        !std::strcmp(meter.function, meter_.function))
+        return;
+    meter_ = meter;
+    cards();
+}
 void ScopeScreen::select(unsigned channel) {
     channel_ = channel < 2 ? channel : 0;
     host_.waveform().frontChannel(channel_);
@@ -86,7 +93,10 @@ void ScopeScreen::cards() {
     const auto &selected = shown.channels[channel_];
     const auto &view = host_.channelView(); // Each card names and tints its input by its on-screen slot.
     char scale[24], time[24], value[64], title[64], details[160];
-    const auto scaleValue = plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
+    // The DMM trace selected (F1/F2): its units/div in place of the channel's V/div.
+    const bool meter = meter_.selected;
+    auto scaleValue = plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
+    if (meter) scaleValue = {meter_.perDivision, meter_.unit};
     plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 3); // The strip uses the same precision.
     const bool spectrum = widget.options().mode == plot::Mode::Spectrum;
     const double secondsPerDivision = framed && !spectrum
@@ -94,11 +104,12 @@ void ScopeScreen::cards() {
     plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
-    std::snprintf(title, sizeof title, "Scale CH%u", view.number(channel_));
+    if (meter) std::snprintf(title, sizeof title, "Scale DMM");
+    else std::snprintf(title, sizeof title, "Scale CH%u", view.number(channel_));
     // Keep the value row at the plotted scale. A waiting record can still be on screen after its
     // range changes. Show the next setting in the title until a record at that scale arrives.
     if (framed) {
-        const bool volts = plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
+        const bool volts = !meter && plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
         const bool seconds = plot::DisplayScale::timePending(shown, widget.options(), next_);
         char pendingVolts[16] = "", pendingTime[16] = "";
         if (volts) {
@@ -115,7 +126,8 @@ void ScopeScreen::cards() {
                 std::snprintf(title, sizeof title, "Next %s", first);
         }
     }
-    std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", view.number(channel_), plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
+    if (meter) std::snprintf(details, sizeof details, "DMM %s  %s %s%s%s", meter_.function, scale, time, *next ? "  " : "", next);
+    else std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", view.number(channel_), plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
     // Keep the font fixed. A wide pair uses two significant digits, then coarser unit prefixes
     // if needed (for example, "500mcnt" becomes "0.5cnt").
     std::snprintf(value, sizeof value, "%s %s", scale, time);
@@ -126,9 +138,10 @@ void ScopeScreen::cards() {
         std::snprintf(value, sizeof value, "%s %s", scale, time);
     }
     bar.item(0, title, value, *next, true);
-    // F2 Position: the channel it moves, with its coupling and probe.
+    // F2 Position: the channel it moves, with its coupling and probe; the DMM trace with its unit.
     const char *compactProbe = std::strcmp(probe, "x10000") == 0 ? "X10K" : probe;
-    std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
+    if (meter) std::snprintf(value, sizeof value, "DMM %s", meter_.unit);
+    else std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
     bar.item(1, "Position", value);
     static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
     static constexpr const char *types[] = {"Trigger", "Pulse width", "Runt", "Rise/Fall"};
@@ -144,11 +157,11 @@ void ScopeScreen::cards() {
     else
         bar.item(3, "Analyze", widget.options().mode == plot::Mode::XY ? "XY" : spectrum ? "FFT" : widget.options().mode == plot::Mode::SpectrumOverlay ? "Y-T+FFT" : "Display");
     // Selected, each card takes the colour of what it acts on (issue #21): F1 Scale and F2 Position
-    // the selected channel's, F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
+    // the selected channel's (the DMM trace's), F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
     using Tint = ParameterBar::Tint;
     const auto channelTint = [&](unsigned c) { return c > 1 ? Tint::Neutral : view.slot(c) ? Tint::Channel2 : Tint::Channel1; };
-    bar.tint(0, channelTint(channel_));
-    bar.tint(1, channelTint(channel_));
+    bar.tint(0, meter ? Tint::Reference : channelTint(channel_));
+    bar.tint(1, meter ? Tint::Reference : channelTint(channel_));
     bar.tint(2, channelTint(unsigned(model.triggerChannel())));
     bar.tint(3, Tint::Neutral);
     if (!host_.overlayActive()) bar.select(focus_ == plot::Focus::Zoom ? 3U : unsigned(focus_));

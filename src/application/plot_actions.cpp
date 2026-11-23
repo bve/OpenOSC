@@ -1,6 +1,7 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
+#include "openosc/measurement/dmm/function.hpp"
 
 namespace openosc {
 // Crossing into or out of X-Y restarts the picture and both directions leave HOLD. Entering is one
@@ -48,6 +49,7 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
     const auto refuse = [&](const char *why) {
         view_.notify(Tooltip::Unavailable, why, now);
         plotControls_.options = view_.waveform().options();
+        plotControls_.meterFunction = prefs_.meterFunction;
         return false;
     };
     auto &widget = view_.waveform();
@@ -82,10 +84,19 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         plotControls_.options.spectrum.channel ^= 1;
     if (!changePlotMode(plotControls_.options,view_.waveform().options().mode,now)) return refuse("Finish data transfer first");
     widget.configure(plotControls_.options);
+    if (plotControls_.channel != selectedChannel_) meterSelected_ = false; // A channel chosen here.
     selectedChannel_ = plotControls_.channel;
     plotControls_.options = widget.options(); // As the view took it (X-Y adds its own).
     queuePlotSave(now);
     dataRefresh_ = true;
+    // The DMM function, the DMM screen's too: sent at once while the DMM trace runs, else when it starts.
+    if (plotControls_.meterFunction == prefs_.meterFunction) return true;
+    const auto function = dmm::Function(plotControls_.meterFunction);
+    if (function == dmm::Function::Temperature && !prefs_.meter.temperature.configured())
+        return refuse("Type K: set Manual junction in the DMM's MENU");
+    if (data_.meterTraceRunning() && !data_.selectDmmFunction(function)) return refuse("Measurement command busy");
+    prefs_.meterFunction = state_.meter.function = plotControls_.meterFunction;
+    changed(now);
     return true;
 }
 } // namespace openosc

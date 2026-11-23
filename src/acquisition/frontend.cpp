@@ -77,7 +77,7 @@ bool AnalogFrontend::scope(const FrontendSettings &settings,int16_t triggerLevel
     initialize();
     // Common power/control bits (bit 10 also the factory selector's, 0804B878); enables, range bits
     // and the interleave selector (bits 8 and 11 together) are committed together.
-    uint16_t word = 0x1600 | (settings.selector() ? InterleaveBits : 0);
+    uint16_t word = 0x1600 | dmmBits_ | (settings.selector() ? InterleaveBits : 0);
     for (unsigned c = 0; c < 2; ++c)
         if (settings.enabled[c]) {
             const unsigned range = settings.physicalRange(c);
@@ -87,6 +87,7 @@ bool AnalogFrontend::scope(const FrontendSettings &settings,int16_t triggerLevel
             word |= 1U << (14 + c);
         }
     ControlLatch::write(word);
+    word_ = word;
     usbtrace::mark(usbtrace::Tag::Latched);
     GPIOE->BSRR = (settings.enabled[0] || settings.enabled[1]) ? GPIO_PIN_8 : uint32_t(GPIO_PIN_8) << 16;
     GPIOC->BSRR = settings.coupling[0] == Coupling::Dc ? GPIO_PIN_12 : uint32_t(GPIO_PIN_12) << 16;
@@ -119,16 +120,26 @@ bool AnalogFrontend::scope(const FrontendSettings &settings,int16_t triggerLevel
     usbtrace::mark(usbtrace::Tag::FrontendEnd);
     return true;
 }
+void AnalogFrontend::dmmPower(bool on) {
+    const uint16_t bits = on ? DmmPowerBit : 0;
+    if (bits == dmmBits_) return;
+    dmmBits_ = bits;
+    if (!scopeActive_) return; // The next scope() writes the whole word.
+    word_ = uint16_t((word_ & ~DmmPowerBit) | bits);
+    ControlLatch::write(word_);
+}
 void AnalogFrontend::multimeterOff() {
     initialize();
     ControlLatch::write(0x1600); // The scope word with both channels off.
     GPIOE->BSRR = uint32_t(GPIO_PIN_8) << 16;
     scopeActive_ = false;
+    dmmBits_ = 0;
 }
 void AnalogFrontend::multimeter(uint16_t generatorBits) {
     initialize();
     ControlLatch::write(0x3200 | generatorBits);
     GPIOE->BSRR = uint32_t(GPIO_PIN_8) << 16;
     scopeActive_ = false;
+    dmmBits_ = 0;
 }
 } // namespace openosc::scope

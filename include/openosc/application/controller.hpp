@@ -210,8 +210,18 @@ private:
     bool applyFound(const ScopeRequest &request, uint32_t now); // AUTO's result: its level is set (LevelIntent::Set).
     bool changePlotMode(plot::Options &options, plot::Mode before, uint32_t now);
     bool channelShown(unsigned channel);
-    // Moves the scale/position selection off a channel that is not shown; true when it moved.
+    // Moves the scale/position selection off a channel that is not shown, and off the DMM trace once
+    // it is off; true when it moved.
     bool followShownChannel();
+    // A second F1/F2 press: the next of CH1, CH2 and the DMM trace that is shown, around to the first.
+    void selectNext();
+    // The Scope's DMM trace (plot::MeterTraceOptions): the quantity of the DMM function it measures
+    // (Preferences::meterFunction), the one its Scale keys step; its cards; each display pass its
+    // readings, value tag and cards.
+    Quantity meterQuantity() const;
+    ui::ScopeScreen::Meter meterCard() const;
+    void showMeterTrace();
+    void stepMeterScale(int direction, uint32_t now); // Up/Down on the Scale card with the trace selected.
     void panelKeys(uint32_t keys, uint32_t now, bool fine);
     void setScopeFocus(plot::Focus focus);
     void syncCursorFocus();
@@ -434,7 +444,7 @@ private:
     bool autoCancelled_ = false;
     bool recordWatched_ = false, loggerWatched_ = false, serialWatched_=false;
     MeterRestore meterRestore_; // The DMM entry's range restore (meter_restore.hpp).
-    uint32_t dmmRestarts_ = 0, dmmReselects_ = 0;
+    uint32_t dmmRestarts_ = 0, dmmReselects_ = 0, meterTraceStarts_ = 0;
     bool powerFired_ = false; // The REL hold (Preferences::holdMs) powered off once this stroke.
     ScopeAutoKey autoKey_;    // AUTO's open stroke on the Scope waveform screen.
     void powerOff(uint32_t now);
@@ -455,6 +465,9 @@ private:
     ui::ArrangementProperties<AnalogBlock> analogLayout_;
     bool meterLayoutAnalog_ = false; // Which DMM order the open LAYOUT edits (the face shown when it opened).
     plot::Focus focus_ = plot::Focus::Scale;
+    // The DMM trace is what F1/F2's Scale and Position act on, beside selectedChannel_, which every
+    // other per-channel action keeps using.
+    bool meterSelected_ = false;
     plot::CursorControl cursors_;
     scope::TriggerFollow triggerFollow_;
     plot::Controls plotControls_;

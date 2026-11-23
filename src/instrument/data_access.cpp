@@ -1,7 +1,6 @@
 #include "openosc/instrument/data_access.hpp"
 #include "openosc/calibration/record.hpp"
 #include "openosc/acquisition/sample_plan.hpp"
-#include "openosc/generator/control_bits.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/interrupts.hpp"
@@ -78,6 +77,7 @@ bool DataAccess::select(MeasurementMode view) {
         status_ = DataStatus::HardwareError;
         return false;
     }
+    stopMeterTrace(); // Its chip unpowered under the scope word, before another word replaces it.
     if (!uart_.stop()) {
         status_ = DataStatus::HardwareError;
         return false;
@@ -111,6 +111,7 @@ bool DataAccess::activate(MeasurementMode view) {
     captureFailed_ = false;
     measurement_ = view;
     if (view != MeasurementMode::Multimeter) session_.stop(timeUs_, dmm::LogEnd::ModeChange); // Committed by poll().
+    if (view != MeasurementMode::Oscilloscope) meterReadings_.invalidate(); // Back in the Scope, Roll is entered anew.
     if (view == MeasurementMode::Multimeter) meter_.expire(timeUs_); // A reading from before is not current.
     uint32_t remainingMs = 0;
     if (view != MeasurementMode::Multimeter) watchdog_.deactivate();
@@ -123,14 +124,11 @@ bool DataAccess::activate(MeasurementMode view) {
     }
     if (view == MeasurementMode::Multimeter) {
         dmmActivatedAtUs_ = timeUs_;
-        meterGeneratorBits_ = generator::controlBits(generator_.offConfirmed());
-        frontend_.multimeter(meterGeneratorBits_);
-        if (!uart_.start()) {
+        powerMeter(true);
+        if (!startMeterUart()) {
             status_ = uart_.status();
             return false;
         }
-        receiveErrors_ = uart_.errors();
-        receiveOverflows_ = uart_.overflows();
         active_ = true;
         status_ = DataStatus::NoData;
         return true;
@@ -221,8 +219,7 @@ bool DataAccess::selectDmmFunction(dmm::Function function) { // Also while off: 
     const uint32_t waitMs = dmmActivatedAtUs_ > timeUs_ ? uint32_t(std::min<uint64_t>((dmmActivatedAtUs_ - timeUs_) / 1000, dmm::FunctionSelector::PowerOnWaitMs)) : 0;
     const bool typeK = function == dmm::Function::Temperature;
     const auto physical = typeK ? dmm::Function::MillivoltsDc : function;
-    if (!active_ || measurement_ != MeasurementMode::Multimeter ||
-        (typeK && !meter_.temperatureSettings().configured()) ||
+    if (!meterLinked() || (typeK && !meter_.temperatureSettings().configured()) ||
         !dmm_.selectFunction(physical, meter_.latest(), Board::milliseconds() + waitMs, dmmActivatedAtUs_)) return false;
     meter_.typeK(typeK, timeUs_);
     // Accepted (a refusal above changes nothing): the statistics period starts with this function.
@@ -311,6 +308,7 @@ void DataAccess::beginShutdown() {
     serial_.stop();
     counters_.stop();
     stopCapture(true);
+    stopMeterTrace();
     if (!dmmClosing_) stopDmmUart();
     heldFrame_.release();
     recordPending_ = false;

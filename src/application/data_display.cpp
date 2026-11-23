@@ -2,6 +2,7 @@
 #include "openosc/decode/table_text.hpp"
 #include "openosc/ui/scope/column_cache.hpp"
 #include "openosc/ui/scope/format.hpp"
+#include "openosc/ui/format/meter.hpp"
 #include "openosc/platform/clocks.hpp"
 #include <cstdio>
 #include <cstring>
@@ -14,6 +15,34 @@ const dmm::Result &shownReading(const dmm::Session &meter, dmm::Function selecti
     return selecting != dmm::Function::Unknown ? none : meter.displayed();
 }
 } // namespace
+// The DMM trace, each pass: its readings to the plot (Roll draws them), its value tag (Y-T and
+// Y-T+FFT, with the units/div in Roll) and the cards while F1/F2 select it. While a function is
+// selected the old one's reading is not shown, as in the DMM.
+void ApplicationController::showMeterTrace() {
+    auto &widget = view_.waveform();
+    const auto &options = widget.options();
+    const bool shown = options.meter.shown;
+    widget.meterReadings(shown ? &data_.meterReadings() : nullptr);
+    char text[64] = "";
+    if (shown && (options.mode == plot::Mode::Time || options.mode == plot::Mode::SpectrumOverlay)) {
+        const auto *reading = data_.dmmSelectionStatus() == DataStatus::Busy ? nullptr : data_.meterTraceReading();
+        if (!reading) std::snprintf(text, sizeof text, "DMM ----");
+        else std::snprintf(text, sizeof text, "DMM %s %s", ui::MeterText::reading(*reading), ui::MeterText::unit(reading->unit));
+        const auto &model = widget.model();
+        const auto quantity = data_.meterReadings().quantity();
+        char scale[24];
+        if (model.hasFrame() && model.metadata().rolling && plot::MeterScale::scaled(quantity)) {
+            const unsigned index = plot::MeterScale::index(quantity);
+            if (plot::Format::quantity(plot::MeterScale::perDivision(options.meter.scales[index]), plot::MeterScale::Spans[index].unit,
+                                       scale, sizeof scale, 3)) {
+                const size_t used = std::strlen(text);
+                std::snprintf(text + used, sizeof text - used, "  %s/div", scale);
+            }
+        }
+    }
+    widget.meterTag(text, widget.palette().reference);
+    view_.scopeMeter(meterCard());
+}
 // The function a running selection awaits, unless a HOLD keeps a reading.
 dmm::Function ApplicationController::meterSelecting() const {
     const auto &meter = data_.meter();
@@ -244,6 +273,7 @@ void ApplicationController::displayData(uint32_t now) {
             const bool room = options.mode == plot::Mode::Time; // X-Y and FFT label that corner.
             view_.waveform().counter(room ? text : "", view_.waveform().palette().channel(source));
         }
+        showMeterTrace();
         if (!view_.traceDrawn()) { // A menu over the Scope, or Decoder only (plan §4.4).
             // No projection and no readouts without a trace; the decoder still takes the record.
             readouts_.suspend(data_); dataAt_=now;
