@@ -266,8 +266,10 @@ int InstrumentBackend::fileOpen(const char *path, uint32_t &bytes) {
     if (const FRESULT found = f_stat(path, &info); found != FR_OK || (info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
         return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : found == FR_INVALID_NAME ? -257 : -250; // As MMEM:CAT? lists.
     const FRESULT result = f_open(&file_, path, FA_READ);
-    if (result != FR_OK) return result == FR_NO_FILE || result == FR_NO_PATH ? -256 : -250;
-    fileOpen_ = true; fileShot_ = shots; ++storage::openReaders; storage::screenshotReaders += shots; bytes = uint32_t(f_size(&file_));
+    if (result != FR_OK) return result == FR_NO_FILE || result == FR_NO_PATH ? -256 : result == FR_INVALID_NAME ? -257 : -250;
+    const char *dot = std::strrchr(path, '.');
+    fileOpen_ = true; fileShot_ = shots && dot && !strcasecmp(dot, ".BMP"); // Only what Clear deletes holds it.
+    ++storage::openReaders; storage::screenshotReaders += fileShot_; bytes = uint32_t(f_size(&file_));
     return 0;
 }
 size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
