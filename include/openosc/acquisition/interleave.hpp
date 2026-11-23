@@ -11,7 +11,8 @@ enum class InterleaveMode : uint8_t { Off, On, Auto };
 // - ZT706S, the factory's (zt_fw 706s_main): InterleavePolicy at 280 MHz (updater 0804A9A8), with its
 //   display gain InterleaveResponse (0804D6A4/0804D720) and range correction InterleaveRangeBoost (0804F3F0);
 // - ZT703S, the user's choice (Capabilities::selectableInterleave; the factory 703S never enables it):
-//   SelectableInterleave on every run mode, none of the ZT706S curves, its own offset calibration.
+//   On is SelectableInterleave on every run mode and timebase, Auto is MkrInterleavePolicy; none of
+//   the ZT706S curves, its own offset and optional gain/timing calibration.
 // What every interleave needs of a request (both boards), as blockers: none, it may run.
 struct InterleaveConditions {
     enum Blocker : uint32_t {
@@ -62,6 +63,18 @@ struct SelectableInterleave {
                InterleaveConditions::shared(in);
     }
 };
+// The ZT703S's Auto, as MKR-MK-O2 V1.6.12 enables it (updater 08048E9C, called before each frame is
+// used: timebase index < 2 and CH2 off, on either run mode): CH1 alone at 10/25 ns/div on the 200 and
+// 280 MHz profiles (MKR has no 360 MHz one), with the capture blockers every automatic interleave has
+// here (no Roll, internal capture or DAC stream). Explicit On stays SelectableInterleave's.
+struct MkrInterleavePolicy {
+    static constexpr bool profile(uint32_t timerHz) { return timerHz == RunModes[0].coreHz || timerHz == RunModes[1].coreHz; }
+    static_assert(RunModes[0].coreHz == 200000000 && RunModes[1].coreHz == 280000000 && RunModes[0].adcDivider == 2 &&
+                  RunModes[1].adcDivider == 2, "MKR's profiles: 200 and 280 MHz at ADC divider 2");
+    static constexpr uint32_t blockers(const InterleaveConditions::Inputs &in) {
+        return (profile(in.timerHz) ? 0U : uint32_t(InterleaveConditions::Clock)) | InterleaveConditions::capture(in);
+    }
+};
 // The build's rule: what keeps a request from interleaving on this board (0: it interleaves).
 // `selected`: the user's choice (ZT703S); the ZT706S factory interleave needs none.
 struct InterleaveRule {
@@ -72,6 +85,7 @@ struct InterleaveRule {
     static constexpr uint32_t blockers(const board::Capabilities &board, InterleaveMode mode, const InterleaveConditions::Inputs &in) {
         if (board.adcInterleave && mode == InterleaveMode::Auto)
             return (in.timerHz == InterleavePolicy::TimerHz ? 0U : uint32_t(InterleaveConditions::Clock)) | InterleaveConditions::capture(in);
+        if (board.selectableInterleave && mode == InterleaveMode::Auto) return MkrInterleavePolicy::blockers(in);
         return blockers(board, mode == InterleaveMode::On, in);
     }
 };

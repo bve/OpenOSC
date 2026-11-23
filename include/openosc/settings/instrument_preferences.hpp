@@ -24,7 +24,7 @@ struct ScopePreferences {
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
     uint32_t rollAuto=1;
-    // InterleaveMode: Off/On, with legacy Auto as the ZT706S default.
+    // InterleaveMode: Off/On/Auto. Defaults: ZT706S Auto (its factory rule), ZT703S Off (Auto: MKR's rule).
     uint32_t interleave = board::Current::Features.adcInterleave ? 2 : 0;
     // A service choice (FactoryRecordPolicy: 0 auto, 1 long, 2 compact, 3 mkr) for reading the factory record
     // at the NEXT start (DataAccess::initialize); Reload settings never re-reads the record. Only on

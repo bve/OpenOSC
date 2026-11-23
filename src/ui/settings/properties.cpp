@@ -82,7 +82,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::BacklightIdleLevel: return DimCount;
     case Action::PowerOffTimeout: return OffCount;
     case Action::GeneratorStartup: case Action::UsbController: return 2;
-    case Action::Interleave: return board::Current::Features.adcInterleave ? 3 : 2;
+    case Action::Interleave: return board::Current::Features.interleaveControl() ? 3 : 2; // Off, On, Auto.
     case Action::AutoKey: return unsigned(ScopeKeys::Auto::Count);
     case Action::ResetHold: return unsigned(ScopeKeys::Reset::Count);
     case Action::ShortcutHold: return shortcutCount();
@@ -139,7 +139,9 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
     case Action::PowerOffTimeout: seconds(IdleSettings::OffChoices[index % OffCount], "min", output, capacity); break;
     case Action::GeneratorStartup: std::snprintf(output, capacity, "%s", index ? "Restore last" : "Off"); break;
     case Action::Interleave: // On says when it runs.
-        std::snprintf(output, capacity, "%s", index == 2 ? "Auto: factory rules" : index ? "On: CH1 alone" : "Off");
+        // Auto: the ZT706S factory's rule, the ZT703S's as MKR firmware (CH1 alone at 10/25 ns, 200/280 MHz).
+        std::snprintf(output, capacity, "%s", index == 2 ? (board::Current::Features.adcInterleave ? "Auto: factory rules" : "Auto: CH1, 10/25 ns")
+                                              : index ? "On: CH1 alone" : "Off");
         break;
     case Action::AutoKey: std::snprintf(output, capacity, "%s", AutoKeys[index % unsigned(ScopeKeys::Auto::Count)]); break;
     case Action::ResetHold: std::snprintf(output, capacity, "%s", ResetHolds[index % unsigned(ScopeKeys::Reset::Count)]); break;

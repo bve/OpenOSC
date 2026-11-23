@@ -242,10 +242,10 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         (legacy && (legacySamples < 4 || legacySamples > 65536 || (legacySamples & 3)))) return false;
     uint32_t legacyInterleave = 0;
     if (!boolean(scope, "interleave", legacyInterleave)) return false;
-    if (board::Current::Features.adcInterleave) {
-        s.interleave = 2; // The old boolean was ignored on the ZT706S.
-        if (!number(scope, "interleave_mode", s.interleave)) return false;
-    } else s.interleave = legacyInterleave;
+    // interleave_mode (InterleaveMode: 0 Off, 1 On, 2 Auto). Without it: the ZT706S Auto (its old
+    // boolean was ignored), the ZT703S the old boolean (Off or On).
+    s.interleave = board::Current::Features.adcInterleave ? 2 : legacyInterleave;
+    if (!number(scope, "interleave_mode", s.interleave)) return false;
     if (!(scope.containsKey("run_mode") ? number(scope,"run_mode",s.runMode) : boolean(scope,"high_performance",s.runMode)) || !boolean(scope,"roll_auto",s.rollAuto) ||
         !choice(scope, "factory_record_format", s.factoryRecordFormat, factoryRecordFormats) ||
         !choice(meter, "display", output.meter.display, displays) ||
@@ -340,7 +340,8 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     scope["run_mode"] = s.runMode;
     scope["roll_auto"]=bool(s.rollAuto);
     scope["interleave"]=s.interleave == 1;
-    if (board::Current::Features.adcInterleave) scope["interleave_mode"] = s.interleave;
+    // Both: older ZT703S firmware reads only the boolean, so Auto reaches it as Off.
+    if (board::Current::Features.interleaveControl()) scope["interleave_mode"] = s.interleave;
     if (s.factoryRecordFormat) scope["factory_record_format"] = factoryRecordFormats[s.factoryRecordFormat]; // Absent: auto.
     auto channels = scope.createNestedArray("channels");
     for (unsigned c = 0; c < 2; ++c) {

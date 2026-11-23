@@ -188,7 +188,7 @@ scpi::Backend::InterleaveStatus InstrumentBackend::interleave() const {
     const auto &features = board::Current::Features;
     const auto mode = scope::InterleaveMode(a.prefs_.scope.interleave);
     return {features.interleaveControl(), mode == scope::InterleaveMode::On, !blockers, blockers,
-            features.adcInterleave, mode == scope::InterleaveMode::Auto};
+            features.interleaveControl(), mode == scope::InterleaveMode::Auto}; // Auto: both boards' own rule.
 }
 bool InstrumentBackend::interleave(bool on) {
     if (application_.bodeOwns()) return false;

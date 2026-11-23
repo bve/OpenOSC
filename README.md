@@ -160,8 +160,11 @@ Captured on a ZT703S running OpenOSC.
 - Zero and gain calibration of both channels, stored as files and never written to the factory calibration
 - Selectable performance profiles: 200/100, 280/140 and 360/90 (core MHz / MS/s per channel),
   switched instantly without a restart
-- CH1 interleave over both ADCs, up to 280 MS/s on CH1 alone: experimental on the ZT703S, with on-device
-  offset and gain/timing calibration; Off/On/Auto on the ZT706S
+- CH1 interleave over both ADCs, up to 280 MS/s on CH1 alone. Both models offer Off, On and Auto.
+  On the ZT703S, interleave is experimental, with on-device offset and gain/timing calibration.
+  Its Auto mode follows the MKR rule: CH1 alone at 10 or 25 ns/div on the 200 and 280 MHz profiles,
+  except in Roll or while the generator streams from the DAC. On interleaves CH1 alone at every timebase
+  and profile. The ZT703S defaults to Off and the ZT706S to Auto (the stock rule)
 - Save waveforms as RAW or CSV
 
 **Multimeter**

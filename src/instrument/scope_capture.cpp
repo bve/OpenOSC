@@ -170,25 +170,30 @@ bool DataAccess::interleaveSelected() const {
     return interleaveMode_ == scope::InterleaveMode::On;
 }
 uint32_t DataAccess::interleaveBlockers(const ScopeRequest &r) const {
+    // On (or the probe's Interleave), Auto by the board's policy (ZT706S factory, ZT703S MKR), else Off.
+    bool probing = false;
+#ifdef OPENOSC_INTERLEAVE_PROBE
+    probing = probe_.active();
+#endif
     const auto mode = interleaveSelected() ? scope::InterleaveMode::On
-        : factoryInterleave() ? interleaveMode_ : scope::InterleaveMode::Off;
+        : !probing && interleaveMode_ == scope::InterleaveMode::Auto ? scope::InterleaveMode::Auto : scope::InterleaveMode::Off;
     return scope::InterleaveRule::blockers(board::Current::Features, mode, interleaveInputs(r));
 }
 bool DataAccess::interleaving(const ScopeRequest &r) const { return !interleaveBlockers(r); }
 // The choice (Settings > Device > Performance > Interleave CH1) takes effect as any setting
 // does: an ordinary forced reconfigure of the same request, or in HOLD the Next plan (the held record
 // keeps its own). Refused during a calibration, an AutoSetup or a recording; a refused reconfigure
-// puts the previous choice back. The ZT706S also accepts Auto for the factory rule.
+// puts the previous choice back. Auto: the ZT706S's factory rule, the ZT703S's MKR one.
 bool DataAccess::selectInterleave(scope::InterleaveMode mode) {
     using Mode = scope::InterleaveMode;
-    if (mode > Mode::Auto || (mode == Mode::Auto && !factoryInterleave())) return false;
+    if (mode > Mode::Auto) return false;
     if (!board::Current::Features.interleaveControl()) return mode == Mode::Off;
     if (mode == interleaveMode_) return true;
     if (zeroBusy() || internalCapture() || recorder_.busy()) return false;
     const auto previous = interleaveMode_;
     const bool previousHeadroom = interleaveHeadroom_;
     interleaveMode_ = mode;
-    if (mode != Mode::On) interleaveHeadroom_ = false;
+    if (!interleaving(request_)) interleaveHeadroom_ = false;
     if (scopeHeld_ ? describeNext(configuration_) : configureScopeCore(request_, true)) return true;
     interleaveMode_ = previous;
     interleaveHeadroom_ = previousHeadroom;
