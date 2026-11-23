@@ -1,7 +1,6 @@
 # OpenOSC
 
-Open-source firmware for the **ZT703S** and **ZT706S** handheld oscilloscope multimeters
-(STM32H7B0).
+Open-source firmware for the **ZT703S** and **ZT706S** handheld oscilloscope multimeters.
 
 OpenOSC replaces the stock application with its own oscilloscope, multimeter and signal generator
 firmware. It also adds a small Recovery bootloader that updates the firmware from a USB drive.
