@@ -39,6 +39,17 @@ public:
     // The same, with its trigger level set on purpose (TRIG:EDGE:LEV): an instrument that keeps the
     // trigger's voltage across scales takes it as the new anchor, also as the same whole code.
     virtual bool setTrigger(const ScopeRequest &request) { return configureScope(request); }
+    // CHANnel<n>:DISPlay: the channel shown, and on or off as the panel switches it (the last one shown
+    // goes off only with the DMM trace on, then hidden: plot::ChannelDisplay); 0 or the SCPI error.
+    virtual bool channelShown(unsigned channel) const { return scopeRequest().frontend.enabled[channel]; }
+    virtual int16_t showChannel(unsigned channel, bool on) {
+        auto request = scopeRequest();
+        return !request.setChannel(channel, on) ? -221 : configureScope(request) ? 0 : -222;
+    }
+    // DMM:FUNCtion: the function of the Scope's DMM trace (a MeterFunctions index, the DMM screen's too),
+    // set as its channel menu's Function row sets it; 0 or the SCPI error. Without one: none.
+    virtual unsigned meterTraceFunction() const { return ~0U; }
+    virtual int16_t meterTraceFunction(unsigned) { return -221; }
     virtual bool run(bool single) = 0;
     virtual bool autoScale() { return false; }
     // A forced trigger (TFORce): a record without a trigger event (DataAccess::forceScope). False:

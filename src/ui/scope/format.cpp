@@ -12,20 +12,33 @@ bool Format::quantity(double value, const char *unit, char *output, size_t capac
     constexpr double powers[] = {1e-12, 1e-9, 1e-6, 1e-3, 1, 1e3, 1e6, 1e9};
     constexpr const char *prefixes[] = {"p", "n", "u", "m", "", "k", "M", "G"};
     double magnitude = std::abs(value);
+    // Seconds from a minute on in minutes, from an hour on in hours ("1min", "1.5h"), never "3.6ks". The
+    // unit is chosen by the value as rounded in it to the digits shown (a measured 59.9997 s/div is
+    // "1min", not "60s"); the value itself is printed unrounded, rounded once.
+    if (!std::strcmp(unit, "s") && magnitude > 0) {
+        const auto rounded = [&](double x) {
+            const double step = std::pow(10.0, std::floor(std::log10(x)) + 1 - double(precision));
+            return std::floor(x / step + .5) * step;
+        };
+        if (rounded(magnitude / 3600) >= 1) { if (used) *used = 4; return quantity(value / 3600, "h", output, capacity, precision, coarse); }
+        if (rounded(magnitude / 60) >= 1) { if (used) *used = 4; return quantity(value / 60, "min", output, capacity, precision, coarse); }
+    }
     unsigned index = 4;
     if (magnitude > 0) {
         index = 0;
         while (index < 7 && magnitude >= powers[index + 1])
             ++index;
     }
-    if (!std::strcmp(unit,"%")) index = 4;
+    // Percent, degrees Celsius, minutes and hours take no prefix ("100m°C" reads as nonsense).
+    const bool plain = !std::strcmp(unit, "%") || !std::strcmp(unit, "°C") || !std::strcmp(unit, "min") || !std::strcmp(unit, "h");
+    if (plain) index = 4;
     double scaled = magnitude / powers[index];
-    if (index < 7 && std::strcmp(unit, "%")) { // 999.97n rounds to 1000n: that is 1u.
+    if (index < 7 && !plain) { // 999.97n rounds to 1000n: that is 1u.
         const unsigned whole = scaled >= 100 ? 3 : scaled >= 10 ? 2 : 1;
         const double step = std::pow(10.0, double(whole) - double(precision));
         if (std::floor(scaled / step + .5) * step >= 1000) { ++index; scaled = magnitude / powers[index]; }
     }
-    if (!coarse && magnitude > 0 && prefer >= 0 && prefer < 8 && std::strcmp(unit, "%") &&
+    if (!coarse && magnitude > 0 && prefer >= 0 && prefer < 8 && !plain &&
         ((prefer == int(index) - 1 && magnitude / powers[prefer] < 1050) || (prefer == int(index) + 1 && magnitude / powers[prefer] >= .95))) {
         index = unsigned(prefer); scaled = magnitude / powers[index];
     }
@@ -40,7 +53,7 @@ bool Format::quantity(double value, const char *unit, char *output, size_t capac
         const int n = std::snprintf(output, capacity, "%s%s%%", value < 0 && number[0] != '-' && units ? "-" : "", number);
         return n > 0 && size_t(n) < capacity;
     }
-    if (coarse && index < 7 && std::strcmp(unit, "%")) { // Three integer digits once rounded: 99.9m at 2 digits is 100m.
+    if (coarse && index < 7 && !plain) { // Three integer digits once rounded: 99.9m at 2 digits is 100m.
         const unsigned digits = scaled >= 100 ? 3 : scaled >= 10 ? 2 : 1;
         const double step = std::pow(10.0, -double(precision > digits ? precision - digits : 0));
         if (std::floor(scaled / step + .5) * step >= 100) { ++index; scaled = magnitude / powers[index]; }

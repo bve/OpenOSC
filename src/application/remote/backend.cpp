@@ -1,6 +1,7 @@
 #include "openosc/board/current.hpp"
 #include "openosc/application/boot_timing.hpp"
 #include "openosc/application/scpi_backend.hpp"
+#include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/screenshot/reader.hpp"
 #include <cstring>
 #include <strings.h>
@@ -36,6 +37,31 @@ bool InstrumentBackend::configure(const ScopeRequest &r, bool level) {
 }
 bool InstrumentBackend::configureScope(const ScopeRequest &r) { return configure(r, false); }
 bool InstrumentBackend::setTrigger(const ScopeRequest &r) { return configure(r, true); }
+unsigned InstrumentBackend::meterTraceFunction() const { return application_.prefs_.meterFunction; }
+// The channel menu's Function row (ApplicationController::selectMeterFunction), its refusals -221.
+int16_t InstrumentBackend::meterTraceFunction(unsigned function) {
+    auto &a = application_;
+    if (a.selectMeterFunction(function, Board::milliseconds())) return -221;
+    a.dataRefresh_ = true;
+    return 0;
+}
+bool InstrumentBackend::channelShown(unsigned channel) const {
+    return plot::ChannelDisplay::shown(application_.data_.scopeRequest(), application_.view_.waveform().options(), channel);
+}
+// The channel menu's Enabled row: the capture's channels and the view's hidden one, both or neither.
+int16_t InstrumentBackend::showChannel(unsigned channel, bool on) {
+    auto &a = application_;
+    auto request = a.data_.scopeRequest();
+    auto options = a.view_.waveform().options();
+    if (!plot::ChannelDisplay::show(request, options, channel, on)) return -221;
+    if (!request.same(a.data_.scopeRequest()) && !configure(request, false)) return -222;
+    if (options.meter.axis != a.view_.waveform().options().meter.axis) {
+        a.view_.waveform().configure(options);
+        a.queuePlotSave(Board::milliseconds());
+        a.dataRefresh_ = true;
+    }
+    return 0;
+}
 void InstrumentBackend::demand() const { application_.data_.frameHosts().demand(host_, Board::milliseconds()); }
 bool InstrumentBackend::run(bool single) {
     if (application_.data_.zeroBusy() || application_.bodeOwns()) return false;
@@ -54,8 +80,7 @@ bool InstrumentBackend::autoScale() {
     auto &a=application_;
     if (a.data_.measurementMode()!=MeasurementMode::Oscilloscope || a.data_.zeroBusy() ||
         a.data_.scopeRecording() || a.autoBusy() || a.bodeOwns()) return false;
-    a.startAuto(Board::milliseconds());
-    return a.autoBusy();
+    return a.startAuto(Board::milliseconds()); // The DMM trace alone: its scale fitted.
 }
 // TFORce: the acquisition's forced record; AutoSetup trials are its own refusal, zero/HOLD/Single
 // done are DataAccess's.

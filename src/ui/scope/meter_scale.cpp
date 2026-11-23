@@ -16,4 +16,17 @@ bool MeterScale::step(unsigned index, double value, int8_t &output) {
         }
     return false;
 }
+bool MeterScale::fit(unsigned index, double minimum, double maximum, double zero, int8_t &output) {
+    if (index >= Quantities) return false;
+    output = Spans[index].highest;
+    if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum > maximum) return false;
+    for (int step = Spans[index].lowest; step <= Spans[index].highest; ++step) {
+        const double divisions = perDivision(step);
+        if (maximum / divisions + zero <= 4 && minimum / divisions + zero >= -4) {
+            output = int8_t(step);
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace openosc::plot

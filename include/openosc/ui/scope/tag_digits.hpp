@@ -11,12 +11,12 @@ struct TagDigits {
     static constexpr int Width = 5, Height = 7;
     static constexpr int Left = (PlotFrame::TagWidth - Width) / 2, Top = (PlotFrame::TagHeight - Height) / 2;
     // Rows top to bottom; bit Width-1 is the leftmost column. Index: channel (0: "1", 1: "2"), 2: the
-    // DMM trace ("D").
+    // DMM trace ("M").
     static constexpr unsigned Glyphs = 3;
     static constexpr uint8_t Rows[Glyphs][Height] = {
         {0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110},
         {0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111},
-        {0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110},
+        {0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001},
     };
     static constexpr bool ink(unsigned channel, int x, int y) {
         return channel < Glyphs && x >= 0 && x < Width && y >= 0 && y < Height && (Rows[channel][y] >> (Width - 1 - x)) & 1U;

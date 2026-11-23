@@ -28,6 +28,9 @@ void Painter::markers() {
             if (traces[c].clippedBottom)
                 text("v", w - 12 - slot * 12, h - 13, color, 12);
         }
+    // The DMM trace's line beyond the plot (meterTrace): its marks beside the channels', in its colour.
+    if (meterAbove_) text("^", w - 36, 0, palette_.meter, 12);
+    if (meterBelow_) text("v", w - 36, h - 13, palette_.meter, 12);
     if (o.showZero) { // CH1, CH2 and the DMM trace (Y-T, Y-T+FFT: X-Y returned above).
         const int zero[ZeroTags::Count] = {traces[0].zero, traces[1].zero, int(std::lround(meterZero()))};
         const bool shown[ZeroTags::Count] = {traces[0].enabled, traces[1].enabled, o.meter.shown};
@@ -37,7 +40,7 @@ void Painter::markers() {
             if (shown[c]) zeroTag(c, zero[c], centre[c], h);
     }
     const unsigned source = unsigned(model_.triggerChannel());
-    if (model_.metadata().rolling || !o.showTrigger || !model_.metadata().channels[source].enabled || !o.channels[source].visible)
+    if (model_.metadata().rolling || !o.showTrigger || !model_.metadata().channels[source].enabled || !o.drawn(source))
         return;
     const auto color = palette_.triggerColor(source); // The Trigger role, else the source channel's colour.
     // Trigger level: right margin, pointing at the plot edge.

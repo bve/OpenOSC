@@ -126,12 +126,12 @@ BodePoint BodeTone::result() const {
     return p;
 }
 
+// Within the sampled timebases: the sweep's records are never an averaged Roll (Timebases::averaging).
 uint64_t BodeSweep::timebaseFor(double frequencyHz) {
-    constexpr unsigned Count = sizeof Timebases::Values / sizeof *Timebases::Values;
-    if (!(frequencyHz > 0)) return Timebases::Values[Count - 1];
+    if (!(frequencyHz > 0)) return Timebases::SampledMaximum;
     const double period = 1e9 / frequencyHz; // One cycle per division: about ten on the screen.
-    for (auto value : Timebases::Values) if (double(value) >= period) return value;
-    return Timebases::Values[Count - 1];
+    for (auto value : Timebases::Values) if (double(value) >= period) return std::min(value, Timebases::SampledMaximum);
+    return Timebases::SampledMaximum;
 }
 bool BodeSweep::start(const BodeSettings &settings, const BodeGrid &grid, const ScopeRequest &base, BodePoint *points) {
     if (!grid.valid() || !points || grid.count > BodeSettings::MaximumPoints || running()) return false;

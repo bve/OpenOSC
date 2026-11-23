@@ -6,7 +6,7 @@
 
 namespace openosc::plot {
 bool MeterTraceOptions::valid() const {
-    if (position < -PositionLimit || position > PositionLimit) return false;
+    if (position < -PositionLimit || position > PositionLimit || (axis != NoAxis && (axis > 1 || !shown))) return false;
     for (unsigned i = 0; i < MeterScale::Quantities; ++i)
         if (!MeterScale::valid(i, scales[i])) return false;
     return true;
@@ -42,7 +42,7 @@ void Options::restoreHeldView(const Options &saved) {
 }
 bool Options::sameTransform(const Options &b) const {
     if (mode != b.mode || zoom != b.zoom || zoomOut != b.zoomOut || panPpb != b.panPpb || heldTimebaseNs != b.heldTimebaseNs ||
-        lockTrigger != b.lockTrigger || centerHeldTrigger != b.centerHeldTrigger ||
+        lockTrigger != b.lockTrigger || centerHeldTrigger != b.centerHeldTrigger || meter.axis != b.meter.axis ||
         averaging != b.averaging || math != b.math ||
         reduction != b.reduction || interpolation != b.interpolation || !spectrum.same(b.spectrum))
         return false;

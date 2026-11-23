@@ -4,6 +4,7 @@
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/view_zoom.hpp"
 #include "openosc/ui/scope/plot_frame.hpp"
+#include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/acquisition/readouts.hpp"
 #include <cstdio>
 #include <cstring>
@@ -148,7 +149,10 @@ void ScopeScreen::cards() {
     bar.item(1, "Position", value);
     static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
     static constexpr const char *types[] = {"Trigger", "Pulse width", "Runt", "Rise/Fall"};
-    std::snprintf(value, sizeof value, "CH%u %s", view.number(unsigned(model.triggerChannel())), modes[unsigned(triggerMode_) % 3]);
+    // No channel shown (the DMM trace alone, plot::ChannelDisplay): Auto, of no channel.
+    const bool source = plot::ChannelDisplay::shown(shown, widget.options(), 0) || plot::ChannelDisplay::shown(shown, widget.options(), 1);
+    if (source) std::snprintf(value, sizeof value, "CH%u %s", view.number(unsigned(model.triggerChannel())), modes[unsigned(triggerMode_) % 3]);
+    else std::snprintf(value, sizeof value, "%s", modes[0]);
     bar.item(2, types[unsigned(triggerType_)], value);
     if (focus_ == plot::Focus::Zoom) { // Zoom & Pan: F4 goes back to the card it came from.
         char factor[16];
@@ -165,7 +169,7 @@ void ScopeScreen::cards() {
     const auto channelTint = [&](unsigned c) { return c > 1 ? Tint::Neutral : view.slot(c) ? Tint::Channel2 : Tint::Channel1; };
     bar.tint(0, meter ? Tint::Meter : channelTint(channel_));
     bar.tint(1, meter ? Tint::Meter : channelTint(channel_));
-    bar.tint(2, channelTint(unsigned(model.triggerChannel())));
+    bar.tint(2, source ? channelTint(unsigned(model.triggerChannel())) : Tint::Neutral);
     bar.tint(3, Tint::Neutral);
     if (!host_.overlayActive()) bar.select(focus_ == plot::Focus::Zoom ? 3U : unsigned(focus_));
     host_.elements().text(ElementId::Details, details);

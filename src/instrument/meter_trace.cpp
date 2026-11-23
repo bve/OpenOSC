@@ -1,6 +1,8 @@
 #include "openosc/instrument/data_access.hpp"
+#include "openosc/measurement/meter_function.hpp"
 #include "openosc/platform/board.hpp"
 #include <cmath>
+#include <cstring>
 
 // The Scope's DMM trace: the DMM chip powered beside the capture, its packets into the DMM's session,
 // and the readings its line is drawn from.
@@ -30,8 +32,7 @@ void DataAccess::serviceMeterTrace(uint32_t now) {
     if (!meterTraceRunning_) {
         meterTraceRunning_ = true;
         ++meterTraceStarts_;
-        meterTraceSinceUs_ = timeUs_;
-        meterGap_ = true;
+        breakMeterTrace();
         dmm_.abandon();
         framer_.reset();
         uint32_t remainingMs = 0;
@@ -62,7 +63,14 @@ void DataAccess::stopMeterTrace() {
     watchdog_.left(Board::milliseconds()); // Off already (a power cycle, a deferred power-on): since then.
     watchdog_.deactivate();
     framer_.reset();
+    breakMeterTrace();
+}
+// The readings stop now (the trace stopped or started, the chip power-cycled, its UART restarted): the
+// line ends here, not at the next reading (a level held from before the stop or a slope across it).
+// HOLD keeps every reading its frame shows: the next reading marks the gap then.
+void DataAccess::breakMeterTrace() {
     meterGap_ = true;
+    if (!scopeHeld_) meterReadings_.gap(uint32_t(timeUs_ / 1000));
 }
 void DataAccess::traceReading() {
     const auto &reading = meter_.live();
@@ -76,15 +84,40 @@ void DataAccess::traceReading() {
         meterReadings_.reset(primary.quantity);
         meterGap_ = false;
     }
-    if (meterGap_) meterReadings_.push(ms, NAN);
+    // At a slow timebase an entry is the mean of the readings within its span (ReadingTrace::push).
+    const uint32_t span = dmm::ReadingTrace::spanMs(request_.timebaseNs);
+    if (meterGap_) meterReadings_.gap(ms, span);
     meterGap_ = false;
-    meterReadings_.push(ms, primary.valid() ? float(primary.si) : NAN);
+    meterReadings_.push(ms, primary.valid() ? float(primary.si) : NAN, span);
 }
-const dmm::Result *DataAccess::meterTraceReading() const {
-    const auto &reading = meter_.live();
-    if (!meterTraceRunning_ || !reading.sequence || reading.timestampUs < meterTraceSinceUs_ ||
-        timeUs_ - reading.timestampUs > ReadingStaleUs)
-        return nullptr;
-    return &reading;
+// A scope CSV's dmm column while the DMM trace shows (ScopeRecorder::Meter): the readings over `record`,
+// from the one in force at its first point to the last by its last, each with the first row it holds
+// from, copied as the write starts (the ring goes on meanwhile). The copy takes the trial area, claimed
+// until the write ends: AutoSetup and zero calibration, its owners, start no capture while a recording
+// runs, and a capture of theirs that holds it now leaves the file without the column.
+bool DataAccess::meterColumn(const scope::FrameMetadata &record, ScopeRecorder::Meter &meter) {
+    using Arena = scope::AcquisitionArena;
+    using Point = ScopeRecorder::MeterPoint;
+    static_assert(dmm::ReadingTrace::Capacity * sizeof(Point) <= Arena::TrialBytes, "A CSV's DMM readings fit the trial area");
+    if (!meterTraceAsked_ || !record.valid() || !arena_.claim(Arena::Trial)) return false;
+    meterCopy_ = true;
+    const double rate = record.samplesPerSecond.value(), last = double(record.samples - 1);
+    const uint32_t originMs = uint32_t(record.timestampUs / 1000);
+    const double originUs = double(record.timestampUs % 1000);
+    auto *copy = reinterpret_cast<unsigned char *>(Arena::trialMemory());
+    uint32_t count = 0;
+    for (size_t i = 0; i < meterReadings_.size(); ++i) {
+        const auto reading = meterReadings_[i];
+        // Its place among the record's points, as plot::MeterAxis places it on the plot.
+        const double point = (double(int32_t(reading.ms - originMs)) * 1000 - originUs) * rate / 1e6;
+        if (point > last) break;
+        if (point <= 0) count = 0; // Of the readings before the record only the last holds at its start.
+        const Point held{point <= 0 ? 0U : uint32_t(std::ceil(point)), reading.value};
+        std::memcpy(copy + count++ * sizeof held, &held, sizeof held);
+    }
+    const auto function = dmm::Functions::identify(meter_.latest());
+    meter = {copy, count, function < dmm::Function::Unknown ? MeterFunctions[unsigned(function)].key : "unknown",
+             meterReadings_.quantity()};
+    return true;
 }
 } // namespace openosc

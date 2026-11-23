@@ -1,7 +1,6 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/input.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
-#include "openosc/measurement/dmm/function.hpp"
 
 namespace openosc {
 // Crossing into or out of X-Y restarts the picture and both directions leave HOLD. Entering is one
@@ -49,7 +48,6 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
     const auto refuse = [&](const char *why) {
         view_.notify(Tooltip::Unavailable, why, now);
         plotControls_.options = view_.waveform().options();
-        plotControls_.meterFunction = prefs_.meterFunction;
         return false;
     };
     auto &widget = view_.waveform();
@@ -64,7 +62,7 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         const unsigned channel = plotControls_.channel;
         constexpr auto VisibleTrace = "Reference needs a visible Y-T channel";
         if ((options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay) ||
-            !options.channels[channel].visible) return refuse(VisibleTrace);
+            !options.drawn(channel)) return refuse(VisibleTrace); // Never the DMM trace's hidden time axis.
         scope::FrameLease frame;
         if (!data_.acquireScopeWait(frame)) return refuse("Reference needs a completed frame");
         widget.setFrame(frame.view());
@@ -80,7 +78,9 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         (!ch1 || !ch2 || !plotControls_.options.channels[0].visible || !plotControls_.options.channels[1].visible)) {
         return refuse("XY needs CH1 + CH2 enabled and visible");
     }
-    if (!plotControls_.enabled[plotControls_.options.spectrum.channel])
+    // Onto the other channel only when that one is shown (as data_display.cpp): with the DMM trace alone
+    // the source stays, drawing nothing.
+    if (!plotControls_.enabled[plotControls_.options.spectrum.channel] && plotControls_.enabled[plotControls_.options.spectrum.channel ^ 1])
         plotControls_.options.spectrum.channel ^= 1;
     if (!changePlotMode(plotControls_.options,view_.waveform().options().mode,now)) return refuse("Finish data transfer first");
     widget.configure(plotControls_.options);
@@ -89,14 +89,6 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
     plotControls_.options = widget.options(); // As the view took it (X-Y adds its own).
     queuePlotSave(now);
     dataRefresh_ = true;
-    // The DMM function, the DMM screen's too: sent at once while the DMM trace runs, else when it starts.
-    if (plotControls_.meterFunction == prefs_.meterFunction) return true;
-    const auto function = dmm::Function(plotControls_.meterFunction);
-    if (function == dmm::Function::Temperature && !prefs_.meter.temperature.configured())
-        return refuse("Type K: set Manual junction in the DMM's MENU");
-    if (data_.meterTraceRunning() && !data_.selectDmmFunction(function)) return refuse("Measurement command busy");
-    prefs_.meterFunction = state_.meter.function = plotControls_.meterFunction;
-    changed(now);
     return true;
 }
 } // namespace openosc

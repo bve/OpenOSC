@@ -19,7 +19,7 @@ Source::Source(const scope::FrameView &frame, const Options &options, Statistics
     split_ = frame.split();
     const auto *c = frame.metadata().channels;
     for (unsigned i = 0; i < 2; ++i)
-        enabled_[i] = read_[i] = c[i].enabled && options.channels[i].visible;
+        enabled_[i] = read_[i] = c[i].enabled && options.drawn(i);
     bool compatible = c[0].enabled && c[1].enabled && c[0].calibrated == c[1].calibrated;
     if (compatible && c[0].calibrated) {
         const double ratio = c[1].voltsPerCode * c[1].probeNumerator * c[0].probeDenominator /

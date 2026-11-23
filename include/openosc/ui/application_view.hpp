@@ -28,7 +28,8 @@ public:
     void measurement(const ApplicationState &state);
     void capture(const scope::FrameView &frame, bool held, unsigned channel, DataStatus health);
     void captureStatus(DataStatus status, bool held) { scope_.status(status, held); refreshIndicators(); }
-    void scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel);
+    // source: a channel is shown to trigger on; none (the DMM trace alone): "AUTO", no channel and no level.
+    void scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel, bool source);
     void scopeCounters(const scope::CounterSnapshot &snapshot) { scope_.counters(snapshot); }
     bool scopeReadouts(const scope::ReadoutResult &result, const ui::ReadoutState &state) { return scope_.readouts(result, state); }
     bool scopeReadoutsPainted() const { return scope_.readoutsPainted(); }
@@ -192,6 +193,7 @@ private:
     lv_obj_t *menu_ = nullptr, *toast_ = nullptr, *generatorIndicator_ = nullptr, *usbIndicator_ = nullptr, *fps_ = nullptr, *trigger_ = nullptr, *edge_ = nullptr, *channelTag_ = nullptr;
     static constexpr unsigned NoTriggerChannel = 2;
     unsigned channelTagChannel_ = NoTriggerChannel;
+    bool triggerSource_ = true; // scopeTrigger's source: the channel tag and the edge are shown.
     uint32_t channelTagColor_ = 0, channelTagInk_ = 0;
     static void drawChannelTag(lv_event_t *event);
     void refreshTriggerColors(unsigned channel);

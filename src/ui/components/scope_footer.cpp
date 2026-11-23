@@ -1,6 +1,7 @@
 #include "openosc/ui/components/scope_footer.hpp"
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/format.hpp"
+#include "openosc/ui/scope/trace_move.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -90,14 +91,16 @@ bool ScopeFooter::replan() {
     bool enabled[2] = {true, true};
     bool spectrum = false, scales = false;
     if (model_) {
-        for (unsigned c = 0; c < 2; ++c) enabled[c] = model_->metadata().channels[c].enabled;
-        spectrum = model_->options().mode == plot::Mode::Spectrum;
+        for (unsigned c = 0; c < 2; ++c) enabled[c] = this->enabled(c);
+        spectrum = model_->options().mode == plot::Mode::Spectrum && this->enabled(model_->options().spectrum.channel);
         scales = model_->options().showScale;
     } else if (countersValid_) for (unsigned c = 0; c < 2; ++c) enabled[c] = counters_.enabled & (1U << c);
     return pages_.plan(selection_, enabled, spectrum, scales, meter_.shown);
 }
+// The DMM trace's hidden time axis (MeterTraceOptions::axis) is off here too.
 bool ScopeFooter::enabled(unsigned channel) const {
-    return model_ ? model_->metadata().channels[channel].enabled : !countersValid_ || (counters_.enabled & (1U << channel));
+    return model_ ? plot::ChannelDisplay::shown(model_->metadata(), model_->options(), channel)
+                  : !countersValid_ || (counters_.enabled & (1U << channel));
 }
 uint32_t ScopeFooter::channelColor(unsigned channel) const {
     if (channel == FooterPages::Meter) return meterColor_;
@@ -227,7 +230,7 @@ void ScopeFooter::scalesPage() {
         }
         const uint32_t color = channelColor(c);
         look(p, &color);
-        if (!channel.enabled) std::snprintf(text, sizeof text, "CH%u Off", view_.number(c));
+        if (!enabled(c)) std::snprintf(text, sizeof text, "CH%u Off", view_.number(c));
         else {
             const auto scale = plot::DisplayScale::channel(channel, model_->options().channels[c]);
             plot::DisplayScale::probe(channel, probe, sizeof probe);

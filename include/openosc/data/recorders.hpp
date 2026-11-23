@@ -9,8 +9,21 @@ namespace openosc {
 class ScopeRecorder {
 public:
     enum class Format { Raw, Csv };
+    // A CSV's dmm column (Csv::ScopeMeterHeader): the DMM readings over its record in time order, each
+    // from its first row on (a reading before the record from row 0), copied for the write's whole
+    // length (DataAccess::meterColumn); NaN leaves the field empty, as do the rows before the first.
+    struct MeterPoint {
+        uint32_t row;
+        float value;
+    };
+    struct Meter {
+        const unsigned char *points = nullptr; // MeterPoint, byte for byte (memcpy).
+        uint32_t count = 0;
+        const char *function = "";
+        Quantity quantity = Quantity::Unknown;
+    };
     explicit ScopeRecorder(Filesystem &fs) : file_(fs) {}
-    bool begin(scope::FrameLease &&lease, Format format);
+    bool begin(scope::FrameLease &&lease, Format format, const Meter *meter = nullptr);
     void service();
     void cancel(bool keep = false);
     bool busy() const { return busy_; }
@@ -23,12 +36,21 @@ public:
 private:
     bool writeCsvHeader(size_t bytes);
     void measureCsv();
+    // The CSV's metadata lines into buffer_, the "# dmm:" line with a dmm column: their bytes, 0 when they do not fit.
+    size_t csvHeader(const scope::FrameMetadata &metadata);
+    const char *columns() const; // The column header: Csv::ScopeMeterHeader with a dmm column, else ScopeHeader.
+    const float *meterField(size_t row); // The dmm field of `row` (rows in order), nullptr without the column.
     FatDataFile file_;
     scope::FrameLease lease_;
     RawCaptureStream stream_;
     Format format_ = Format::Raw;
     size_t offset_ = 0;
     uint64_t required_ = 0;
+    const unsigned char *meter_ = nullptr; // Meter::points, nullptr: no dmm column.
+    uint32_t meterCount_ = 0, meterNext_ = 0; // The points; the next to come into force.
+    float meterValue_ = 0;                  // The one in force (NaN: none).
+    const char *meterFunction_ = "";        // Meter::function and quantity: the "# dmm:" line.
+    Quantity meterQuantity_ = Quantity::Unknown;
     bool busy_ = false, finishing_ = false, measuring_ = false;
     DataStatus status_ = DataStatus::NoData;
     uint8_t buffer_[4096]{};

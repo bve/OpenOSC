@@ -31,6 +31,11 @@ public:
         default: return Quantity::Unknown;
         }
     }
+    // The quantity a function's readings are in: continuity reads in ohms, the diode in volts.
+    static constexpr Quantity reading(Function f) {
+        return f == Function::Continuity ? Quantity::Resistance : f == Function::Diode ? Quantity::Voltage
+             : f == Function::Temperature ? Quantity::Temperature : quantity(f);
+    }
 };
 class FunctionSelector {
 public:

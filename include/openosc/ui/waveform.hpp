@@ -44,10 +44,8 @@ public:
     void note(const char *text, uint32_t color);
     // The frequency counter overlay in the top left corner; empty hides it.
     void counter(const char *text, uint32_t color);
-    // The Scope's DMM trace: the readings its line is drawn from (nullptr: none) and its value tag in
-    // the plot's bottom left, above the scales (empty hides it).
+    // The Scope's DMM trace: the readings its line is drawn from (nullptr: none).
     void meterReadings(const dmm::ReadingTrace *readings);
-    void meterTag(const char *text, uint32_t color);
     const char *note() const { return note_ && !lv_obj_is_hidden(note_) ? lv_label_get_text(note_) : ""; } // On show.
     void service(uint32_t now);
     bool captureReference(unsigned channel);
@@ -67,7 +65,7 @@ private:
     static void cover(lv_event_t *event);
     static void geometry(lv_event_t *event);
     void triggerMark(plot::TriggerMark mark); // Repaints the right margin when it changes.
-    lv_obj_t *object_ = nullptr, *note_ = nullptr, *counter_ = nullptr, *meterTag_ = nullptr;
+    lv_obj_t *object_ = nullptr, *note_ = nullptr, *counter_ = nullptr;
     bool noteLow_ = false; // The note in the plot's bottom left: Y-T+FFT has its header on the top line.
     plot::Model model_;
     plot::Palette palette_;

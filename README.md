@@ -162,23 +162,28 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 
 **Oscilloscope**
 
-- Two channels, 20 mV/div to 10 V/div, timebase from 10 ns/div to 20 s/div
+- Two channels, 20 mV/div to 10 V/div, timebase from 10 ns/div to 1 h/div (10 hours on screen).
+  Past 20 s/div the capture runs in Roll with the trigger in Auto, sampling as at 20 s/div: each point
+  shown is the mean of the samples it spans
 - Trigger modes Auto, Normal and Single, with adjustable pre/post-trigger position and Center trigger.
   Tap **F3** to select Trigger and use Left/Right to adjust pretrigger. Tap **F3** again to cycle modes.
   The Trigger menu supports Edge, Pulse width, Runt and Rise/fall time. [Trigger setup](docs/SCOPE_TRIGGERS.md)
   Hold **F3** to set the trigger level to the signal midpoint and pretrigger to 50%. Pan with **F2**
-- Continuous Roll mode for slow timebases (200 ms/div and slower)
+- Continuous Roll mode for slow timebases (200 ms/div and slower, always past 20 s/div)
 - Record memory from 64K to 512K points across enabled channels. The record overview shows the
   budget used for the displayed capture. A label such as `<512K` means the capture plan reserves part
   of that budget, for example as DMA headroom at the fastest sample rates. The prefix depends on the
   plan only, so it stays steady while the settings stay the same. **Analyze → Acquisition → Captured**
   shows the exact number of points per channel in the displayed record.
-- The multimeter as a third channel beside CH1 and CH2 (**Analyze → Display → View → DMM** and
-  **DMM function**), measured at the multimeter's own inputs: its line at every timebase in its own
-  color (**Analyze → Colors**), with its zero tag and its reading over the plot. **F1**/**F2** select
-  it after the channels; Up/Down then set its units/div and its position. Its readouts (mean, min,
-  max, peak to peak, RMS) have a footer page of their own, or the panel of a channel that is off, and
-  level cursors can measure it in its units
+- The multimeter as a third channel beside CH1 and CH2 (**Channel → Channel → DMM**: **Enabled** and
+  **Function**), measured at the multimeter's own inputs: its line at every timebase in its own color
+  (**Analyze → Colors**), with its zero tag, from where the record starts. At slow timebases each point
+  of the line is the mean of every reading it spans. **F1**/**F2** select it after the channels;
+  Up/Down then set its units/div and its position, and **MENU** opens its channel menu. **AUTO** also
+  sets its units/div to fit the readings on screen; with the DMM alone, only that. Its readouts
+  (mean, min, max, peak to peak, RMS) have a footer page of their own, or the panel of a channel that
+  is off, and level cursors can measure it in its units. With the DMM on, CH1 and CH2 can both be off:
+  the DMM takes the plot and the whole footer, on the time axis of the last channel, kept hidden
 - In the default **Quick** profile, tap **AUTO** to start Auto Setup or cancel it in progress.
   Hold **AUTO** for 2 s in Y-T to open **Zoom & Pan**. Up/Down zoom the view, Left/Right pan, and
   **F4** returns to the previous card. The **Classic** profile uses a tap to reset pan and a hold to
@@ -232,6 +237,7 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   and profile. The ZT703S defaults to Off and the ZT706S to Auto (the stock rule)
 - Save waveforms to `/openosc/CAPTURES` with **Analyze → Save waveform RAW** or **Save waveform CSV**. If the CSV
   size estimate exceeds the free space, OpenOSC counts the actual formatted rows before rejecting the save.
+  With the DMM on, a CSV also has its readings in a `dmm` column
 
 **Multimeter**
 

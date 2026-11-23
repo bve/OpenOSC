@@ -29,7 +29,7 @@ void DataAccess::restartDmmUart() {
     dmm_.abandon();
     framer_.reset();
     meter_.interruptCharge(); // Readings are lost across the restart.
-    meterGap_ = true;
+    breakMeterTrace();
     if ((!uart_.stop() || !startMeterUart()) && measurement_ == MeasurementMode::Multimeter) status_ = DataStatus::HardwareError;
 }
 // dmm::LinkWatchdog's decision carried out: a silent chip power-cycled, a deferred power-on, a UART
@@ -53,7 +53,7 @@ void DataAccess::serviceDmmWatchdog(uint32_t now) {
         dmm_.abandon();
         meter_.interruptCharge(); // The DMM chip goes off: no reading until it is back.
         powerMeter(false);
-        meterGap_ = true;
+        breakMeterTrace();
         dmmActivatedAtUs_ = timeUs_ + uint64_t(dmm::LinkWatchdog::OffMs) * 1000;
         if (meter) status_ = DataStatus::NoData;
         return;
@@ -128,7 +128,9 @@ void DataAccess::poll(uint32_t now) {
         scope::FrameLease lease;
         if (timeUs_ >= recordDeadlineUs_) { recordStatus_ = DataStatus::Timeout; recordPending_ = false; }
         else if (acquireScope(lease)) {
-            if (!recorder_.begin(std::move(lease), recordFormat_))
+            ScopeRecorder::Meter meter;
+            const bool column = recordFormat_ == ScopeRecorder::Format::Csv && meterColumn(lease.view().metadata(), meter);
+            if (!recorder_.begin(std::move(lease), recordFormat_, column ? &meter : nullptr))
                 recordStatus_ = recorder_.status();
             recordPending_ = false;
         }
@@ -136,6 +138,7 @@ void DataAccess::poll(uint32_t now) {
     const bool recording = recorder_.busy();
     recorder_.service();
     if (recording && !recorder_.busy()) recordStatus_ = recorder_.status();
+    if (meterCopy_ && !recorder_.busy()) { arena_.release(scope::AcquisitionArena::Trial); meterCopy_ = false; } // Its copy is done with.
     logger_.service();
     session_.service(timeUs_); // Time and the commit, also while stopping (beginShutdown ended it).
     if (active_ && !stopping_ && measurement_==MeasurementMode::Multimeter) serial_.service(meter_.latest(),now);

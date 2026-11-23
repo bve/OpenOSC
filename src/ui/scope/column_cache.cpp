@@ -5,7 +5,7 @@ bool ColumnCache::applies(const scope::FrameView &frame, const Options &options,
     const auto *c = frame.metadata().channels;
     return (options.mode == Mode::Time || options.mode == Mode::SpectrumOverlay) && options.math == Math::Off &&
            viewport.aggregates() && frame.pairs() && c[0].enabled && c[1].enabled &&
-           options.channels[0].visible && options.channels[1].visible;
+           options.drawn(0) && options.drawn(1);
 }
 bool ColumnCache::reduce(const scope::FrameView &frame, uint32_t first, uint32_t last, scope::ColumnStats (&out)[2]) {
     auto reader = frame.pairCursor(first);
