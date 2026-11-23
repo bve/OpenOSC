@@ -25,6 +25,7 @@ const char *ErrorQueue::message(int16_t code) {
     case -221: return "Settings conflict";
     case -222: return "Data out of range";
     case -224: return "Illegal parameter value";
+    case -223: return "Too much data";
     case -230: return "Data unavailable or invalid";
     case -240: return "Hardware error";
     case -241: return "Hardware missing";

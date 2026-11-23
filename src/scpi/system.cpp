@@ -30,7 +30,8 @@ int path(const char *&p, bool name, char *out, size_t size) {
     if (!folder) return -257;
     if (slash) {
         const char *file = slash + 1, *dot = std::strrchr(file, '.');
-        if (!*file || *file == '.' || std::strpbrk(file, "/\\:*?\"<>|") || (dot && !strcasecmp(dot, ".TMP"))) return -257;
+        const char last = *file ? file[std::strlen(file) - 1] : 0; // FatFs drops trailing dots and spaces: "X.TMP." is X.TMP.
+        if (!*file || *file == '.' || last == '.' || last == ' ' || std::strpbrk(file, "/\\:*?\"<>|") || (dot && !strcasecmp(dot, ".TMP"))) return -257;
         const int n = std::snprintf(out, size, "%s/%s/%s", storage::Layout::Root, folder, file);
         return n > 0 && size_t(n) < size ? 0 : -257;
     }
@@ -65,6 +66,7 @@ bool Engine::systemCommand(const Command &c) {
         uint32_t count = 0, total = 0;
         const int e = backend_.fileList(folder, uint32_t(start), list, sizeof list, count, total);
         if (e) error(int16_t(e), true);
+        else if (!count && start < total) error(-223, true); // One name longer than a reply: paging cannot pass it.
         else reply("%lu,%lu%s%s", (unsigned long)total, (unsigned long)count, *list ? "," : "", list);
     } else if (match("MMEMory:DATA")) { // "FOLDER/NAME": the file as a definite block.
         const char *p = c.argument;

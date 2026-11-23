@@ -8,6 +8,7 @@
 #include "openosc/platform/clocks.hpp"
 #include <cstdio>
 #include <strings.h>
+#include "openosc/storage/open_readers.hpp"
 
 namespace openosc {
 InstrumentBackend::InstrumentBackend(ApplicationController &application)
@@ -231,9 +232,11 @@ bool InstrumentBackend::idleSettings(IdleSettings &settings) const { settings = 
 int InstrumentBackend::setIdle(const IdleSettings &settings) {
     auto &a = application_;
     if (!settings.valid()) return -222;
+    const auto now = Board::milliseconds();
+    a.dropEdit(now); // An unconfirmed edit is undone first, never saved with this.
     auto chosen = a.prefs_; chosen.idle = settings;
-    a.applySettings(chosen, Board::milliseconds());
-    if (a.state_.settingsOpen) { a.navigator_.reset(a.navigator_.row()); a.showSettings(); } // An edit in progress ends.
+    a.applySettings(chosen, now);
+    if (a.state_.settingsOpen) a.showSettings();
     return 0;
 }
 int InstrumentBackend::fileList(const char *folder, uint32_t start, char *out, size_t size, uint32_t &count, uint32_t &total) {
@@ -258,9 +261,14 @@ int InstrumentBackend::fileList(const char *folder, uint32_t start, char *out, s
 int InstrumentBackend::fileOpen(const char *path, uint32_t &bytes) {
     fileClose();
     if (!application_.fs_.mounted()) return -250;
+    const bool shots = !std::strncmp(path, storage::Layout::Screenshots, std::strlen(storage::Layout::Screenshots));
+    if (shots && application_.images_.clearing()) return -221;
+    FILINFO info{};
+    if (const FRESULT found = f_stat(path, &info); found != FR_OK || (info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
+        return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : -250; // As MMEM:CAT? lists.
     const FRESULT result = f_open(&file_, path, FA_READ);
     if (result != FR_OK) return result == FR_NO_FILE || result == FR_NO_PATH ? -256 : -250;
-    fileOpen_ = true; ++openFiles_; bytes = uint32_t(f_size(&file_));
+    fileOpen_ = true; ++storage::openReaders; bytes = uint32_t(f_size(&file_));
     return 0;
 }
 size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
@@ -268,12 +276,15 @@ size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
     if (!fileOpen_ || (f_tell(&file_) != at && f_lseek(&file_, at) != FR_OK) || f_read(&file_, out, UINT(size), &n) != FR_OK) return 0;
     return n;
 }
-void InstrumentBackend::fileClose() { if (fileOpen_) { f_close(&file_); --openFiles_; } fileOpen_ = false; }
+void InstrumentBackend::fileClose() { if (fileOpen_) { f_close(&file_); --storage::openReaders; } fileOpen_ = false; }
 int InstrumentBackend::fileDelete(const char *path) {
     if (!application_.fs_.mounted()) return -250;
     const auto &a = application_;
     const bool shots = !std::strncmp(path, storage::Layout::Screenshots, std::strlen(storage::Layout::Screenshots));
-    if (openFiles_ || (shots && (a.imageReader_.busy() || a.images_.clearing() || a.panel_ == ApplicationController::Panel::Images ||
+    FILINFO info{};
+    if (const FRESULT found = f_stat(path, &info); found != FR_OK || (info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
+        return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : -250;
+    if (storage::openReaders || (shots && (a.imageReader_.busy() || a.images_.clearing() || a.panel_ == ApplicationController::Panel::Images ||
         (a.panel_ == ApplicationController::Panel::Confirmation && a.confirmationImages_)))) return -221; // Being read or browsed.
     const FRESULT result = f_unlink(path);
     return result == FR_OK ? 0 : result == FR_NO_FILE || result == FR_NO_PATH ? -256 : -250;

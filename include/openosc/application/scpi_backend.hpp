@@ -102,6 +102,5 @@ private:
     char serial_[25]{};
     FIL file_{};
     bool fileOpen_ = false;
-    static inline unsigned openFiles_ = 0; // MMEM:DATA? streams of every session (TMC, CDC).
 };
 } // namespace openosc

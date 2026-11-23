@@ -83,9 +83,10 @@ size_t Tmc::packet(uint8_t *output, size_t capacity) {
     }
     size_t used = 0;
     while (replyAt_ < 12 && used < capacity) output[used++] = reply_[replyAt_++];
-    if (transfer_ && used < capacity) {
+    while (transfer_ && used < capacity) { // A short packet ends the host's transfer: an early read stops only at 64.
         const size_t count = engine_.read(output + used, std::min<size_t>(transfer_, capacity - used));
         transfer_ -= count; used += count; inData_ += count;
+        if (!count || !(used & 63)) break;
     }
     while (!transfer_ && outputPadding_ && used < capacity) { output[used++] = 0; --outputPadding_; }
     if (!transfer_ && !outputPadding_) {
