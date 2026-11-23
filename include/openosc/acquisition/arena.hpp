@@ -115,7 +115,7 @@ public:
     static bool roll(CaptureBuffer &out, bool interleaved = false);
     static uint16_t *rollHistory();  // RollWindow words.
     static uint16_t *rollSnapshot(); // RollWindow words.
-    static uint16_t *rollSpare();    // Bank 3: written only by a slot capture, never while Roll holds the arena.
+    static uint16_t *rollSpare();    // Bank 3: no capture writes it while Roll holds the arena; the DMM trace's readings live there.
     // A free slot for a budget, or false while the frame on show, HOLD or Roll hold the memory.
     bool freeSlot(uint32_t budget, unsigned &slot, Geometry geometry = Geometry::Standard) const;
     // Slots exclude Roll and each other; Roll parts exclude every slot; the trial area is apart.
