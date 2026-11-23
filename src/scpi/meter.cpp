@@ -102,7 +102,7 @@ bool Engine::meterCommand(const Command &c) {
             if (argument(c, value)) {
                 const double deciC = std::round(value * 10);
                 if (!std::isfinite(deciC) || deciC < dmm::TemperatureSettings::Minimum || deciC > dmm::TemperatureSettings::Maximum ||
-                    std::fabs(value * 10 - deciC) > 1e-8) error(-222);
+                    std::fabs(value * 10 - deciC) > 1e-8 || !dmm::Thermocouple::junctionInRange(settings.type, value)) error(-222);
                 else {
                     settings.junctionDeciC = int32_t(deciC);
                     settings.source = dmm::JunctionSource::Manual;

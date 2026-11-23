@@ -49,7 +49,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
     if (data_.measurementMode() == MeasurementMode::Multimeter && data_.dmmSelectionStatus() == DataStatus::Ok && !data_.dmmBusy()) {
         const auto &result = data_.meter().latest();
         const auto &meter = data_.meter();
-        const auto function = meter.typeK() ? dmm::Function::Temperature : dmm::Functions::identify(result);
+        const auto function = meter.thermocouple() ? dmm::Function::Temperature : dmm::Functions::identify(result);
         if (restoreDue) { // Another or an unknown function: restores() is false, nothing is sent, prefs stay.
             if (MeterRangeMemory::restores(prefs_.meter, prefs_.meterFunction, function, result.range)) {
                 const bool accepted = prefs_.meter.automatic ? data_.setDmmAuto(true) : data_.setDmmRange(prefs_.meter.range);
@@ -58,7 +58,7 @@ void ApplicationController::serviceInstruments(uint32_t now) {
             }
         }
         // A native temperature packet can be displayed, but cannot be selected at the next boot.
-        if (function != dmm::Function::Unknown && (function != dmm::Function::Temperature || meter.typeK()) &&
+        if (function != dmm::Function::Unknown && (function != dmm::Function::Temperature || meter.thermocouple()) &&
             prefs_.meterFunction != unsigned(function)) {
             prefs_.meterFunction = state_.meter.function = unsigned(function); changed(now); dataRefresh_ = true;
             if (visible) refreshMeterPanel();

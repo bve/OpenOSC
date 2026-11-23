@@ -13,7 +13,7 @@ class MeterProperties final : public PropertyList {
 public:
     // Hold: its own list (MeterHoldProperties), the mode as its value.
     enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, BarGraph, BarUnit, Relative, Hold, ResetStatistics,
-               Logging, SessionLog, JunctionSource, ColdJunction, TemperatureUnit, SerialOutput, Count };
+               Logging, SessionLog, ThermocoupleType, JunctionSource, ColdJunction, TemperatureUnit, SerialOutput, Count };
     static constexpr unsigned VisibleRows = board::Current::Features.dmmSerialOutput ? Count : SerialOutput;
     explicit MeterProperties(const dmm::Result &result, unsigned display = 0, bool statistics = true,
                              bool relative = false, bool logging = false, bool serial=false, bool jackBusy=false,
@@ -57,6 +57,7 @@ public:
     bool optionSwatch(unsigned row, unsigned index, uint32_t &rgb) const override;
     bool valueSwatch(unsigned row, uint32_t &rgb) const override { return optionSwatch(row, palette_, rgb); }
 private:
+    void windowNote(char *output, size_t capacity) const;
     bool ranged() const; // The function shown has ranges (dmm::Ranges::selectable): else Range is Info, "None".
     dmm::Result result_;
     unsigned display_, face_, palette_;

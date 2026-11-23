@@ -59,11 +59,11 @@ struct BarReading {
         const bool delta = relative && relative->matches(result);
         if (bar.temperature) {
             const bool live = bar.status == DataStatus::Ok && result.primary.valid();
-            const double degrees = live ? TypeK::display(delta ? relative->apply(result).si : result.primary.si,
+            const double degrees = live ? TemperatureUnits::display(delta ? relative->apply(result).si : result.primary.si,
                                                          result.unit, delta || result.peerRelative)
                                         : std::numeric_limits<double>::quiet_NaN();
             TemperatureAxis singleReading;
-            bar.scale = (axis ? *axis : singleReading).select(degrees, TypeK::fahrenheit(result.unit), delta || result.peerRelative);
+            bar.scale = (axis ? *axis : singleReading).select(degrees, TemperatureUnits::fahrenheit(result.unit), delta || result.peerRelative);
             if (std::isfinite(degrees))
                 bar.counts = int(std::lround(std::clamp(degrees * TemperatureAxis::CountsPerDegree - bar.scale.minimum,
                                                         0., double(bar.scale.fullScale))));

@@ -11,7 +11,7 @@ namespace openosc::ui {
 PropertyKind MeterProperties::kind(unsigned row) const {
     if (row == Range && !ranged()) return PropertyKind::Info; // Diode, continuity: nothing to choose.
     switch (row) {
-    case Range: case Display: case Colors: case Digits: case JunctionSource: case TemperatureUnit: return PropertyKind::Choice;
+    case Range: case Display: case Colors: case Digits: case ThermocoupleType: case JunctionSource: case TemperatureUnit: return PropertyKind::Choice;
     case ColdJunction: return PropertyKind::Number;
     case ResetStatistics: return PropertyKind::Action;
     case Appearance: case Layout: case Hold: case SessionLog: return PropertyKind::Page; // Own lists (MeterAppearance/MeterHold/MeterLog/ArrangementProperties).
@@ -21,12 +21,13 @@ PropertyKind MeterProperties::kind(unsigned row) const {
 void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
     static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Bar graph",
                                             "Bar scale unit", "Relative",
-                                            "Hold", "Reset statistics", "CSV logging", "Session log", "Junction source", "Manual junction", "Temp units", "Serial 115200"};
+                                            "Hold", "Reset statistics", "CSV logging", "Session log", "Thermocouple type", "Junction source", "Manual junction", "Temp units", "Serial 115200"};
     std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
 }
 unsigned MeterProperties::options(unsigned row) const {
     switch (row) {
     case Range: case TemperatureUnit: return 2;
+    case ThermocoupleType: return unsigned(dmm::ThermocoupleType::Count);
     case JunctionSource: return unsigned(dmm::JunctionSource::Count);
     case Display: return MeterPreferences::Displays;
     case Colors: return MeterPreferences::Palettes;
@@ -46,6 +47,7 @@ unsigned MeterProperties::option(unsigned row) const {
     case Relative: return relative_;
     case Logging: return logging_;
     case SerialOutput: return serial_;
+    case ThermocoupleType: return unsigned(temperature_.type);
     case JunctionSource: return unsigned(temperature_.source);
     case TemperatureUnit: return temperature_.fahrenheit;
     default: return 0;
@@ -58,6 +60,12 @@ void MeterProperties::optionName(unsigned row, unsigned index, char *output, siz
     case Display: std::snprintf(output, capacity, "%s", displays[index < MeterPreferences::Displays ? index : 0]); break;
     case Colors: std::snprintf(output, capacity, "%s", MeterStyles::paletteName(index)); break;
     case Digits: std::snprintf(output, capacity, "%s", MeterStyles::faceName(index)); break;
+    case ThermocoupleType: {
+        static constexpr const char *types[] = {"B", "E", "J", "K", "N", "R", "S", "T"};
+        static_assert(sizeof types / sizeof *types == unsigned(dmm::ThermocoupleType::Count), "a name per thermocouple type");
+        std::snprintf(output, capacity, "%s", index < options(row) ? types[index] : "");
+        break;
+    }
     case JunctionSource: {
         static constexpr const char *sources[] = {"Manual", "MCU at startup", "MCU live"};
         std::snprintf(output, capacity, "%s", index < options(row) ? sources[index] : "");
@@ -67,6 +75,15 @@ void MeterProperties::optionName(unsigned row, unsigned index, char *output, siz
     default: PropertyList::optionName(row, index, output, capacity); break;
     }
 }
+// ", S -40..100" when the junction in effect is outside the window of the selected type, else nothing.
+void MeterProperties::windowNote(char *output, size_t capacity) const {
+    output[0] = 0;
+    if (!temperature_.junctionOutsideWindow(mcuJunction_)) return;
+    const auto window = dmm::Thermocouple::junctionWindow(temperature_.type);
+    char type[4];
+    optionName(ThermocoupleType, unsigned(temperature_.type), type, sizeof type);
+    std::snprintf(output, capacity, ", %s %d..%d", type, window.from, window.to);
+}
 void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
     if (row == Range && !ranged()) std::snprintf(output, capacity, "None");
     else if (row == Range && result_.range == dmm::RangeMode::Unknown) std::snprintf(output, capacity, "Unknown");
@@ -75,15 +92,17 @@ void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
     else if (row == SessionLog) std::snprintf(output, capacity, "%s", session_ ? "REC" : "");
     else if (row == JunctionSource && temperature_.source != dmm::JunctionSource::Manual) {
         const char *source = temperature_.source == dmm::JunctionSource::McuStartup ? "Startup" : "Live";
-        char value[16];
+        char value[16], note[24];
+        windowNote(note, sizeof note);
         if (mcuJunction_ && Decimal::fixed(*mcuJunction_ / 10.0, 1, value, sizeof value))
-            std::snprintf(output, capacity, "%s %s °C", source, value);
+            std::snprintf(output, capacity, "%s %s °C%s", source, value, note);
         else std::snprintf(output, capacity, "%s --", source);
     }
     else if (row == ColdJunction) {
-        char value[16]{};
+        char value[16]{}, note[24];
+        windowNote(note, sizeof note);
         if (temperature_.manualConfigured() && Decimal::fixed(temperature_.junctionCelsius(), 1, value, sizeof value))
-            std::snprintf(output, capacity, "%s °C", value);
+            std::snprintf(output, capacity, "%s °C%s", value, temperature_.source == dmm::JunctionSource::Manual ? note : "");
         else std::snprintf(output, capacity, "Set °C");
     }
     else PropertyList::value(row, output, capacity);
@@ -104,6 +123,7 @@ bool MeterProperties::choose(unsigned row, unsigned index) {
     case Relative: relative_ = index; break;
     case Logging: logging_ = index; break;
     case SerialOutput: serial_ = index; break;
+    case ThermocoupleType: temperature_.type = dmm::ThermocoupleType(index); break;
     case JunctionSource: temperature_.source = dmm::JunctionSource(index); break;
     case TemperatureUnit: temperature_.fahrenheit = index != 0; break;
     default: return false;

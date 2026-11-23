@@ -9,7 +9,7 @@ namespace openosc {
 // and storage failures. A hidden notice changes nothing else: the action, its refusal and its outcome
 // are the same.
 enum class Tooltip : uint8_t {
-    Usage,       // How to use a feature: "Type K: set Manual junction in MENU".
+    Usage,       // How to use a feature: "Thermocouple: set Manual junction in MENU".
     Unavailable, // An action refused by the normal restrictions: "Select Scope first".
     Progress,    // An operation under way: "Saving waveform...".
     Done,        // An outcome as expected: "Trigger centered", a file saved.

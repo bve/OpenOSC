@@ -99,7 +99,7 @@ void MeterTrend::update(const dmm::History *history, Quantity quantity, double r
             return;
         }
         char digits[24]{};
-        Decimal::fixed(dmm::TypeK::display(value, temperatureUnit, delta), 1, digits, sizeof digits);
+        Decimal::fixed(dmm::TemperatureUnits::display(value, temperatureUnit, delta), 1, digits, sizeof digits);
         std::snprintf(output, sizeof output, "%s%s", digits, MeterText::unit(temperatureUnit));
     };
     format(minimum - (relative ? reference : 0), relative || peerRelative, low);

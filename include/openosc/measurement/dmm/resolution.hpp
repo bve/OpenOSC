@@ -33,7 +33,7 @@ public:
             (!temperature && (!UnitParser::parse("1", result.unit, unit) || !(unit.si > 0))))
             return resolution;
         resolution.decimals_ = places;
-        resolution.unitSi_ = temperature ? (TypeK::fahrenheit(result.unit) ? 5. / 9 : 1) : unit.si;
+        resolution.unitSi_ = temperature ? (TemperatureUnits::fahrenheit(result.unit) ? 5. / 9 : 1) : unit.si;
         resolution.quantity_ = result.primary.quantity;
         std::strcpy(resolution.unit_, result.unit);
         return resolution;
@@ -57,7 +57,7 @@ public:
         if (!valid() || !output || !capacity || !unit || !std::isfinite(si)) return false;
         uint32_t scale = 1;
         for (unsigned i = 0; i < decimals_; ++i) scale *= 10;
-        const double value = quantity_ == Quantity::Temperature ? TypeK::display(si, unit_, relative) : si / unitSi_;
+        const double value = quantity_ == Quantity::Temperature ? TemperatureUnits::display(si, unit_, relative) : si / unitSi_;
         const double counts = std::round(value * scale);
         if (!(std::fabs(counts) < 1e5)) return false; // MaxDigits digits: 99999 at most.
         const auto magnitude = uint32_t(std::fabs(counts));
