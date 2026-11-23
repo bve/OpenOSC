@@ -15,6 +15,10 @@ public:
     const scope::FrameMetadata *configuration() const override;
     bool configureScope(const ScopeRequest &) override;
     bool setTrigger(const ScopeRequest &) override;
+    bool channelShown(unsigned channel) const override;
+    int16_t showChannel(unsigned channel, bool on) override;
+    unsigned meterTraceFunction() const override;
+    int16_t meterTraceFunction(unsigned function) override;
     bool run(bool single) override;
     bool autoScale() override;
     bool forceTrigger() override;

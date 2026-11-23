@@ -1,6 +1,5 @@
 #include "openosc/ui/scope/controls.hpp"
 #include "openosc/ui/scope/view_zoom.hpp"
-#include "openosc/measurement/meter_function.hpp"
 #include <algorithm>
 #include <cstdio>
 
@@ -16,7 +15,7 @@ template <class T, size_t N> unsigned indexOf(T value, const T (&choices)[N]) {
 }
 Kind Controls::kind(unsigned row) const {
     switch (row) {
-    case PeakHold: case Glow: case Visible: case Invert: case TimeCursors: case VoltageCursors: case FftDc: case MeterTrace: return Kind::Toggle;
+    case PeakHold: case Glow: case Visible: case Invert: case TimeCursors: case VoltageCursors: case FftDc: return Kind::Toggle;
     case Pan: case Gain: case Position: case CursorAX: case CursorBX: case CursorAY: case CursorBY: case CounterPpm: return Kind::Number;
     case CenterTrigger: case Reference: case Clear: return Kind::Action;
     default: return Kind::Choice;
@@ -49,8 +48,6 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case CursorAY: std::snprintf(text, capacity, "Cursor a level"); break;
     case CursorBY: std::snprintf(text, capacity, "Cursor b level"); break;
     case MathTrace: std::snprintf(text, capacity, "MATH"); break;
-    case MeterTrace: std::snprintf(text, capacity, "DMM"); break;
-    case MeterFunction: std::snprintf(text, capacity, "DMM function"); break;
     case Reference: std::snprintf(text, capacity, "Capture CH%u reference", view.number(channel)); break;
     case Clear: std::snprintf(text, capacity, "Clear history and reference"); break;
     case SampleReduction: std::snprintf(text, capacity, "Samples"); break;
@@ -77,7 +74,6 @@ unsigned Controls::choices(unsigned row) const {
     case Persistence: return sizeof Persistences / sizeof *Persistences;
     case GridBrightness: return Brightness::choices(Brightness::LowestGrid);
     case Zoom: return sizeof Zooms / sizeof *Zooms;
-    case MeterFunction: return MeterFunctionCount;
     default: return kind(row) == Kind::Toggle ? 2 : 0;
     }
 }
@@ -95,8 +91,6 @@ unsigned Controls::choice(unsigned row) const {
     case Average: return indexOf(o.averaging, Averages);
     case Zoom: return o.zoomOut > 1 ? choices(row) : indexOf(o.zoom, Zooms); // Below 1x: none of the list.
     case MathTrace: return unsigned(o.math);
-    case MeterTrace: return o.meter.shown;
-    case MeterFunction: return meterFunction;
     case SampleReduction: return unsigned(o.reduction);
     case TraceInterpolation: return unsigned(o.interpolation);
     case FftSource: return o.spectrum.channel;
@@ -140,7 +134,6 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
         if (i == 1 || i == 2) std::snprintf(text, capacity, "CH%u%cCH%u", view.number(0), i == 1 ? '+' : '-', view.number(1));
         else std::snprintf(text, capacity, "%s", i ? "" : "Off");
         break;
-    case MeterFunction: std::snprintf(text, capacity, "%s", i < MeterFunctionCount ? MeterFunctions[i].name : ""); break;
     case SampleReduction: pick(reductions, 3); break;
     case TraceInterpolation: pick(interpolations, 3); break;
     case FftWindow: pick(windows, 4); break;

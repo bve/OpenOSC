@@ -63,7 +63,7 @@ struct Preferences {
     bool valid() const {
         scope::SamplePlan sampling;
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
-               timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
+               timebaseNs <= scope::Timebases::Maximum && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
                useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && unsigned(menuContrast) < MenuContrastCount && holdTime < 3 && usbController < UsbControllerCount && bode.valid() &&
                generatorShape < generator::ShapeCount && generator::ArbitraryLimits::rate(generatorArbitraryRate) &&
@@ -75,7 +75,8 @@ struct Preferences {
                (!generator::Capabilities::AmplitudeStepMillivolts || !(generatorAmplitudeMillivolts % (generator::Capabilities::AmplitudeStepMillivolts ? generator::Capabilities::AmplitudeStepMillivolts : 1))) &&
                generatorLevel<4 && generatorSquareDrive<2 && generatorStartup<2 && generatorLastOutput<2 && generatorArrangement.valid() && generatorMinimumCode<=generatorMaximumCode &&
                generatorMaximumCode<=4095 && scope.valid() && meter.valid() && idle.valid() &&
-               scope::SamplePlan::calculate(timebaseNs,
+               // The plan the ADC runs: past SampledMaximum, Roll's at Timebases::sampled (DataAccess::samplePlan).
+               scope::SamplePlan::calculate(scope::Timebases::sampled(timebaseNs),
                     scope::RecordBudget::perChannel(scope.recordPoints,scope::RecordBudget::channels(scope.enabled[0],scope.enabled[1])),
                     RunModes[scope.runMode].maximumSampleRate(),scope::RecordBudget::Maximum,sampling);
     }

@@ -4,8 +4,7 @@ namespace openosc::plot {
 namespace {
 constexpr unsigned rows[][14] = {
     {Controls::View, Controls::Channel, Controls::Zoom, Controls::Pan, Controls::CenterTrigger, Controls::Visible,
-     Controls::Invert, Controls::Gain, Controls::Position, Controls::GridStyle, Controls::GridBrightness, Controls::MathTrace,
-     Controls::MeterTrace, Controls::MeterFunction},
+     Controls::Invert, Controls::Gain, Controls::Position, Controls::GridStyle, Controls::GridBrightness, Controls::MathTrace},
     {Controls::SampleReduction, Controls::TraceInterpolation, Controls::TraceStyle, Controls::Average,
      Controls::PeakHold, Controls::Glow},
     {Controls::Channel, Controls::TimeCursors, Controls::VoltageCursors, Controls::CursorAX,
@@ -14,7 +13,7 @@ constexpr unsigned rows[][14] = {
     {Controls::FftSource, Controls::FftWindow, Controls::FftScale, Controls::FftDc},
     {Controls::CounterSource, Controls::CounterAverage, Controls::CounterPpm, Controls::CounterEstimate, Controls::CounterTimed}
 };
-constexpr unsigned counts[] = {14, 6, 7, 3, 4, 5};
+constexpr unsigned counts[] = {12, 6, 7, 3, 4, 5};
 constexpr const char *names[] = {"View", "Capture rendering", "Cursors", "History", "FFT", "Frequency counter"};
 }
 const char *Controls::groupName(unsigned g) { return g < unsigned(Group::Count) ? names[g] : ""; }

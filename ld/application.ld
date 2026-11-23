@@ -65,8 +65,9 @@ SECTIONS {
     .scpi_measure (NOLOAD) : { . = ALIGN(8); _sscpi_measure = .; KEEP(*(.scpi_measure)) . = ALIGN(8); _escpi_measure = .; } > ITCM
     /* The DMM session recorder (GitHub #144: its file, record and accumulators), zeroed at reset, built in place on first use. */
     .dmm_log (NOLOAD) : { . = ALIGN(8); _sdmm_log = .; KEEP(*(.dmm_log)) . = ALIGN(8); _edmm_log = .; } > ITCM
-    /* The Scope's DMM trace readings (DataAccess::meterReadings, the CPU's alone), zeroed at reset in 64-bit
-       ECC words. Empty in OPENOSC_USB_TRACE builds: their trace ring takes this room. */
+    /* The Scope's DMM trace readings (DataAccess::meterReadings) and the copy of them a CSV or CSV.gz save's dmm
+       column is written from (DataAccess::meterColumn): the CPU's alone, zeroed at reset in 64-bit ECC words.
+       Empty in OPENOSC_USB_TRACE builds: their trace ring takes this room. */
     .meter_trace (NOLOAD) : { . = ALIGN(8); _smeter_trace = .; KEEP(*(.meter_trace)) . = ALIGN(8); _emeter_trace = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")

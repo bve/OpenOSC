@@ -251,7 +251,7 @@ private:
     void selectNext();
     // The Scope's DMM trace (plot::MeterTraceOptions): the quantity of the DMM function it measures
     // (Preferences::meterFunction), the one its Scale keys step; its cards; each display pass its
-    // readings, value tag and cards.
+    // readings, footer readouts and cards.
     Quantity meterQuantity() const;
     ui::ScopeScreen::Meter meterCard() const;
     void showMeterTrace();
@@ -282,7 +282,7 @@ private:
     // F1-F4 held to their long press on that screen (issues #95, #96): Probe, the F2 reset, 50 %, the
     // F4 shortcut. Once a stroke (KeyGestures). True when the screen took the holds.
     [[gnu::noinline]] bool scopeHoldKeys(uint32_t holds, uint32_t now);
-    void openChannel(unsigned row = ui::ChannelEditor::Channel);
+    void openChannel(unsigned channel, unsigned row = ui::ChannelEditor::Channel); // channel: ChannelEditor::Meter too.
     void openProbe(uint32_t now);    // F1 hold: the selected channel's Probe choices.
     void openShortcut(uint32_t now); // F4 hold: the saved destination's editor, nothing changed by opening it.
     bool resetView(uint32_t now);    // F2 hold: Home view or Reset zoom & pan; explicit, so RUN keeps it.
@@ -448,7 +448,8 @@ private:
     // after keys and on every display pass, so background updates never leave other captions.
     void refreshSoftKeys();
     ui::SoftKeys imageSoftKeys() const; // The image list's and preview's keys (also the preview's header line).
-    void startAuto(uint32_t now);
+    bool startAuto(uint32_t now); // False when nothing started (or, for the DMM trace alone, nothing fitted).
+    bool fitMeterScale(uint32_t now);
     void serviceAuto(uint32_t now);
     bool cancelAuto(uint32_t now,bool hold=false);
     bool autoBusy() const { return autoSetup_.state()!=scope::AutoSetup::State::Idle; }
@@ -476,6 +477,10 @@ private:
     // The Channel/Acquisition editor's committed field to the instrument; the editor then shows what
     // the instrument took (or, refused, what it has).
     void commitScopeEditor(ui::ScopeEditor &editor, uint32_t now);
+    // The DMM's function (a MeterFunctions index) chosen in the DMM trace's channel menu, the DMM
+    // screen's too: sent at once while the DMM trace runs, else when it starts. Null when taken or
+    // unchanged, else why it was refused.
+    const char *selectMeterFunction(unsigned function, uint32_t now);
     void commitTrigger(uint32_t now, bool level); // level: the Level row or 50 % (LevelIntent::Set).
     void triggerModeStep(uint32_t now); // A short F3 on the Trigger card: Auto, Normal, Single (held: staged).
     // DISPLAY's committed field (row Count) or its Reference/Clear action row, with every draft;

@@ -32,14 +32,6 @@ lv_obj_t *WaveformWidget::create(lv_obj_t *parent) {
     lv_obj_set_style_pad_hor(counter_, 2, 0);
     lv_obj_align(counter_, LV_ALIGN_TOP_LEFT, plot::PlotFrame::Left + 1, plot::PlotFrame::Top + 1);
     lv_obj_set_hidden(counter_, true);
-    meterTag_ = lv_label_create(object_);
-    lv_obj_remove_style_all(meterTag_);
-    lv_obj_set_style_text_font(meterTag_, ui::Elements::font(12), 0);
-    lv_obj_set_style_bg_opa(meterTag_, LV_OPA_70, 0);
-    lv_obj_set_style_pad_hor(meterTag_, 2, 0);
-    // One row above the inline scales (Painter::scales, 14 pixels at the plot's bottom).
-    lv_obj_align(meterTag_, LV_ALIGN_BOTTOM_LEFT, plot::PlotFrame::Left + 1, -(plot::PlotFrame::Bottom + 16));
-    lv_obj_set_hidden(meterTag_, true);
     return object_;
 }
 void WaveformWidget::colors(const Theme &theme) {
@@ -151,7 +143,6 @@ void WaveformWidget::meterReadings(const dmm::ReadingTrace *readings) {
     meter_ = readings;
     if (object_) lv_obj_invalidate(object_);
 }
-void WaveformWidget::meterTag(const char *text, uint32_t color) { overlayLabel(meterTag_, text, color, palette_.background); }
 void WaveformWidget::setFrame(const scope::FrameView &frame) {
     if (!object_)
         return;
@@ -229,7 +220,7 @@ void WaveformWidget::cover(lv_event_t *event) {
 void WaveformWidget::geometry(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     if (lv_event_get_code(event) == LV_EVENT_DELETE)
-        self.object_ = self.note_ = self.counter_ = self.meterTag_ = nullptr;
+        self.object_ = self.note_ = self.counter_ = nullptr;
     else {
         self.model_.clear();
         lv_obj_invalidate(self.object_);

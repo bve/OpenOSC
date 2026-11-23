@@ -40,6 +40,7 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     auto meter = root.createNestedObject("dmm"); // The DMM trace; older firmware ignores it.
     meter["shown"] = o.meter.shown;
     meter["position"] = o.meter.position;
+    meter["axis"] = o.meter.axis; // The channel kept only as its time axis: 0 CH1, 1 CH2, 2 none.
     auto scales = meter.createNestedObject("per_division"); // Units/div in each quantity's SI unit.
     for (unsigned i = 0; i < plot::MeterScale::Quantities; ++i)
         scales[plot::MeterScale::Spans[i].key] = plot::MeterScale::perDivision(o.meter.scales[i]);

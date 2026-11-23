@@ -222,6 +222,14 @@ bool DataAccess::selectDmmFunction(dmm::Function function) { // Also while off: 
     if (!meterLinked() || (typeK && !meter_.temperatureSettings().configured()) ||
         !dmm_.selectFunction(physical, meter_.latest(), Board::milliseconds() + waitMs, dmmActivatedAtUs_)) return false;
     meter_.typeK(typeK, timeUs_);
+    // The Scope's DMM trace starts again in the new function's quantity at once (its scale, units and
+    // cursors with it), not at its first reading; a HOLD keeps the readings its frame shows.
+    const auto quantity = dmm::Functions::reading(function);
+    if (measurement_ == MeasurementMode::Oscilloscope && !scopeHeld_ && quantity != Quantity::Unknown &&
+        quantity != meterReadings_.quantity()) {
+        meterReadings_.reset(quantity);
+        meterGap_ = false;
+    }
     // Accepted (a refusal above changes nothing): the statistics period starts with this function.
     meter_.restart(function, timeUs_ + (uint64_t(dmm::FunctionSelector::DeadlineMs) + waitMs) * 1000);
     return true;

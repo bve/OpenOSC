@@ -1,6 +1,15 @@
 #include "openosc/acquisition/rolling.hpp"
 
 namespace openosc::scope {
+namespace {
+// The time `points` take at `rate`, in microseconds, without the 64-bit product of ticks and 10^6.
+bool micros(const Rational &rate, uint64_t points, uint64_t &output) {
+    const uint64_t ticks = points * rate.denominator, seconds = ticks / rate.numerator;
+    if (points > UINT64_MAX / rate.denominator || seconds > UINT64_MAX / 1000000 - 1) return false;
+    output = seconds * 1000000 + ticks % rate.numerator * 1000000 / rate.numerator;
+    return true;
+}
+} // namespace
 bool RollingBuffer::append(const FrameView &frame) {
     if (!storage_ || !capacity_ || capacity_ > 65536 || !frame.valid())
         return false;
@@ -24,21 +33,27 @@ bool RollingBuffer::append(const FrameView &frame) {
                 return false;
         }
     }
-    const uint64_t ticks = uint64_t(metadata.samples) * metadata.samplesPerSecond.denominator;
-    if (ticks > UINT64_MAX / 1000000)
-        return false;
-    const uint64_t duration = ticks * 1000000 / metadata.samplesPerSecond.numerator;
-    if (metadata.timestampUs > UINT64_MAX - duration)
+    Rational stored;
+    if (!metadata.samplesPerSecond.scaled(1, averaging_, stored)) return false; // A snapshot could not say its rate.
+    uint64_t duration = 0;
+    if (!micros(metadata.samplesPerSecond, metadata.samples, duration) || metadata.timestampUs > UINT64_MAX - duration)
         return false;
     for (size_t i = 0; i < frame.metadata().samples; ++i) {
-        uint16_t word = 0;
-        for (unsigned c = 0; c < 2; ++c) {
-            uint8_t raw = 0;
-            if (frame.metadata().channels[c].enabled && !frame.code(static_cast<Channel>(c), i, raw))
+        uint8_t raw[2] = {};
+        for (unsigned c = 0; c < 2; ++c)
+            if (frame.metadata().channels[c].enabled && !frame.code(static_cast<Channel>(c), i, raw[c]))
                 return false;
-            word |= uint16_t(raw) << (c * 8);
+        if (averaging_ > 1) {
+            for (unsigned c = 0; c < 2; ++c) sums_[c] += int8_t(raw[c]);
+            if (++pending_ < averaging_) continue;
+            const int32_t n = int32_t(averaging_);
+            for (unsigned c = 0; c < 2; ++c) {
+                raw[c] = uint8_t(int8_t((sums_[c] < 0 ? sums_[c] - n / 2 : sums_[c] + n / 2) / n));
+                sums_[c] = 0;
+            }
+            pending_ = 0;
         }
-        storage_[cursor_] = word;
+        storage_[cursor_] = uint16_t(raw[0] | raw[1] << 8);
         cursor_ = (cursor_ + 1) % capacity_;
         if (size_ < capacity_)
             ++size_;
@@ -61,13 +76,15 @@ FrameView RollingBuffer::snapshot() const {
     metadata.origin = (cursor_ + capacity_ - size_) % capacity_;
     metadata.rollPhase = dropped_; // The oldest retained point's index in the history.
     metadata.clearTrigger();
-    const uint64_t ticks = uint64_t(size_) * metadata.samplesPerSecond.denominator;
-    if (ticks > UINT64_MAX / 1000000)
+    // The stored points end where the points still summed begin; each lies at the middle of its own.
+    const Rational input = metadata_.samplesPerSecond;
+    uint64_t pending = 0, duration = 0, middle = 0;
+    if (!input.scaled(1, averaging_, metadata.samplesPerSecond) || !micros(input, pending_, pending) ||
+        !micros(input, uint64_t(size_) * averaging_, duration) || !micros(input, averaging_ - 1, middle) ||
+        pending + duration > nextTimestampUs_)
         return {};
-    const uint64_t duration = ticks * 1000000 / metadata.samplesPerSecond.numerator;
-    if (duration > nextTimestampUs_)
-        return {};
-    metadata.timestampUs = nextTimestampUs_ - duration;
+    metadata.timebaseNs *= averaging_;
+    metadata.timestampUs = nextTimestampUs_ - pending - duration + middle / 2;
     const uint16_t *banks[] = {storage_, nullptr, nullptr, nullptr};
     return {metadata, banks, capacity_};
 }

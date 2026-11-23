@@ -28,5 +28,8 @@ public:
     static double perDivision(int step);
     // The step of a units/div value within a quantity's span (a hand-edited file); false for none.
     static bool step(unsigned index, double perDivision, int8_t &output);
+    // AUTO's: the smallest step of the span at which readings from `minimum` to `maximum` lie within the
+    // plot's eight divisions, its zero `zero` divisions above the middle line. None: the largest, false.
+    static bool fit(unsigned index, double minimum, double maximum, double zero, int8_t &output);
 };
 } // namespace openosc::plot

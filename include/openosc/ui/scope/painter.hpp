@@ -13,7 +13,7 @@ namespace openosc::plot {
 // The plot's colours. trigger: FollowSource draws the trigger marks in the source channel's colour;
 // tagText: Contrast writes on a coloured tag (zero tags, the active cursor's) in the ink that
 // contrasts with that tag (ColorContrast); readout: neutral texts on the plot (scales, record-edge
-// and spectrum labels); meter: the DMM trace's line, zero tag, level cursors and value tag. The
+// and spectrum labels); meter: the DMM trace's line, zero tag and level cursors. The
 // Scope appearance's Trigger, TagText, Readout and DMM roles (ScopeLook).
 // channels: the on-screen CH1 and CH2 slots' colours; view: the slot each input shows in (channel()).
 struct Palette {
@@ -91,6 +91,7 @@ private:
     TriggerMark trigger_;
     int counterHeight_;
     const dmm::ReadingTrace *meter_;
+    bool meterAbove_ = false, meterBelow_ = false; // meterTrace's line beyond the plot's top, bottom (markers).
 };
 class Path {
 public:

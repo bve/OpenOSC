@@ -1,16 +1,26 @@
 #include "openosc/application/controller.hpp"
+#include "openosc/ui/scope/meter_readouts.hpp"
+#include "openosc/ui/scope/meter_scale.hpp"
 
 namespace openosc {
-void ApplicationController::startAuto(uint32_t now) {
+// AUTO (the key, SCPI AUToscale): the DMM trace's units/div when it is shown (fitMeterScale), then Auto
+// Setup of the channels; with no channel shown (the DMM trace alone) the DMM trace's scale only, its
+// hidden time axis and the timebase as they are.
+bool ApplicationController::startAuto(uint32_t now) {
     if (data_.scopeRecording()) {
         if (uiReady_) view_.notify(Tooltip::Unavailable, "Finish waveform save first", now);
-        return;
+        return false;
+    }
+    const bool meter = fitMeterScale(now);
+    if (view_.waveform().options().meter.shown && !channelShown(0) && !channelShown(1)) {
+        if (!meter && uiReady_) view_.notify(Tooltip::Unavailable, "No DMM readings on screen", now);
+        return meter;
     }
     autoWasHeld_ = data_.scopeHeld();
     // The frame on show stays where it is (no copy) for HOLD to return to; trials use their own area.
     if (!data_.retainScope()) {
         if (uiReady_) view_.notify(Tooltip::Unavailable, "Cannot retain HOLD frame: release USB waveform",now);
-        return;
+        return false;
     }
     autoCancelled_=false; autoStep_ = 0;
     data_.scopeTrials(true);
@@ -18,6 +28,33 @@ void ApplicationController::startAuto(uint32_t now) {
     autoSetup_.begin(data_.scopeRequest(), selectedChannel_, now);
     if (!data_.configureScope(autoSetup_.request())) autoSetup_.fail();
     if (uiReady_) view_.notify(Tooltip::Progress, "Auto setup...", now);
+    return autoBusy();
+}
+// The smallest units/div at which the DMM trace's readings in the window fit the plot at its position
+// (MeterScale::fit; the largest when none does). False without a reading there to fit.
+bool ApplicationController::fitMeterScale(uint32_t now) {
+    auto options = view_.waveform().options();
+    const auto &readings = data_.meterReadings();
+    if (!options.meter.shown || !plot::MeterScale::scaled(readings.quantity())) return false;
+    plot::MeterReadouts window;
+    window.calculate(readings, view_.waveform().model());
+    if (!window.valid) return false;
+    const unsigned index = plot::MeterScale::index(readings.quantity());
+    int8_t step = 0;
+    const double zero = double(options.meter.position) / plot::MeterTraceOptions::PositionSteps;
+    if (!plot::MeterScale::fit(index, window.minimum, window.maximum, zero, step) && uiReady_) {
+        // Their span fits the plot on its largest scale: the zero's position is what leaves no room.
+        const bool span = window.maximum - window.minimum <= 8 * plot::MeterScale::perDivision(plot::MeterScale::Spans[index].highest);
+        view_.notify(Tooltip::Advisory, span ? "DMM zero leaves no room: move it" : "DMM readings beyond its largest scale", now);
+    }
+    if (step != options.meter.scales[index]) {
+        options.meter.scales[index] = step;
+        view_.waveform().configure(options);
+        queuePlotSave(now);
+    }
+    view_.scopeMeter(meterCard());
+    dataRefresh_ = true;
+    return true;
 }
 bool ApplicationController::restoreAuto() {
     if (autoWasHeld_) {

@@ -30,8 +30,10 @@ void MeterReadouts::calculate(const dmm::ReadingTrace &readings, const Model &mo
     const MeterAxis axis(model.metadata());
     const auto &view = model.viewport();
     if (!axis.valid() || !view.spanQ16) return;
-    // The window in record points, cut at the record's last point (Painter::meterTrace's line ends there).
-    const double first = double(view.startQ16) / 65536, last = std::min(first + double(view.spanQ16) / 65536, axis.last);
+    // The window in record points, cut at the record's first and last points (Painter::meterTrace's line
+    // spans the record: a reading before it holds its level from the record's start).
+    const double start = double(view.startQ16) / 65536;
+    const double first = std::max(start, 0.0), last = std::min(start + double(view.spanQ16) / 65536, axis.last);
     if (last < first) return;
     double sum = 0, squares = 0;
     unsigned count = 0;

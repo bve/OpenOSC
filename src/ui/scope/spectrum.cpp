@@ -8,6 +8,9 @@ bool Model::projectSpectrum(const scope::FrameView &frame, bool recalculate) {
     auto &trace = storage_.fft;
     trace.enabled = false;
     auto &s=spectrum_;
+    // Of the DMM trace's hidden time axis (MeterTraceOptions::axis) none: no trace, labels, cursors or
+    // readouts; calculated again once it is shown.
+    if (options_.meter.axis == options_.spectrum.channel) { s.result = {}; spectrumDirty_ = true; return true; }
     if (recalculate) {
         spectrumDirty_ = false;
         ++statistics_.fftCalculations;

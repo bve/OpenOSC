@@ -25,6 +25,7 @@ ScopeRequest InstrumentState::scope(const Preferences &p) {
         request.probeDenominator[c] = p.scope.probeDenominator[c];
     }
     request.followChannels(); // A file may name a trigger source that is switched off.
+    request.followTimebase();
     return request;
 }
 void InstrumentState::capture(const ScopeRequest &r, Preferences &p) {

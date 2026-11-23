@@ -26,7 +26,6 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     if (outcome != Outcome::Activate && outcome != Outcome::Open) { view_.properties(actions, navigator_); return; }
     for (unsigned c=0; c<2; ++c) plotControls_.enabled[c]=channelShown(c);
     plotControls_.view = view_.channelView(); // Swap CH1/CH2: the rows name inputs as the plot does.
-    plotControls_.meterFunction = prefs_.meterFunction;
     const unsigned row = navigator_.row();
     analyzeRow_ = row; // A sub-menu's Back returns here.
     switch (row) {

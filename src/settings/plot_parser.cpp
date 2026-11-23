@@ -87,7 +87,8 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
     if (object.containsKey("dmm")) { // Absent in older themes: off, at the middle line, the initial scales.
         if (!object["dmm"].is<JsonObjectConst>()) return false;
         const auto input = object["dmm"].as<JsonObjectConst>();
-        if (!flag(input, "shown", o.meter.shown) || !integer(input, "position", o.meter.position)) return false;
+        if (!flag(input, "shown", o.meter.shown) || !integer(input, "position", o.meter.position) ||
+            !integer(input, "axis", o.meter.axis)) return false;
         if (input.containsKey("per_division")) {
             if (!input["per_division"].is<JsonObjectConst>()) return false;
             const auto scales = input["per_division"].as<JsonObjectConst>();

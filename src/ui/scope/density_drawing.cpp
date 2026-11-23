@@ -154,7 +154,7 @@ bool Painter::densityShown(unsigned c) const {
     if (c >= 2 || layer_->color_format != LV_COLOR_FORMAT_RGB565) return false;
     const auto &o = model_.options().channels[c];
     const auto &plane = model_.storage().persistence;
-    return o.visible && o.opacity && plane.graded(c) && plane.hasPixels(c);
+    return model_.options().drawn(c) && o.opacity && plane.graded(c) && plane.hasPixels(c);
 }
 void Painter::density(unsigned c) {
     const auto &o = model_.options().channels[c];

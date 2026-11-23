@@ -29,7 +29,7 @@ void DataAccess::restartDmmUart() {
     dmm_.abandon();
     framer_.reset();
     meter_.interruptCharge(); // Readings are lost across the restart.
-    meterGap_ = true;
+    breakMeterTrace();
     if ((!uart_.stop() || !startMeterUart()) && measurement_ == MeasurementMode::Multimeter) status_ = DataStatus::HardwareError;
 }
 // dmm::LinkWatchdog's decision carried out: a silent chip power-cycled, a deferred power-on, a UART
@@ -53,7 +53,7 @@ void DataAccess::serviceDmmWatchdog(uint32_t now) {
         dmm_.abandon();
         meter_.interruptCharge(); // The DMM chip goes off: no reading until it is back.
         powerMeter(false);
-        meterGap_ = true;
+        breakMeterTrace();
         dmmActivatedAtUs_ = timeUs_ + uint64_t(dmm::LinkWatchdog::OffMs) * 1000;
         if (meter) status_ = DataStatus::NoData;
         return;
@@ -128,7 +128,9 @@ void DataAccess::poll(uint32_t now) {
         scope::FrameLease lease;
         if (timeUs_ >= recordDeadlineUs_) { recordStatus_ = DataStatus::Timeout; recordPending_ = false; }
         else if (acquireScope(lease)) {
-            if (!recorder_.begin(std::move(lease), recordFormat_, &arena_))
+            ScopeRecorder::Meter meter;
+            const bool column = !ScopeRecorder::raw(recordFormat_) && meterColumn(lease.view().metadata(), meter);
+            if (!recorder_.begin(std::move(lease), recordFormat_, &arena_, column ? &meter : nullptr))
                 recordStatus_ = recorder_.status();
             recordPending_ = false;
         }

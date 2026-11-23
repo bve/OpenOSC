@@ -74,15 +74,20 @@ struct CounterOptions {
     }
 };
 // The Scope's DMM trace (DataAccess::meterReadings, drawn in Y-T and Y-T+FFT): shown or not, where its
-// zero lies and each quantity's units/div (MeterScale steps, in MeterScale's order).
+// zero lies, each quantity's units/div (MeterScale steps, in MeterScale's order) and the channel kept
+// only as its time axis.
 struct MeterTraceOptions {
     // Its zero within the plot, as a channel's: four divisions either way of the middle line.
     static constexpr int8_t PositionSteps = 20, PositionLimit = 4 * PositionSteps; // Per division.
+    static constexpr uint8_t NoAxis = 2;
     bool shown = false;
     int8_t position = 0; // Its zero above the plot's middle line, in 1/PositionSteps of a division.
     int8_t scales[MeterScale::Quantities] = {MeterScale::Spans[0].initial, MeterScale::Spans[1].initial,
                                              MeterScale::Spans[2].initial, MeterScale::Spans[3].initial,
                                              MeterScale::Spans[4].initial, MeterScale::Spans[5].initial};
+    // The last channel switched off while the trace is shown: captured on as the record's time axis,
+    // nothing of it shown (plot::ChannelDisplay); NoAxis: none. Only while the trace is shown.
+    uint8_t axis = NoAxis;
     bool valid() const;
 };
 struct Options {
@@ -116,6 +121,8 @@ struct Options {
     static constexpr uint16_t DensityHistoryMs = 1000;
     uint16_t densityHistoryMs() const { return persistenceMs ? persistenceMs : DensityHistoryMs; }
     bool graded() const { return (mode == Mode::Time || mode == Mode::SpectrumOverlay) && (channels[0].graded() || channels[1].graded()); }
+    // A channel's trace and its marks drawn: visible, and not the DMM trace's hidden time axis.
+    bool drawn(unsigned channel) const { return channel < 2 && channels[channel].visible && meter.axis != channel; }
     bool valid() const;
     bool sameTransform(const Options &other) const;
     // What HOLD may change to explore one record; a new capture starts from `saved` again.

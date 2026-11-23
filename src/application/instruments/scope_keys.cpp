@@ -34,22 +34,15 @@ void ApplicationController::setScopeFocus(plot::Focus focus) {
     view_.scopeMeter(meterCard());
 }
 void ApplicationController::selectNext() {
-    if (meterSelected_) {
-        meterSelected_ = false;
-        if (channelShown(0)) selectedChannel_ = 0;
-        else if (channelShown(1)) selectedChannel_ = 1;
+    if (meterSelected_) { // Kept while no channel is shown.
+        if (channelShown(0)) { selectedChannel_ = 0; meterSelected_ = false; }
+        else if (channelShown(1)) { selectedChannel_ = 1; meterSelected_ = false; }
     } else if (selectedChannel_ == 0 && channelShown(1)) selectedChannel_ = 1;
     else if (view_.waveform().options().meter.shown) meterSelected_ = true;
     else if (channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
 }
 Quantity ApplicationController::meterQuantity() const {
-    using F = dmm::Function;
-    switch (const auto function = F(prefs_.meterFunction)) {
-    case F::Continuity: return Quantity::Resistance; // Its reading is in ohms.
-    case F::Diode: return Quantity::Voltage;
-    case F::Temperature: return Quantity::Temperature;
-    default: return dmm::Functions::quantity(function);
-    }
+    return dmm::Functions::reading(dmm::Function(prefs_.meterFunction));
 }
 ui::ScopeScreen::Meter ApplicationController::meterCard() const {
     ui::ScopeScreen::Meter card;
@@ -307,7 +300,8 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         const auto card = focus_ == plot::Focus::Zoom ? zoomReturn_ : focus_;
         if (card == plot::Focus::Trigger) { openTrigger(); return; }
         if (card == plot::Focus::Cursor) { openAnalyze(ui::ScopeActions::Cursors); return; }
-        openChannel();
+        // The selected channel's menu: the DMM trace's when F1/F2 selected it.
+        openChannel(meterSelected_ ? ui::ChannelEditor::Meter : selectedChannel_);
         return;
     }
     if (keys & Keypad::F4) {
@@ -446,13 +440,13 @@ bool ApplicationController::scopeHoldKeys(uint32_t holds, uint32_t now) {
     dataRefresh_ = true;
     return true;
 }
-void ApplicationController::openChannel(unsigned row) {
-    channelEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
+void ApplicationController::openChannel(unsigned channel, unsigned row) {
+    channelEditor_.begin(data_.scopeRequest(), view_.waveform().options(), channel, prefs_.meterFunction);
     channelEditor_.channelView(view_.channelView());
     openPanel(Panel::Channel, channelEditor_, row);
 }
 void ApplicationController::openProbe(uint32_t now) {
-    openChannel(ui::ChannelEditor::Probe);
+    openChannel(selectedChannel_, ui::ChannelEditor::Probe);
     fieldKeys(Keypad::Menu, channelEditor_, now); // Its choices open: Up/Down, MENU takes one, F4 keeps the ratio.
 }
 // The editor of the saved destination, opened for review: nothing is applied until a field is
@@ -482,7 +476,6 @@ void ApplicationController::openShortcut(uint32_t) {
         plotControls_.view = view_.channelView();
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
         plotControls_.options.cursors.channel = uint8_t(meterSelected_ ? plot::CursorOptions::Meter : selectedChannel_);
-        plotControls_.meterFunction = prefs_.meterFunction;
         plotControls_.group = plot::Controls::Group::Cursors; plotControls_.listing = false;
         sectionDirect_ = true; // Back closes the section (analyzeRow_ none).
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_));

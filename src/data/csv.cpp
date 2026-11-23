@@ -1,5 +1,6 @@
 #include "openosc/data/csv.hpp"
 #include "openosc/data/decimal.hpp"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -43,6 +44,19 @@ const char *Csv::quantity(Quantity value) {
         return "unknown";
     }
 }
+namespace {
+const char *unit(Quantity value) { // The SI unit of a value_si, as MeterFunctions names them.
+    switch (value) {
+    case Quantity::Voltage: return "V";
+    case Quantity::Current: return "A";
+    case Quantity::Resistance: return "Ohm";
+    case Quantity::Capacitance: return "F";
+    case Quantity::Frequency: return "Hz";
+    case Quantity::Temperature: return "degC";
+    default: return "";
+    }
+}
+} // namespace
 size_t Csv::dmm(const dmm::Result &result, bool hold, char *out, size_t capacity) {
     if (!out || !capacity)
         return 0;
@@ -61,7 +75,7 @@ size_t Csv::dmm(const dmm::Result &result, bool hold, char *out, size_t capacity
                                 unsigned(result.packetHold), unsigned(hold), unsigned(result.peerRelative));
     return n > 0 && size_t(n) < capacity ? size_t(n) : 0;
 }
-size_t Csv::scope(const scope::FrameView &frame, size_t index, char *out, size_t capacity) {
+size_t Csv::scope(const scope::FrameView &frame, size_t index, char *out, size_t capacity, const float *meter) {
     if (!out || !capacity || !frame.valid() || index >= frame.metadata().samples)
         return 0;
     char raw[2][8]{}, volts[2][40]{};
@@ -78,11 +92,22 @@ size_t Csv::scope(const scope::FrameView &frame, size_t index, char *out, size_t
     if (!Decimal::fraction(uint64_t(index) * frame.metadata().samplesPerSecond.denominator,
                            frame.metadata().samplesPerSecond.numerator, time, sizeof time))
         return 0;
-    const int n = std::snprintf(out, capacity, "%lu,%s,%s,%s,%s,%s\r\n", static_cast<unsigned long>(index),
-                                time, raw[0], raw[1], volts[0], volts[1]);
+    char reading[40] = "";
+    // A float's seven digits: more would print its binary rounding.
+    if (meter && std::isfinite(*meter) && !Decimal::number(*meter, reading, sizeof reading, 7))
+        return 0;
+    const int n = std::snprintf(out, capacity, "%lu,%s,%s,%s,%s,%s%s%s\r\n", static_cast<unsigned long>(index),
+                                time, raw[0], raw[1], volts[0], volts[1], meter ? "," : "", reading);
     return n > 0 && size_t(n) < capacity ? size_t(n) : 0;
 }
-size_t Csv::scopeRowLimit(const scope::FrameMetadata &m) {
+size_t Csv::scopeMeter(const char *function, Quantity value, char *out, size_t capacity) {
+    if (!out || !capacity || !function)
+        return 0;
+    const int n = std::snprintf(out, capacity, "# dmm: function=%s,quantity=%s,unit=%s\r\n", function, quantity(value),
+                                unit(value));
+    return n > 0 && size_t(n) < capacity ? size_t(n) : 0;
+}
+size_t Csv::scopeRowLimit(const scope::FrameMetadata &m, bool meter) {
     if (!m.valid()) // Also samples and the rate.
         return 0;
     char text[48];
@@ -116,6 +141,7 @@ size_t Csv::scopeRowLimit(const scope::FrameMetadata &m) {
         }
         bytes += 4 + volts; // A signed 8-bit code: "-128" at most.
     }
+    if (meter) bytes += 1 + 13; // Its comma and a float at scope()'s seven digits: "-1.234567e-45".
     return bytes + 5 + 2; // Five commas, CRLF.
 }
 size_t Csv::scopeMetadata(const scope::FrameMetadata &m, char *output, size_t capacity) {

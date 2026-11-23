@@ -2,12 +2,13 @@
 #include "openosc/storage/layout.hpp"
 #include "openosc/data/csv.hpp"
 #include "openosc/platform/board.hpp"
+#include <cmath>
 #include <cstring>
 #include <new>
 #include <utility>
 
 namespace openosc {
-bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, scope::AcquisitionArena *arena) {
+bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, scope::AcquisitionArena *arena, const Meter *meter) {
     if (!supported(format)) {
         status_ = DataStatus::InvalidArgument;
         return false;
@@ -20,19 +21,25 @@ bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, scope::Acqui
         status_ = DataStatus::InvalidArgument;
         return false;
     }
+    meter_ = !raw(format) && meter ? meter->points : nullptr;
+    meterCount_ = meter_ ? meter->count : 0;
+    meterFunction_ = meter_ ? meter->function : "";
+    meterQuantity_ = meter_ ? meter->quantity : Quantity::Unknown;
+    meterNext_ = 0;
+    meterValue_ = NAN;
     if (compressed(format)) return beginGzip(std::move(lease), arena);
     // Start immediately when even the largest representation fits. If the bound does not fit,
     // measure the actual record in slices before opening a temporary file.
     size_t header = 0;
     if (format == Format::Csv) {
         const auto &metadata = lease.view().metadata();
-        const size_t row = Csv::scopeRowLimit(metadata);
-        header = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
+        const size_t row = Csv::scopeRowLimit(metadata, meter_ != nullptr);
+        header = csvHeader(metadata);
         if (!row || !header) {
             status_ = DataStatus::InvalidArgument;
             return false;
         }
-        required_ = header + std::strlen(Csv::ScopeHeader) + uint64_t(metadata.samples) * row;
+        required_ = header + std::strlen(columns()) + uint64_t(metadata.samples) * row;
     } else
         required_ = stream_.size();
     const bool opened = file_.begin(storage::Layout::Captures, "CAP", format == Format::Raw ? "RAW" : "CSV", required_);
@@ -41,7 +48,7 @@ bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, scope::Acqui
         status_ = file_.status();
         return false;
     }
-    if (measuring_) required_ = header + std::strlen(Csv::ScopeHeader);
+    if (measuring_) required_ = header + std::strlen(columns());
     else if (format == Format::Csv && !writeCsvHeader(header)) return false;
     lease_ = std::move(lease);
     offset_ = 0;
@@ -52,12 +59,12 @@ bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, scope::Acqui
 }
 bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena *arena) {
     const bool csv = format_ == Format::CsvGz;
-    size_t header = 0, columns = 0;
+    size_t header = 0, names = 0;
     if (csv) {
         const auto &metadata = lease.view().metadata();
-        header = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
-        columns = std::strlen(Csv::ScopeHeader);
-        if (!header || header + columns > GzipStream::InputBytes || !Csv::scopeRowLimit(metadata)) {
+        header = csvHeader(metadata);
+        names = std::strlen(columns());
+        if (!header || header + names > GzipStream::InputBytes || !Csv::scopeRowLimit(metadata, meter_ != nullptr)) {
             status_ = DataStatus::InvalidArgument;
             return false;
         }
@@ -65,7 +72,7 @@ bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena
     if (!arena || !gzip_.begin(*arena)) { status_ = DataStatus::Busy; return false; } // A screenshot, a trial frame.
     if (csv) {
         std::memcpy(gzip_.input(), buffer_, header);
-        std::memcpy(gzip_.input() + header, Csv::ScopeHeader, columns);
+        std::memcpy(gzip_.input() + header, columns(), names);
     }
     // No upper bound is reserved: the free space is checked as each chunk is written.
     if (!file_.begin(storage::Layout::Captures, "CAP", csv ? "CSV.GZ" : "RAW.GZ", GzipStream::HeaderBytes)) {
@@ -75,7 +82,7 @@ bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena
     }
     GzipStream::header(buffer_);
     out_ = GzipStream::HeaderBytes;
-    pending_ = header + columns; consumed_ = 0;
+    pending_ = header + names; consumed_ = 0;
     lease_ = std::move(lease);
     offset_ = 0;
     finishing_ = measuring_ = false;
@@ -83,23 +90,39 @@ bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena
     status_ = DataStatus::Busy;
     return true;
 }
+size_t ScopeRecorder::csvHeader(const scope::FrameMetadata &metadata) {
+    const size_t bytes = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
+    if (!bytes || !meter_) return bytes;
+    const size_t line = Csv::scopeMeter(meterFunction_, meterQuantity_, reinterpret_cast<char *>(buffer_ + bytes), sizeof buffer_ - bytes);
+    return line ? bytes + line : 0;
+}
+const char *ScopeRecorder::columns() const { return meter_ ? Csv::ScopeMeterHeader : Csv::ScopeHeader; }
 bool ScopeRecorder::writeCsvHeader(size_t bytes) {
-    if (file_.write(buffer_, bytes) && file_.write(Csv::ScopeHeader, std::strlen(Csv::ScopeHeader))) return true;
+    if (file_.write(buffer_, bytes) && file_.write(columns(), std::strlen(columns()))) return true;
     status_ = file_.status();
     if (status_ == DataStatus::NoSpace) file_.discard();
     return false;
+}
+const float *ScopeRecorder::meterField(size_t row) {
+    if (!meter_) return nullptr;
+    for (; meterNext_ < meterCount_; ++meterNext_) { // The reading this row holds.
+        const MeterPoint &point = meter_[meterNext_];
+        if (point.row > row) break;
+        meterValue_ = point.value;
+    }
+    return &meterValue_;
 }
 void ScopeRecorder::measureCsv() {
     constexpr unsigned RowsPerService = 96;
     const auto &frame = lease_.view();
     const auto &metadata = frame.metadata();
     for (unsigned i = 0; i < RowsPerService && offset_ < metadata.samples; ++i, ++offset_) {
-        const size_t bytes = Csv::scope(frame, offset_, reinterpret_cast<char *>(buffer_), sizeof buffer_);
+        const size_t bytes = Csv::scope(frame, offset_, reinterpret_cast<char *>(buffer_), sizeof buffer_, meterField(offset_));
         if (!bytes) { status_ = DataStatus::InvalidArgument; cancel(); return; }
         required_ += bytes;
     }
     if (offset_ < metadata.samples) return;
-    const size_t header = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
+    const size_t header = csvHeader(metadata);
     if (!header) { status_ = DataStatus::InvalidArgument; cancel(); return; }
     if (!file_.begin(storage::Layout::Captures, "CAP", "CSV", required_)) {
         status_ = file_.status();
@@ -108,12 +131,15 @@ void ScopeRecorder::measureCsv() {
     }
     if (!writeCsvHeader(header)) { cancel(); return; }
     offset_ = 0;
+    meterNext_ = 0; // The write goes over the readings again from row 0.
+    meterValue_ = NAN;
     measuring_ = false;
 }
 size_t ScopeRecorder::csvRows(uint8_t *out, size_t capacity) {
     size_t bytes = 0;
     while (offset_ < lease_.view().metadata().samples && capacity - bytes >= 180) {
-        const size_t length = Csv::scope(lease_.view(), offset_, reinterpret_cast<char *>(out + bytes), capacity - bytes);
+        const size_t length = Csv::scope(lease_.view(), offset_, reinterpret_cast<char *>(out + bytes), capacity - bytes,
+                                         meterField(offset_));
         if (!length) return 0;
         bytes += length;
         ++offset_;

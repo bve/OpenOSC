@@ -22,12 +22,14 @@ void DataAccess::serviceRolling(uint32_t now) {
         if (rolling_.size()==rolling_.capacity()) rollingLost_=false;
         status_=rollingLost_ ? DataStatus::Overflow : DataStatus::Ok;
     }
-    if (!rolling_.size() || rollingConsumed_==rollingPublished_ || !store_.writable() || uint32_t(now-rollingAt_)<16) return;
+    // Published when a point was stored (an averaged Roll stores one per Timebases::averaging consumed).
+    const uint64_t stored=rolling_.dropped()+rolling_.size();
+    if (!rolling_.size() || stored==rollingPublished_ || !store_.writable() || uint32_t(now-rollingAt_)<16) return;
     const auto snapshot=rolling_.snapshot();
     metadata=snapshot.metadata(); metadata.sequence=++sequence_;
     const uint16_t *banks[]={snapshot.bank(0),nullptr,nullptr,nullptr};
     if (store_.beginLinear({metadata,banks,rolling_.capacity()},now)) {
-        rollingAt_=now; rollingPublished_=rollingConsumed_;
+        rollingAt_=now; rollingPublished_=stored;
     }
 }
 } // namespace openosc

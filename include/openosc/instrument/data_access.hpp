@@ -159,13 +159,11 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // Counts each start of the chip under the Scope: it comes up in its default function, so the
     // caller selects the saved one (as on a DMM entry). Restarts after silence: dmmRestarts().
     uint32_t meterTraceStarts() const { return meterTraceStarts_; }
-    // The readings the trace draws: time on the frames' clock (nowUs), the value in SI. Kept through
-    // every capture, timebase and measurement (a HOLD freezes them, a restart in between leaves a gap);
-    // restarted when the reading's quantity changes.
+    // The readings the trace draws: time on the frames' clock (nowUs), the value in SI, a slow
+    // timebase's averaged into its entries (ReadingTrace::push). Kept through every capture, timebase
+    // and measurement (a HOLD freezes them; a stop, a power cycle or a UART restart ends the line at
+    // once, a gap); restarted when the quantity of the function selected, or of a reading, changes.
     const dmm::ReadingTrace &meterReadings() const { return meterReadings_; }
-    // The newest reading of the running trace, at most ReadingStaleUs old; nullptr without one.
-    static constexpr uint64_t ReadingStaleUs = 2000000;
-    const dmm::Result *meterTraceReading() const;
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
     bool dmmRanged() const { return !meter_.typeK() && dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
@@ -464,11 +462,12 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void serviceMeterTrace(uint32_t now);
     void stopMeterTrace();
     void traceReading(); // The session's newest reading into meterReadings_ (not held).
+    void breakMeterTrace();
+    bool meterColumn(const scope::FrameMetadata &record, ScopeRecorder::Meter &meter);
     bool meterTraceAsked_ = false, meterTraceRunning_ = false;
     // Readings were missed since the last one kept (HOLD, a restart): the next is preceded by a gap.
     bool meterGap_ = false;
     uint32_t meterTraceStarts_ = 0;
-    uint64_t meterTraceSinceUs_ = 0; // Its last start: an older reading is not this run's.
     static dmm::ReadingTrace::Reading *meterTraceMemory(); // Its ITCM (.meter_trace), or nullptr (meter_trace.cpp).
     dmm::ReadingTrace meterReadings_{meterTraceMemory()};
     static_assert(dmm::LinkWatchdog::OffMs <= dmm::FunctionSelector::PowerOnWaitMs, "A selection's deadline covers the power-on wait");
