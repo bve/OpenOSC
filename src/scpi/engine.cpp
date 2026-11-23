@@ -105,11 +105,7 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
 }
 void Engine::poll(uint32_t now) {
     now_ = now;
-    if (profileKnown_ && profile_ != backend_.multimeter()) { // A reply cut short says so (-410).
-        const bool dropped = available() != 0;
-        reset(); if (dropped) errors_.push(-410);
-        return;
-    }
+    if (profileKnown_ && profile_ != backend_.multimeter()) { reset(); return; }
     profile_ = backend_.multimeter(); profileKnown_ = true;
     // A stop the generator made by itself (DAC underrun, a setting above the clock's limit): -240 once
     // when the count moved (at most one a poll, never repeated for a stop already reported).
