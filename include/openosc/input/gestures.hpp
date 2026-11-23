@@ -26,8 +26,9 @@ public:
     // REL/Power and AUTO/RANGE hold as the factory's KEY4/KEY5: four 500 ms intervals (703S 080459F4).
     static constexpr uint32_t LongHoldMs = 2000;
     // REL/Power: from the first interval (500 ms after the debounced press) the power-off progress
-    // shows, and a release from then on cancels it with no REL (as the factory's poll); a release
-    // before it is REL. AUTO/RANGE keeps its short press below LongHoldMs.
+    // shows (the hold settings), and a release from then on cancels it with no REL (as the factory's
+    // poll); a release before it is REL, or the power off with the short-press setting. AUTO/RANGE
+    // keeps its short press below LongHoldMs.
     static constexpr uint32_t PowerCommitMs = 500;
     static constexpr uint32_t RepeatDelayMs = 400, RepeatPeriodMs = 80;
     // The factory's KEY5 intervals: the long flag at the first 500 ms interval, slot2 at the fourth

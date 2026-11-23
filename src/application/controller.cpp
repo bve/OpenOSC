@@ -167,7 +167,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         const bool activity=InputService::activity();
         const bool wake=servicePower(InputService::keys() || activity,now);
         if (wake) {
-            InputService::wake();
+            InputService::wake(!prefs_.shortPowerOff()); // Short press: the wake takes REL's stroke like any key's.
             autoKey_.cancel();
         }
         if (InputService::overflowed()) {
@@ -176,12 +176,20 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
             data_.closeDmmRange(); // Its release may be among the lost events.
             if (uiReady_) view_.notify(Tooltip::Critical, "Input overflow; press again",now);
         }
-        { // The REL/Power hold, from the input sampler's own timing; the long press covers headless.
+        { // The REL/Power hold, from the input sampler's own timing; the long press covers headless. With the
+          // short-press power off the hold is REL's own function and the power off is onKeys' short press.
             uint32_t held = 0;
             const bool down = InputService::powerHold(held), holding = shutdown_ == Shutdown::None && down;
-            if (!down) powerFired_ = false; // Up (debounced): the long press's end is no new hold.
-            else if (holding && held >= prefs_.holdMs() && !recoveryPending_) powerOff(now);
-            const int power = PowerHold::percent(holding, held, prefs_.holdMs());
+            const bool shortOff = prefs_.shortPowerOff(); // REL's short press powers off; its hold is REL's own function.
+            if (!down) powerFired_ = relativeFired_ = false; // Up (debounced): the long press's end is no new hold.
+            else if (shortOff) {
+                if (holding && held >= KeyGestures::HoldMs && !relativeFired_) {
+                    relativeFired_ = true;
+                    onKeys(KeyEvents{Keypad::Relative}, now, true); // Held, not released: the short press's own routing.
+                    refreshSoftKeys();
+                }
+            } else if (holding && held >= prefs_.holdMs() && !recoveryPending_) powerOff(now);
+            const int power = shortOff ? -1 : PowerHold::percent(holding, held, prefs_.holdMs());
             const int automatic = scopeAutoCountdown(now, power >= 0); // Every pass: its input state must not depend on the drawing.
             if (uiReady_) {
                 if (power >= 0) view_.powerHold(power, "Hold to power off");
@@ -262,7 +270,7 @@ void ApplicationController::applyPreferences() {
     applyBrightness();
     dataRefresh_=true;
 }
-void ApplicationController::powerOff(uint32_t now) {
+void ApplicationController::powerOff(uint32_t now, bool announce) {
     if (powerFired_) return; // Once a hold: a refusal is not repeated every pass.
     powerFired_ = true;
     if (panel_==Panel::Zero) data_.cancelZero(now);
@@ -271,9 +279,10 @@ void ApplicationController::powerOff(uint32_t now) {
     if (panel_ == Panel::InterleaveMatch) finishInterleaveMatch(now, Tooltip::Done, nullptr, false);
 #endif
     if (dropEdit(now) && uiReady_) showSettings(); // Not saved, not kept if the power off is refused.
+    if (announce && uiReady_) { shutdownNotice("Powering off...", now); lv_refr_now(nullptr); display_.settle(); }
     confirmAction_=ShutdownAction::PowerOff; requestShutdown(now);
 }
-void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
+void ApplicationController::onKeys(const KeyEvents& events, uint32_t now, bool relativeHeld) {
     const uint32_t keys = events.shortPress | events.repeat;
     // A held Right steps a Number but never runs through a Choice (relays, run mode): the navigator
     // takes the next option on its press only.
@@ -284,8 +293,12 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     if (!(events.shortPress | events.longPress | events.repeat)) return;
     // REL/Power held to the end of its progress (PowerHold): the power-off pipeline at once, from
     // every screen, menu, dialog, Remote or headless; it saves settings and files and stops the
-    // instruments, and says why when it cannot.
-    if (events.longPress & Keypad::Relative) { powerOff(now); return; }
+    // instruments, and says why when it cannot. With the short-press setting that is REL's tap, and
+    // its long press does nothing; relativeHeld: the 1 s hold, REL's own function, not a tap.
+    if (prefs_.shortPowerOff()) {
+        if (events.longPress & Keypad::Relative) return;
+        if (!relativeHeld && (events.shortPress & Keypad::Relative)) { powerOff(now, true); return; }
+    } else if (events.longPress & Keypad::Relative) { powerOff(now); return; }
     if (panel_==Panel::Zero) { zeroKeys(keys,now); return; }
     if (panel_ == Panel::GainMatch) { gainMatchKeys(keys, now); return; }
 #if OPENOSC_BOARD == 703

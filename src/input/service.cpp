@@ -18,9 +18,9 @@ void InputService::suppress() {
     CriticalSection guard;
     input.reset(Keypad::read(),Board::milliseconds());
 }
-void InputService::wake() {
+void InputService::wake(bool relativeHold) {
     CriticalSection guard;
-    input.wake(Keypad::read(),Board::milliseconds());
+    input.wake(Keypad::read(),Board::milliseconds(),relativeHold);
 }
 bool InputService::powerHold(uint32_t &elapsed) { return input.powerHold(elapsed); }
 } // namespace openosc

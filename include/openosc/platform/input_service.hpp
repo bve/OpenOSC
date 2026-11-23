@@ -11,7 +11,7 @@ public:
     static bool take(TimedKeyEvents &event);
     static bool overflowed();
     static void suppress();
-    static void wake();                       // suppress(), but a REL/Power hold goes on (KeyInput::wake).
+    static void wake(bool relativeHold);      // suppress(); with relativeHold a REL/Power hold goes on (KeyInput::wake).
     static bool powerHold(uint32_t &elapsed);
 };
 } // namespace openosc

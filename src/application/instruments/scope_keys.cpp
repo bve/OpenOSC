@@ -260,7 +260,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         return;
     }
     holdKeys(keys, now);
-    if (keys & Keypad::Relative) view_.scopeFooterPage(); // REL has no other Scope use; its hold is power.
+    if (keys & Keypad::Relative) view_.scopeFooterPage(); // REL's tap (a 1 s hold with the short-press power off); REL has no other Scope use.
     // A second F1/F2 press changes the channel only to one that is shown (followShownChannel).
     if (keys & Keypad::F1) {
         if (focus_ == plot::Focus::Scale && channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;

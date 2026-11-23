@@ -74,8 +74,8 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!root["hold_ms"].is<unsigned>()) return false;
         const unsigned ms = root["hold_ms"].as<unsigned>();
         unsigned index = 0;
-        while (index < 3 && Preferences::HoldTimes[index] != ms) ++index;
-        if (index == 3) return false;
+        while (index < 4 && Preferences::HoldTimes[index] != ms) ++index;
+        if (index == 4) return false;
         candidate.holdTime = index;
     }
     if (indicators.containsKey("battery")) {

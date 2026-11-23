@@ -85,7 +85,7 @@ private:
     uint8_t triggerRepeats_ = 0;
     int8_t triggerSign_ = 0;
     PerformanceCounter performance_;
-    void onKeys(const KeyEvents &events, uint32_t now);
+    void onKeys(const KeyEvents &events, uint32_t now, bool relativeHeld = false);
     void settingsKeys(uint32_t keys, uint32_t now);
     void showSettings();
     void closeSettings();
@@ -413,8 +413,10 @@ private:
     MeterRestore meterRestore_; // The DMM entry's range restore (meter_restore.hpp).
     uint32_t dmmRestarts_ = 0, dmmReselects_ = 0;
     bool powerFired_ = false; // The REL hold (Preferences::holdMs) powered off once this stroke.
+    bool relativeFired_ = false; // The 1 s REL hold ran REL's function once this stroke (Preferences::shortPowerOff).
     ScopeAutoKey autoKey_;    // AUTO's open stroke on the Scope waveform screen.
-    void powerOff(uint32_t now);
+    // announce: "Powering off..." drawn at once, before the saves block the screen (the short press has no hold progress).
+    void powerOff(uint32_t now, bool announce = false);
     // An explicit DMM command (keys, SCPI): accepted, it supersedes the entry's pending restore.
     bool meterCommand(bool accepted) { if (accepted) meterRestore_.cancel(); return accepted; }
     // *OPC?'s view of that restore (InstrumentBackend::busy): owed and still able to happen.

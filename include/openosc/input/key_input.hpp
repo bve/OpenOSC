@@ -14,9 +14,13 @@ public:
         gestures_=KeyGestures{}; gestures_.poll(keys,now);
         written_=read_=0; keys_=keys; activity_=false; dropped_=0; holding_=false;
     }
-    // A wake takes the stroke of every key held, except that REL/Power still counts towards its
-    // hold (power off from a dark screen); its short release gives nothing.
-    void wake(uint32_t keys,uint32_t now) { reset(keys,now); gestures_.holdOnly(Keypad::Relative,now); }
+    // A wake takes the stroke of every key held. With relativeHold (the power-off hold settings) REL/Power
+    // still counts towards its hold (power off from a dark screen); its short release gives nothing.
+    // Without it (the short-press power off) REL's hold is REL's own function, so the wake takes it too.
+    void wake(uint32_t keys,uint32_t now,bool relativeHold) {
+        reset(keys,now);
+        if (relativeHold) gestures_.holdOnly(Keypad::Relative,now);
+    }
     void sample(uint32_t keys,uint32_t now) {
         if (keys_.exchange(keys,std::memory_order_relaxed)!=keys) activity_.store(true,std::memory_order_release);
         const auto events=gestures_.poll(keys,now);

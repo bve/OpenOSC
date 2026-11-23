@@ -82,7 +82,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::ShowFps: return 3;
     case Action::ClockIndicator: return 2;
     case Action::PanDirection: return 2;
-    case Action::HoldTime: return 3;
+    case Action::HoldTime: return 4;
     case Action::BatteryDisplay: return 3;
     case Action::RunProfile: return RunModeCount;
     case Action::BufferSize: return scope::RecordBudget::StepCount;
@@ -127,7 +127,7 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
     case Action::PanDirection: std::snprintf(output, capacity, "%s", index ? "Move waveform" : "Move view"); break;
     case Action::ClockIndicator: case Action::TooltipUsage: case Action::TooltipUnavailable: case Action::TooltipProgress:
     case Action::TooltipDone: case Action::TooltipAdvisory: std::snprintf(output, capacity, "%s", index ? "On" : "Off"); break;
-    case Action::HoldTime: { static constexpr const char *holds[] = {"1 s", "1.5 s", "2 s"}; std::snprintf(output, capacity, "%s", holds[index % 3]); break; }
+    case Action::HoldTime: { static constexpr const char *holds[] = {"Short press", "1 s", "1.5 s", "2 s"}; std::snprintf(output, capacity, "%s", holds[index % 4]); break; }
     case Action::RunProfile: {
         const auto &mode = RunModes[index % RunModeCount];
         std::snprintf(output, capacity, "CPU %lu MHz  ADC %lu", (unsigned long)mode.coreHz / 1000000UL,

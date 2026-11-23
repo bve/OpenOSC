@@ -264,7 +264,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   you switch the device off, restart it or enter Recovery. The microcontroller's internal Flash
   holds only the firmware. You can edit the files from a computer; a damaged settings file is
   restored from its previous version or from a copy in `/openosc/SETCOPY/`.
-- Hold-to-power-off with a progress bar
+- Hold-to-power-off with a progress bar. **Settings → Device → Power → Power-off hold → Short press**
+  powers off on a short REL press instead; REL's own function (relative measurement, the oscilloscope
+  footer page) then moves to a 1 s hold
 - Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
 
 **Recovery bootloader**

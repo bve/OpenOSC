@@ -30,9 +30,10 @@ struct Preferences {
     // Bytes beside batteryOffsetMv, with bode after them: the space four 32-bit words took (sizeof checked below).
     uint8_t panReverse = 0;                   // Left/Right pan: 0 moves the view, 1 the waveform.
     uint8_t clockIndicator = 0;               // Scope top bar L/M/H run profile glyph: 0 off (older files), 1 on.
-    uint8_t holdTime = 2;                     // REL power-off hold: HoldTimes index.
-    static constexpr uint32_t HoldTimes[] = {1000, 1500, 2000};
-    uint32_t holdMs() const { return HoldTimes[holdTime < 3 ? holdTime : 2]; }
+    uint8_t holdTime = 3;                     // REL power-off hold: HoldTimes index; 0 is a short press, no hold.
+    static constexpr uint32_t HoldTimes[] = {0, 1000, 1500, 2000};
+    bool shortPowerOff() const { return holdTime == 0; } // REL's short press powers off; its own function moves to a 1 s hold.
+    uint32_t holdMs() const { return HoldTimes[holdTime < 4 ? holdTime : 3]; }
     // Settings > Files & USB > USB controller: 1 enabled (USB data where the clock allows it, 200 MHz),
     // 0 disabled (the OTG controller stays off; Recovery's USB disk is not affected). Older files: enabled.
     uint8_t usbController = 1;
@@ -54,7 +55,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && holdTime < 3 && usbController <= 1 && bode.valid() &&
+               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && holdTime < 4 && usbController <= 1 && bode.valid() &&
                generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&
