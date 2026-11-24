@@ -119,7 +119,8 @@ bool Engine::expire(uint32_t now) {
 }
 void Engine::idle(uint32_t now) {
     now_ = now; // Reads stamp outputAt_ with now_ (poll() may not run here).
-    if (expire(now) || int32_t(now - inputAt_) < 10000 || int32_t(now - frameAt_) < 10000 || int32_t(now - outputAt_) < 10000) return;
+    const auto recent = [&](uint32_t at) { const int32_t age = int32_t(now - at); return age > -10000 && age < 10000; }; // Never set: old.
+    if (expire(now) || recent(inputAt_) || recent(frameAt_) || recent(outputAt_)) return;
     if (measuring_ || waitingDecode_ || waitingWaveform_) { discardOutput(); errors_.push(-410); }
     else backend_.releaseFrame();
     preambleChannels_ = 0;
