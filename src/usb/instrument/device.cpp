@@ -123,6 +123,7 @@ void InstrumentUsb::poll(uint32_t now) {
     serialEngine_.poll(now);
     serviceTmc(now); // USBTMC: split transactions first, then the bulk pipe.
     transfer(now);
+    serialEngine_.refill();
     boot_diagnostics.usbState = usbDevice.dev_state;
 }
 }

@@ -274,7 +274,8 @@ bool Engine::waveformCommand(const Command &c) {
         if (!waitingWaveform_) { preambleChannels_ = 0; waveRepeat_ = false; } // The lease moves: PRE?'s no longer applies.
         const auto *f = frame(!waitingWaveform_);
         if (!f && waitingWaveform_ && !waveRepeat_ && int32_t(now_ - deadline_) >= 0) { // None newer in 1 s: 1 s more for the current.
-            backend_.repeatFrame(); waveRepeat_ = true; deadline_ = now_ + 1000; f = frame();
+            waveRepeat_ = true;
+            if (backend_.repeatFrame()) { deadline_ = now_ + 1000; f = frame(); }
         }
         if (!f) { waitFrame(envelope ? "ENV" : "FRAM"); return true; }
         waitingWaveform_ = false;

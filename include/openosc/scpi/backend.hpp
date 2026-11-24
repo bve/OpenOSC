@@ -52,7 +52,7 @@ public:
     virtual bool triggered() const { return false; } // The last frame held its trigger edge (TRIG:STAT? TD).
     virtual const scope::FrameView *frame(bool refresh) = 0;
     virtual void releaseFrame() = 0;
-    virtual void repeatFrame() {} // The next frame() may serve the record just released.
+    virtual bool repeatFrame() { return false; } // True: frame() refused a re-read, which it now allows.
     // The session ended (Engine::reset: a new session, a disconnect, a clear): its frame lease and
     // any claim on records it has not read yet go.
     virtual void endSession() { releaseFrame(); }
