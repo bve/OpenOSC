@@ -114,11 +114,12 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
 }
 bool Engine::expire(uint32_t now) {
     if (!available() && fileDone()) return false;
-    if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
+    if (int32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
     return true;
 }
 void Engine::idle(uint32_t now) {
-    if (expire(now) || std::min({uint32_t(now - inputAt_), uint32_t(now - frameAt_), uint32_t(now - outputAt_)}) < 10000) return;
+    now_ = now; // Reads stamp outputAt_ with now_ (poll() may not run here).
+    if (expire(now) || int32_t(now - inputAt_) < 10000 || int32_t(now - frameAt_) < 10000 || int32_t(now - outputAt_) < 10000) return;
     if (measuring_ || waitingDecode_ || waitingWaveform_) { discardOutput(); errors_.push(-410); }
     else backend_.releaseFrame();
     preambleChannels_ = 0;
@@ -132,7 +133,7 @@ void Engine::poll(uint32_t now) {
     const uint32_t faults = backend_.generator().faults;
     if (generatorFaultsKnown_ && faults != generatorFaults_) errors_.push(-240);
     generatorFaults_ = faults; generatorFaultsKnown_ = true;
-    if (inputPending_ && uint32_t(now - inputAt_) >= 3000) {
+    if (inputPending_ && int32_t(now - inputAt_) >= 3000) {
         parser_.reset(); inputPending_ = false; errors_.push(-102);
     }
     fillStage(); // The next file bytes, here in the foreground.
