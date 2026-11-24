@@ -14,17 +14,22 @@ struct ScopeRequest {
     uint32_t probeNumerator[2] = {1, 1}, probeDenominator[2] = {1, 1};
     bool rollAuto=true;
     bool longerRecord = true;
-    // Roll: Auto from 200 ms/div with rollAuto, and always past Timebases::SampledMaximum (averaged Roll).
-    // Up to it, a qualified trigger needs a bounded record with the history around its candidate.
+    // Trend (TrendBuffer): the step after Timebases::Maximum. It rolls at Timebases::SampledMaximum, as a
+    // flag because the time/div of its record is its own (it halves as the record grows).
+    bool trend=false;
+    // Roll: Auto from 200 ms/div with rollAuto, and always past Timebases::SampledMaximum (averaged Roll)
+    // and in a trend. Up to it, a qualified trigger needs a bounded record with the history around its candidate.
     bool rolling() const {
-        return trigger.mode==scope::TriggerMode::Auto && (timebaseNs>scope::Timebases::SampledMaximum ||
+        return trigger.mode==scope::TriggerMode::Auto && (trend || timebaseNs>scope::Timebases::SampledMaximum ||
                                                           (rollAuto && timebaseNs>=200000000 && !trigger.qualified()));
     }
-    // Past Timebases::SampledMaximum the scope only rolls: a trigger mode asked for there is Auto (every
-    // caller through ApplicationController::applyScope, the saved settings as they load; DataAccess
-    // refuses any other). True when it changed the mode.
+    // Past Timebases::SampledMaximum, and in a trend (which takes that time/div), the scope only rolls: a
+    // trigger mode asked for there is Auto (every caller through ApplicationController::applyScope, the
+    // saved settings as they load; DataAccess refuses any other). True when it changed the mode.
     bool followTimebase() {
-        if (timebaseNs<=scope::Timebases::SampledMaximum || trigger.mode==scope::TriggerMode::Auto) return false;
+        if (trend) timebaseNs=scope::Timebases::SampledMaximum;
+        else if (timebaseNs<=scope::Timebases::SampledMaximum) return false;
+        if (trigger.mode==scope::TriggerMode::Auto) return false;
         trigger.mode=scope::TriggerMode::Auto;
         return true;
     }
@@ -47,7 +52,7 @@ struct ScopeRequest {
         if (source < 2 && !frontend.enabled[source] && frontend.enabled[source ^ 1]) trigger.channel = scope::Channel(source ^ 1);
     }
     bool same(const ScopeRequest &other) const {
-        if (timebaseNs != other.timebaseNs || recordPoints != other.recordPoints || rollAuto!=other.rollAuto ||
+        if (timebaseNs != other.timebaseNs || recordPoints != other.recordPoints || rollAuto!=other.rollAuto || trend!=other.trend ||
             longerRecord != other.longerRecord ||
             trigger != other.trigger) return false;
         for (unsigned c = 0; c < 2; ++c)

@@ -137,6 +137,11 @@ void WaveformWidget::meterReadings(const dmm::ReadingTrace *readings) {
     meter_ = readings;
     if (object_) lv_obj_invalidate(object_);
 }
+void WaveformWidget::trend(const scope::TrendView *view) {
+    if (trend_ == view) return;
+    trend_ = view;
+    if (object_) lv_obj_invalidate(object_);
+}
 void WaveformWidget::setFrame(const scope::FrameView &frame) {
     if (!object_)
         return;
@@ -189,7 +194,7 @@ void WaveformWidget::draw(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     lv_area_t area;
     lv_obj_get_coords(self.object_, &area);
-    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_, self.meter_).draw();
+    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_, self.meter_, self.trend_).draw();
 }
 void WaveformWidget::cover(lv_event_t *event) {
     auto *info = static_cast<lv_cover_check_info_t *>(lv_event_get_param(event));

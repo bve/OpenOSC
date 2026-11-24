@@ -33,6 +33,7 @@ struct ScopePreferences {
     // in preferences.hpp).
     uint8_t rollAuto=1;
     uint8_t longerRecord = 1;
+    uint8_t trend=0; // ScopeRequest::trend: the step after 1 h/div.
     // InterleaveMode: Off/On/Auto. Defaults: ZT706S Auto (its factory rule), ZT703S Off (Auto: MKR's rule).
     uint8_t interleave = board::Current::Features.adcInterleave ? 2 : 0;
     // A service choice (FactoryRecordPolicy: 0 auto, 1 long, 2 compact, 3 mkr) for reading the factory record

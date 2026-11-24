@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/acquisition/mailbox.hpp"
+#include "openosc/acquisition/trend.hpp"
 #include "openosc/data/fat_file.hpp"
 #include "openosc/data/raw_capture.hpp"
 #include "openosc/data/session_log.hpp"
@@ -23,7 +24,9 @@ public:
         Quantity quantity = Quantity::Unknown;
     };
     explicit ScopeRecorder(Filesystem &fs) : file_(fs) {}
-    bool begin(scope::FrameLease &&lease, Format format, const Meter *meter = nullptr);
+    // trend: the copy of the trend the frame is the means of (a CSV only): rows of min, mean and max
+    // instead of codes; its meter, if any, carries the dmm columns' header and no points.
+    bool begin(scope::FrameLease &&lease, Format format, const Meter *meter = nullptr, const scope::TrendView *trend = nullptr);
     void service();
     void cancel(bool keep = false);
     bool busy() const { return busy_; }
@@ -38,8 +41,11 @@ private:
     void measureCsv();
     // The CSV's metadata lines into buffer_, the "# dmm:" line with a dmm column: their bytes, 0 when they do not fit.
     size_t csvHeader(const scope::FrameMetadata &metadata);
-    const char *columns() const; // The column header: Csv::ScopeMeterHeader with a dmm column, else ScopeHeader.
+    // The column header: a trend's (Csv::ScopeTrendHeader, ScopeTrendMeterHeader with the dmm columns), else
+    // Csv::ScopeMeterHeader with a dmm column, else ScopeHeader.
+    const char *columns() const;
     const float *meterField(size_t row); // The dmm field of `row` (rows in order), nullptr without the column.
+    size_t csvRow(size_t row, char *output, size_t capacity); // Csv::trend's row of a trend, else Csv::scope's.
     FatDataFile file_;
     scope::FrameLease lease_;
     RawCaptureStream stream_;
@@ -47,6 +53,8 @@ private:
     size_t offset_ = 0;
     uint64_t required_ = 0;
     const unsigned char *meter_ = nullptr; // Meter::points, nullptr: no dmm column.
+    const scope::TrendView *trend_ = nullptr;
+    bool trendMeter_ = false; // A trend's rows carry the dmm columns.
     uint32_t meterCount_ = 0, meterNext_ = 0; // The points; the next to come into force.
     float meterValue_ = 0;                  // The one in force (NaN: none).
     const char *meterFunction_ = "";        // Meter::function and quantity: the "# dmm:" line.

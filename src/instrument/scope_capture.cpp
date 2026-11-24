@@ -21,7 +21,7 @@ bool sameCh1Range(const ScopeRequest &a, const ScopeRequest &b) {
 }
 bool DataAccess::validateScope(const ScopeRequest &r) const {
     if (r.timebaseNs < 10 || r.timebaseNs > scope::Timebases::Maximum || !scope::RecordBudget::valid(r.recordPoints) ||
-        !r.trigger.valid() || (r.timebaseNs > scope::Timebases::SampledMaximum && !r.rolling()))
+        !r.trigger.valid() || ((r.timebaseNs > scope::Timebases::SampledMaximum || r.trend) && !r.rolling()))
         return false;
     for (unsigned c = 0; c < 2; ++c)
         if (!r.probeNumerator[c] || !r.probeDenominator[c] || r.frontend.range[c] > 10 ||
@@ -615,6 +615,9 @@ bool DataAccess::startCapture() {
         rolling_.reset(plan.count,averaging); rollingConsumed_=rollingPublished_=0; rollingLost_=false;
         rollingAt_=Board::milliseconds()-16;
     }
+    // Bank 3 is the trend's only while it runs: any other capture may write it.
+    if (rolling && request_.trend) trend_.reset(meterReadings_.quantity());
+    else trend_.forget();
     if (!holdPending_) status_ = DataStatus::Ok; // A pending HOLD's retry keeps the fault until a record arrives.
     applyForce();
     return true;

@@ -46,6 +46,9 @@ public:
     void counter(const char *text, uint32_t color);
     // The Scope's DMM trace: the readings its line is drawn from (nullptr: none).
     void meterReadings(const dmm::ReadingTrace *readings);
+    // A trend's points (DataAccess::trendShown): drawn instead of the channels' traces and the DMM line
+    // for the frame they belong to; nullptr: none.
+    void trend(const scope::TrendView *view);
     const char *note() const { return note_ && !lv_obj_is_hidden(note_) ? lv_label_get_text(note_) : ""; } // On show.
     void service(uint32_t now);
     bool captureReference(unsigned channel);
@@ -75,5 +78,6 @@ private:
     bool held_ = false, inlineScales_ = true;
     const plot::ColumnCache *cache_ = nullptr;
     const dmm::ReadingTrace *meter_ = nullptr;
+    const scope::TrendView *trend_ = nullptr;
 };
 } // namespace openosc

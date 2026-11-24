@@ -9,6 +9,9 @@
 namespace openosc::dmm {
 class ReadingTrace;
 }
+namespace openosc::scope {
+struct TrendView;
+}
 namespace openosc::plot {
 // The plot's colours. trigger: FollowSource draws the trigger marks in the source channel's colour;
 // tagText: Contrast writes on a coloured tag (zero tags, the active cursor's) in the ink that
@@ -39,10 +42,13 @@ class Painter {
 public:
     // frame: the whole waveform object; the plot is frame less the PlotFrame margins. meter: the
     // readings of the Scope's DMM trace (Options::meter), drawn in Y-T and Y-T+FFT at every timebase.
+    // trend: the min/max/mean points of a trend, drawn in place of the channels' traces and the DMM line
+    // while it belongs to the frame shown (trend.cpp).
     Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette,
-            bool inlineScales = true, TriggerMark trigger = {}, const dmm::ReadingTrace *meter = nullptr)
+            bool inlineScales = true, TriggerMark trigger = {}, const dmm::ReadingTrace *meter = nullptr,
+            const scope::TrendView *trend = nullptr)
         : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), inlineScales_(inlineScales),
-          trigger_(trigger), meter_(meter) {}
+          trigger_(trigger), meter_(meter), trend_(trend) {}
     void draw();
     static lv_area_t plotArea(const lv_area_t &frame) {
         return {frame.x1 + PlotFrame::Left, frame.y1 + PlotFrame::Top, frame.x2 - PlotFrame::Right, frame.y2 - PlotFrame::Bottom};
@@ -57,6 +63,11 @@ private:
     void recordGapLabels(const RecordGaps &gaps);
     void traces();
     void meterTrace();
+    // A trend of the frame shown (the copy was published with it): drawn from its points, not from the
+    // projection of the frame's means.
+    bool trendShown() const;
+    void trendTrace(unsigned channel, uint32_t color, uint8_t opacity, unsigned width); // The band and the mean line.
+    void trendMeter();                                                                // The DMM's, as meterTrace's own scale.
     // The DMM trace's zero in plot rows (MeterTraceOptions::position), unrounded.
     double meterZero() const {
         const double h = model_.viewport().height - 1;
@@ -89,6 +100,7 @@ private:
     bool inlineScales_;
     TriggerMark trigger_;
     const dmm::ReadingTrace *meter_;
+    const scope::TrendView *trend_;
     bool meterAbove_ = false, meterBelow_ = false; // meterTrace's line beyond the plot's top, bottom (markers).
 };
 class Path {

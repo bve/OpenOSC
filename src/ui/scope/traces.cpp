@@ -41,9 +41,12 @@ void Painter::traces() {
     if (o.glow)
         for (const unsigned c : order)
             if (!densityShown(c)) glow(c);
+    // A trend's band supersedes the peak hold and the grades: each column of it is already a min/max.
+    const bool trend = trendShown();
     for (const unsigned c : order) {
         const auto &channel = o.channels[c];
         const uint32_t color = traceColor(c);
+        if (trend) { trendTrace(c, color, channel.opacity, channel.width); continue; }
         if (o.peakHold)
             trace(s.peaks[c], color, 65U * channel.opacity / 255, 1, Style::Envelope);
         // A graded channel is its density, the newest record included; with none yet (cleared by a
@@ -51,7 +54,8 @@ void Painter::traces() {
         if (densityShown(c)) density(c);
         else trace(s.traces[c], color, channel.opacity, channel.width, o.style);
     }
-    meterTrace();
+    if (trend) trendMeter();
+    else meterTrace();
     if (o.math != Math::Off) {
         trace(s.traces[2], palette_.math, 220, 1, o.style);
         // The operation keeps its input order. Show each input's on-screen number.

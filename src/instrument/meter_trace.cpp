@@ -71,7 +71,9 @@ void DataAccess::stopMeterTrace() {
 // HOLD keeps every reading its frame shows: the next reading marks the gap then.
 void DataAccess::breakMeterTrace() {
     meterGap_ = true;
-    if (!scopeHeld_) meterReadings_.gap(uint32_t(timeUs_ / 1000));
+    if (scopeHeld_) return;
+    meterReadings_.gap(uint32_t(timeUs_ / 1000));
+    trend_.meterGap();
 }
 // The line in the function selected: started again when that function or its quantity is not the
 // line's (its scale, units and cursors with it); the same one (the trace's start, a restart's
@@ -80,6 +82,7 @@ void DataAccess::restartMeterLine() {
     const auto quantity = dmm::Functions::reading(meterTraceFunction_);
     if (quantity == Quantity::Unknown || (meterTraceFunction_ == meterLineFunction_ && quantity == meterReadings_.quantity())) return;
     meterReadings_.reset(quantity);
+    trend_.restartMeter(quantity);
     meterGap_ = false;
     meterLineFunction_ = meterTraceFunction_;
 }
@@ -94,13 +97,16 @@ void DataAccess::traceReading() {
     const auto ms = uint32_t(reading.timestampUs / 1000);
     if (primary.quantity != Quantity::Unknown && primary.quantity != meterReadings_.quantity()) {
         meterReadings_.reset(primary.quantity);
+        trend_.restartMeter(primary.quantity);
         meterGap_ = false;
     }
     // At a slow timebase an entry is the mean of the readings within its span (ReadingTrace::push).
     const uint32_t span = dmm::ReadingTrace::spanMs(request_.timebaseNs);
     if (meterGap_) meterReadings_.gap(ms, span);
     meterGap_ = false;
-    meterReadings_.push(ms, primary.valid() ? float(primary.si) : NAN, span);
+    const float value = primary.valid() ? float(primary.si) : NAN;
+    meterReadings_.push(ms, value, span);
+    trend_.reading(value);
 }
 // A scope CSV's dmm column while the DMM trace shows (ScopeRecorder::Meter): the readings over `record`,
 // from the one in force at its first point to the last by its last, each with the first row it holds
@@ -127,9 +133,16 @@ bool DataAccess::meterColumn(const scope::FrameMetadata &record, ScopeRecorder::
         const Point held{point <= 0 ? 0U : uint32_t(std::ceil(point)), reading.value};
         std::memcpy(copy + count++ * sizeof held, &held, sizeof held);
     }
-    const auto function = dmm::Functions::identify(meter_.latest());
-    meter = {copy, count, function < dmm::Function::Unknown ? MeterFunctions[unsigned(function)].key : "unknown",
-             meterReadings_.quantity()};
+    meter = meterHeader();
+    meter.points = copy;
+    meter.count = count;
     return true;
+}
+ScopeRecorder::Meter DataAccess::meterHeader() const {
+    const auto function = dmm::Functions::identify(meter_.latest());
+    ScopeRecorder::Meter meter;
+    meter.function = function < dmm::Function::Unknown ? MeterFunctions[unsigned(function)].key : "unknown";
+    meter.quantity = meterReadings_.quantity();
+    return meter;
 }
 } // namespace openosc

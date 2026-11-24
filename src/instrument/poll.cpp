@@ -103,7 +103,9 @@ void DataAccess::serviceStreams(uint32_t now) {
 }
 void DataAccess::serviceBackground(uint32_t now) {
     if (!initialized_) return;
+    backgroundPass_=true;
     serviceStreams(now);
+    backgroundPass_=false;
     serviceScopeCapture(now); // A finished capture starts the next one now, not after the frame.
 }
 void DataAccess::poll(uint32_t now) {
@@ -129,8 +131,17 @@ void DataAccess::poll(uint32_t now) {
         if (timeUs_ >= recordDeadlineUs_) { recordStatus_ = DataStatus::Timeout; recordPending_ = false; }
         else if (acquireScope(lease)) {
             ScopeRecorder::Meter meter;
-            const bool column = recordFormat_ == ScopeRecorder::Format::Csv && meterColumn(lease.view().metadata(), meter);
-            if (!recorder_.begin(std::move(lease), recordFormat_, column ? &meter : nullptr))
+            const scope::TrendView *trend = nullptr;
+            bool column = false;
+            if (recordFormat_ == ScopeRecorder::Format::Csv) {
+                if (trend_.shown().sequence && trend_.shown().sequence == lease.view().metadata().sequence) {
+                    // A trend's CSV holds its own min/max/mean rows, the DMM's from the trend, not from the ReadingTrace.
+                    trend = &trend_.shown();
+                    meter = meterHeader();
+                    column = meterTraceAsked_;
+                } else column = meterColumn(lease.view().metadata(), meter);
+            }
+            if (!recorder_.begin(std::move(lease), recordFormat_, column ? &meter : nullptr, trend))
                 recordStatus_ = recorder_.status();
             recordPending_ = false;
         }

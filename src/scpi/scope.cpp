@@ -27,10 +27,10 @@ bool Engine::scopeCommand(const Command &c) {
     if (channelCommand(c) || waveformCommand(c)) return true;
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
     auto request = backend_.scopeRequest();
-    // Auto is the only trigger mode past Timebases::SampledMaximum (Roll only) and with the DMM trace
-    // alone (no channel shown): Normal and Single are refused there.
+    // Auto is the only trigger mode past Timebases::SampledMaximum and in a trend (Roll only) and with the
+    // DMM trace alone (no channel shown): Normal and Single are refused there.
     const auto autoOnly = [&] {
-        return request.timebaseNs > scope::Timebases::SampledMaximum || (!backend_.channelShown(0) && !backend_.channelShown(1));
+        return request.timebaseNs > scope::Timebases::SampledMaximum || request.trend || (!backend_.channelShown(0) && !backend_.channelShown(1));
     };
     if (match("MEASure:FCNT:QUALity") || match("MEASure:COUNter:QUALity")) {
         scope::CounterReading reading;
@@ -69,8 +69,12 @@ bool Engine::scopeCommand(const Command &c) {
         else reply("%s", backend_.held() ? "STOP" : backend_.waiting() ? "WAIT" : request.rolling() ? "RUN" : backend_.triggered() ? "TD" :
                          request.trigger.mode == scope::TriggerMode::Auto ? "AUTO" : "RUN"); // Rigol's TD|WAIT|RUN|AUTO|STOP.
     } else if (match("TIMebase:SCALe") || match("TIMebase:MAIN:SCALe")) {
-        if (c.query) number(request.timebaseNs / 1e9);
-        else { double value; if (argument(c, value, Header::Unit::Time)) { if (value < 1e-8 || value > scope::Timebases::Maximum / 1e9) error(-222); else { request.timebaseNs = scope::Timebases::nearest(value * 1e9); apply(request); } } }
+        if (c.query) {
+            // A trend's time/div is the record's own, which halves as it grows: the published frame's.
+            const auto *m = request.trend ? backend_.configuration() : nullptr;
+            if (request.trend && !m) error(-230, true); else number(m ? m->timebaseNs / 1e9 : request.timebaseNs / 1e9);
+        }
+        else { double value; if (argument(c, value, Header::Unit::Time)) { if (value < 1e-8 || value > scope::Timebases::Maximum / 1e9) error(-222); else { request.timebaseNs = scope::Timebases::nearest(value * 1e9); request.trend = false; apply(request); } } }
     } else if (match("TIMebase:MAIN:OFFSet") || match("TIMebase:OFFSet")) {
         const double span=request.timebaseNs/1e8;
         if (c.query) number((.5-request.trigger.position/1000.0)*span);
@@ -100,6 +104,9 @@ bool Engine::scopeCommand(const Command &c) {
     } else if (match("ACQuire:ROLL")) {
         if (c.query) reply("%u",request.rollAuto);
         else { bool value; if (boolean(c,value)) { request.rollAuto=value; apply(request); } }
+    } else if (match("ACQuire:TRENd")) { // Trend: the step after 1 h/div (a record from its start, its scale halving as it grows).
+        if (c.query) reply("%u",request.trend);
+        else { bool value; if (boolean(c,value)) { request.trend=value; apply(request); } }
     } else if (match("ACQuire:PROGress")) {
         if (!c.query || *c.argument) error(-108,c.query);
         else {
