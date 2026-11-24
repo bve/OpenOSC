@@ -12,15 +12,17 @@ void MeterBar::draw(lv_event_t *event) {
     auto *layer = lv_event_get_layer(event);
     lv_area_t area;
     lv_obj_get_coords(self.bar_, &area);
+    const auto segmentsBottom = lv_coord_t(area.y1 + SegmentHeight - 1); // The protrusion below: area.y2.
     lv_draw_rect_dsc_t on, off;
     lv_draw_rect_dsc_init(&on); lv_draw_rect_dsc_init(&off);
     on.bg_color = lv_color_hex(self.color_); off.bg_color = lv_color_hex(self.off_);
     for (int i = 0; i < Segments; ++i) {
-        lv_area_t segment = {lv_coord_t(area.x1 + i * Pitch), area.y1, lv_coord_t(area.x1 + i * Pitch + SegmentWidth - 1), area.y2};
+        lv_area_t segment = {lv_coord_t(area.x1 + i * Pitch), area.y1, lv_coord_t(area.x1 + i * Pitch + SegmentWidth - 1), segmentsBottom};
         lv_draw_rect(layer, i < self.lit_ ? &on : &off, &segment);
     }
     // GitHub #139: each number's notch, a cut through a lit segment, the numbers' colour elsewhere; the
-    // two ends always in the numbers' colour (the bar's end caps).
+    // two ends always in the numbers' colour (the bar's end caps). Below the segments every notch
+    // protrudes in the numbers' colour, whatever the fill.
     lv_draw_rect_dsc_t cut, mark;
     lv_draw_rect_dsc_init(&cut); lv_draw_rect_dsc_init(&mark);
     cut.bg_color = lv_color_hex(self.face_); mark.bg_color = lv_color_hex(self.muted_);
@@ -30,8 +32,10 @@ void MeterBar::draw(lv_event_t *event) {
         const int first = x - (i + 1 == labels), last = x + (i == 0); // Widen the end marks inward.
         for (int column = first; column <= last; ++column) {
             const bool lit = first == last && column % Pitch < SegmentWidth && column / Pitch < self.lit_;
-            const lv_area_t notch = {lv_coord_t(area.x1 + column), area.y1, lv_coord_t(area.x1 + column), area.y2};
+            const auto x1 = lv_coord_t(area.x1 + column);
+            const lv_area_t notch = {x1, area.y1, x1, segmentsBottom}, protrusion = {x1, lv_coord_t(segmentsBottom + 1), x1, area.y2};
             lv_draw_rect(layer, lit ? &cut : &mark, &notch);
+            lv_draw_rect(layer, &mark, &protrusion);
         }
     }
 }
@@ -79,19 +83,29 @@ void MeterBar::visible(bool value) {
 }
 // Each number on its notch (GitHub #139): the first starts and the last ends there, the others are
 // centred on it. Move an intermediate label left only if a wide label to its right needs the space,
-// such as the full-scale label with the engineering unit.
+// such as the full-scale label with the engineering unit (unless Bar scale unit is Off).
 void MeterBar::scale(dmm::CountScale counts, unsigned decimals, const char *unit) {
     const bool known = decimals <= 6;
     if (counts != scale_) lv_obj_invalidate(bar_); // Its notches move with it.
     scale_ = counts; decimals_ = uint8_t(known ? decimals : 255);
     std::snprintf(unit_, sizeof unit_, "%s", known ? unit : "");
+    label();
+}
+void MeterBar::unit(bool shown) {
+    if (shown == unitShown_) return;
+    unitShown_ = shown;
+    if (bar_) label();
+}
+void MeterBar::label() {
+    const auto counts = scale_;
+    const bool known = decimals_ <= 6;
     const int labels = counts.labels(), last = labels - 1;
     const int stateLeft = StateX, stateRight = StateX + StateWidth; // The caption's box, as before.
     int right = tickX(last, labels) + 1; // Past the last number's right edge, its notch.
     for (int i = last; i >= 0; --i) {
         char text[24];
-        MeterText::scaleNumber(counts.tickValue(i * counts.major), known ? decimals : 3, text, sizeof text);
-        if (i == last && *unit_) {
+        MeterText::scaleNumber(counts.tickValue(i * counts.major), known ? decimals_ : 3, text, sizeof text);
+        if (i == last && unitShown_ && *unit_) {
             const size_t length = std::strlen(text);
             std::snprintf(text + length, sizeof text - length, " %s", unit_);
         }
@@ -101,10 +115,10 @@ void MeterBar::scale(dmm::CountScale counts, unsigned decimals, const char *unit
         const int tick = tickX(i, labels);
         const int ideal = i == last ? tick + 1 - width : i ? tick - (width - 1) / 2 : tick;
         const int left = std::min(ideal, right - width);
-        auto *label = ticks_[i];
-        Elements::setText(label, text);
-        lv_obj_set_width(label, width);
-        lv_obj_set_x(label, left);
+        auto *number = ticks_[i];
+        Elements::setText(number, text);
+        lv_obj_set_width(number, width);
+        lv_obj_set_x(number, left);
         covered_[i] = left < stateRight && left + width > stateLeft;
         right = left - LabelGap;
     }

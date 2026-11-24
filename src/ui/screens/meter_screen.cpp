@@ -228,6 +228,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     }
     const bool relative = context.relative && context.relative->matches(result);
     this->status(result, held, status, relative, context.hold);
+    host_.meterSummary().barUnit(context.showBarUnit); // Also over a held or no reading.
     feed(result, status, context.relative);
     const double reference = relative ? context.relative->reference().si : 0;
     const auto *statistics = context.statistics;

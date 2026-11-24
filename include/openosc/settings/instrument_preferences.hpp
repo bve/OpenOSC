@@ -61,6 +61,7 @@ struct MeterPreferences {
     // (display 3) each keep their own. Files before them: defaults (soft keys at the bottom).
     DigitalArrangement digitalArrangement;
     AnalogArrangement analogArrangement;
+    bool barUnit = true; // The engineering unit after the bar scale's last number.
     // How HOLD takes its reading (Measurement > Hold): Manual by default and in files before it. Only
     // the mode and its parameters are kept: a cycle or a snapshot never outlives a restart.
     dmm::HoldSettings hold;

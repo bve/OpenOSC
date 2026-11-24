@@ -25,6 +25,7 @@ public:
     void palette(const MeterLook &look);
     // The analog dial shows the magnitude: no bar.
     void bar(bool shown) { bar_.visible(shown); }
+    void barUnit(bool shown) { bar_.unit(shown); } // MeterBar::unit.
     // The analog layout: the reference, range mode and secondary reading on one 14 px meta row at
     // `metaY` (right of the function sign, CompactMetaX on), MIN/MAX/AVG on one 14 px row at
     // `statsY` (-1: no such row, it is hidden), each name + value group centred in its third; no
@@ -53,6 +54,7 @@ public:
     lv_obj_t *rangeMode() const { return range_; } // AUTO / MANUAL (tests).
     lv_obj_t *secondary() const { return secondary_; } // The secondary reading, the AC frequency (tests).
     lv_obj_t *reference() const { return reference_; } // Range or REL reference (tests).
+    const MeterBar &barGraph() const { return bar_; } // Its numbers (tests).
 
 private:
     void arrange();

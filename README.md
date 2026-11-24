@@ -217,9 +217,10 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   a repeated selection of the same function keeps it.
 - Large 72/80 px reading when the bar graph and statistics are off
 - Bar graph labels follow the active range in measurement units. The 2.5 V range runs from 0 to 2.5 V
-  in 0.5 V steps. A notch on the bar marks each labelled value. The analog dial labels its scale in
-  the reading's unit. On both the bar and the dial, ranges that end below the meter's counts, such as
-  1000 V DC, 750 V AC and 10 A, reach full scale at the end of the range
+  in 0.5 V steps. Each notch extends below the bar and lines up with its scale value. The analog dial
+  labels its scale in the reading's unit. On both the bar and the dial, ranges that end below the
+  meter's counts, such as 1000 V DC, 750 V AC and 10 A, reach full scale at the end of the range.
+  **MENU → Bar scale unit** shows or hides the unit after the bar's last number. It is on by default.
 
 **Signal generator**
 
@@ -239,6 +240,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - [SCPI extensions for desktop clients](docs/SCPI_DESKTOP.md) for frame, peak, measurement and file transfers
 - Compatible command profiles for Rigol DS oscilloscopes and the OWON XDM1041 multimeter, so
   existing PC software such as ngscopeclient can talk to the device
+- Fyfar built a web app for the oscilloscope, multimeter, signal generator and Bode analyzer.
+  It connects over USB via Web Serial. [OpenOSC Panel](https://github.com/Fyfar/openosc-panel)
 - USB Remote mode: the PC controls the device while the screen keeps showing live data
 - USB data works only in the 200/100 performance profile. Connect directly to a PC port:
   disconnects are known, especially through USB hubs.

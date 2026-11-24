@@ -19,7 +19,8 @@ PropertyKind MeterProperties::kind(unsigned row) const {
     }
 }
 void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Bar graph", "Relative",
+    static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Bar graph",
+                                            "Bar scale unit", "Relative",
                                             "Hold", "Reset statistics", "CSV logging", "Junction source", "Manual junction", "Temp units", "Serial 115200"};
     std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
 }
@@ -41,6 +42,7 @@ unsigned MeterProperties::option(unsigned row) const {
     case Digits: return face_;
     case Statistics: return statistics_;
     case BarGraph: return bar_;
+    case BarUnit: return barUnit_;
     case Relative: return relative_;
     case Logging: return logging_;
     case SerialOutput: return serial_;
@@ -97,6 +99,7 @@ bool MeterProperties::choose(unsigned row, unsigned index) {
     case Digits: face_ = index; break;
     case Statistics: statistics_ = index; break;
     case BarGraph: bar_ = index; break;
+    case BarUnit: barUnit_ = index; break;
     case Relative: relative_ = index; break;
     case Logging: logging_ = index; break;
     case SerialOutput: serial_ = index; break;

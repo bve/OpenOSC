@@ -19,5 +19,6 @@ struct MeterContext {
     dmm::Function selecting = dmm::Function::Unknown; // Being selected (boot, restart): its sign over an empty reading.
     // The ampere-hour counter (Session::charge): shown in the meta row's secondary slot on DC current.
     const dmm::ChargeCounter *charge = nullptr;
+    bool showBarUnit = true; // The unit after the bar scale's last number (MeterBar::unit).
 };
 } // namespace openosc::ui

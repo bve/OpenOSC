@@ -85,7 +85,7 @@ ui::MeterProperties ApplicationController::meterProperties() const {
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
         prefs_.meter.shownFace(), prefs_.meter.shownPalette(), &themes_.theme(), prefs_.meter.hold.mode)
-        .barGraph(prefs_.meter.bar).temperature(prefs_.meter.temperature).mcuJunction(meter.mcuJunction());
+        .barGraph(prefs_.meter.bar).barUnit(prefs_.meter.barUnit).temperature(prefs_.meter.temperature).mcuJunction(meter.mcuJunction());
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
 void ApplicationController::refreshMeterPanel() {
@@ -182,6 +182,7 @@ void ApplicationController::meterChanged(unsigned row, uint32_t now) {
     case Row::Display: prefs_.meter.display=meterEditor_.display(); break;
     case Row::Statistics: prefs_.meter.statistics=meterEditor_.statistics(); break;
     case Row::BarGraph: prefs_.meter.bar=meterEditor_.barGraph(); break;
+    case Row::BarUnit: prefs_.meter.barUnit=meterEditor_.barUnit(); break;
     // Base digits and colours: a manual edit of the look in force (while Hybrid shows, the Custom look
     // starts from it, MeterPreferences::custom); the value in force again changes nothing.
     case Row::Digits:

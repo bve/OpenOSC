@@ -12,7 +12,7 @@ namespace openosc::ui {
 class MeterProperties final : public PropertyList {
 public:
     // Hold: its own list (MeterHoldProperties), the mode as its value.
-    enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, BarGraph, Relative, Hold, ResetStatistics,
+    enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, BarGraph, BarUnit, Relative, Hold, ResetStatistics,
                Logging, JunctionSource, ColdJunction, TemperatureUnit, SerialOutput, Count };
     static constexpr unsigned VisibleRows = board::Current::Features.dmmSerialOutput ? Count : SerialOutput;
     explicit MeterProperties(const dmm::Result &result, unsigned display = 0, bool statistics = true,
@@ -27,6 +27,8 @@ public:
     bool statistics() const { return statistics_; }
     bool barGraph() const { return bar_; }
     MeterProperties &barGraph(bool shown) { bar_ = shown; return *this; }
+    bool barUnit() const { return barUnit_; } // The unit after the bar scale's last number.
+    MeterProperties &barUnit(bool shown) { barUnit_ = shown; return *this; }
     bool relative() const { return relative_; }
     bool automatic() const { return result_.range == dmm::RangeMode::Auto; }
     bool logging() const { return logging_; }
@@ -57,7 +59,7 @@ private:
     bool ranged() const; // The function shown has ranges (dmm::Ranges::selectable): else Range is Info, "None".
     dmm::Result result_;
     unsigned display_, face_, palette_;
-    bool statistics_, relative_, logging_,serial_,jackBusy_, bar_ = true;
+    bool statistics_, relative_, logging_,serial_,jackBusy_, bar_ = true, barUnit_ = true;
     const Theme *theme_;
     dmm::HoldMode hold_;
     dmm::TemperatureSettings temperature_;
