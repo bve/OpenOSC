@@ -92,10 +92,11 @@ private:
 // the new range's scale (23.03 V stepping 2.2 -> 4.5 V), seen at the 2.5 V and the 25 mA switches on the
 // bench. That reading, the first in another range of the same function (Ranges::current) as the chip
 // sends it (a thermocouple's millivolts, not the temperature), is not shown, as an overload's settling.
-// The switching reading sometimes comes flagged MANUAL, so AUTO is judged on the reading before it: a
-// range changed in MANUAL is the user's and is shown at once (leaving AUTO by the RANGE key drops one
-// reading too). An overload is always shown, and never two in a row: a signal that keeps the chip
-// switching shows its readings rather than freezing on an old one.
+// The switching reading sometimes comes flagged MANUAL, so AUTO on the reading before it counts as well
+// as on the reading itself: a range changed in MANUAL is the user's and is shown at once, while leaving
+// or entering AUTO drops one reading when that also changes the range. An overload is always shown, and
+// never two in a row: a signal that keeps the chip switching shows its readings rather than freezing on
+// an old one.
 class RangeSettle {
 public:
     bool skip(const Result &result); // True: this reading is not shown.
@@ -114,7 +115,7 @@ public:
     // Readings before nowUs are stale (an activation, a resume): the charge's run ends there too.
     void expire(uint64_t nowUs) { freshFromUs_ = nowUs; charge_.interrupt(); }
     // The last packet as decoded: its function, range, HOLD and REL flags for the commands, and the
-    // raw stream (log, serial output). Settling readings (OverloadSettle) are here too.
+    // raw stream (log, serial output). Settling readings (OverloadSettle, RangeSettle) are here too.
     const Result &latest() const { return latest_; }
     const Result &live() const { return shown_; }
     const TemperatureSettings &temperatureSettings() const { return temperatureSettings_; }
