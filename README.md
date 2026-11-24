@@ -240,7 +240,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - [SCPI extensions for desktop clients](docs/SCPI_DESKTOP.md) for frame, peak, measurement and file transfers
 - Compatible command profiles for Rigol DS oscilloscopes and the OWON XDM1041 multimeter, so
   existing PC software such as ngscopeclient can talk to the device
-- Fyfar built a web app for the oscilloscope, multimeter, signal generator and Bode analyzer.
+- [Fyfar](https://github.com/Fyfar) built a web app for the oscilloscope, multimeter, signal generator
+  and Bode analyzer.
   It connects over USB via Web Serial. [OpenOSC Panel](https://github.com/Fyfar/openosc-panel)
 - USB Remote mode: the PC controls the device while the screen keeps showing live data
 - USB data works only in the 200/100 performance profile. Connect directly to a PC port:
