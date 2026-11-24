@@ -14,9 +14,7 @@ namespace openosc::usb {
 class TmcPipe final : private TmcRecovery::Target {
 public:
     TmcPipe(scpi::Tmc &tmc, scpi::Engine &engine, TmcRecovery &recovery) : tmc_(tmc), engine_(engine), recovery_(recovery) {}
-    // One turn: the split's work first, then input and output for USB `generation`. dispatch() also
-    // runs the engine: the main poll only; service() is the background pass (inside FAT waits), and
-    // cannot reach the engine's commands, so their stack never adds to a storage call's.
+    // service(): background pass (inside FAT waits), never the engine's commands; dispatch(): main poll.
     void service(uint32_t now, uint32_t generation, TmcRecovery::Port &port);
     void dispatch(uint32_t now, uint32_t generation, TmcRecovery::Port &port);
 

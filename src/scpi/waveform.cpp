@@ -272,6 +272,7 @@ bool Engine::waveformCommand(const Command &c) {
         }
         // A new record each query in RUN (the backend waits for one newer than the last); HOLD repeats its own.
         const auto *f = frame(!waitingWaveform_);
+        if (!f && waitingWaveform_ && int32_t(now_ - deadline_) >= 0) { backend_.repeatFrame(); f = frame(); } // None newer in 1 s.
         if (!f) { waitFrame(envelope ? "ENV" : "FRAM"); return true; }
         waitingWaveform_ = false;
         const auto &m = f->metadata();

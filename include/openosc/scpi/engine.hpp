@@ -26,7 +26,7 @@ public:
     void discardOutput();
     uint8_t statusByte() const;
     uint32_t outputGeneration() const { return generation_; } // Moves when pending output is dropped (reset, discard).
-    bool more() const { return !fileDone(); } // Output still to come after available() (a file being staged).
+    bool more() const { return fileBinary_ && fileRead_ < fileBytes_; } // File bytes not yet staged: no EOM yet.
 private:
     bool common(const Command &command);
     bool scopeCommand(const Command &command);
@@ -38,8 +38,7 @@ private:
     bool decodeCommand(const Command &command); // DECode: (decode.cpp).
     bool systemCommand(const Command &command); // Idle settings and MMEMory: (system.cpp), either profile.
     void endFile();
-    // MMEM:DATA?: FatFs is read only here, in the foreground poll (never in USB's background pass,
-    // which can run inside a FAT write): fileRead_ of fileBytes_ staged, stage_[stageAt_..stageEnd_) unsent.
+    // MMEM:DATA?: FatFs read in poll() only (USB's background pass runs inside FAT writes).
     void fillStage();
     static constexpr size_t StageBytes = 512; // A FAT sector a refill.
     static uint8_t *claimStage(const Engine *owner); // One of two ITCM stages (system.cpp); null: both in use.

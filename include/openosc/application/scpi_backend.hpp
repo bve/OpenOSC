@@ -24,6 +24,7 @@ public:
     bool triggered() const override;
     const scope::FrameView *frame(bool refresh) override;
     void releaseFrame() override;
+    void repeatFrame() override { freshFrame_ = false; }
     void endSession() override;
     bool frameKey(char *output, size_t capacity) const override;
     bool decodeReport(scpi::DecodeReport &) const override;

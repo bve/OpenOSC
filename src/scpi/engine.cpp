@@ -223,7 +223,7 @@ void Engine::waitGenerator() {
     waitingGenerator_ = backend_.generator().status == DataStatus::Busy; generatorDeadline_ = now_ + GeneratorMs;
 }
 uint8_t Engine::statusByte() const {
-    const uint8_t base = (available() ? 16 : 0) | (!errors_.empty() ? 4 : 0) | ((errors_.event() & ese_) ? 32 : 0);
+    const uint8_t base = (available() || more() ? 16 : 0) | (!errors_.empty() ? 4 : 0) | ((errors_.event() & ese_) ? 32 : 0);
     return base | ((base & sre_) ? 64 : 0);
 }
 } // namespace openosc::scpi
