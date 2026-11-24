@@ -20,7 +20,7 @@ void ApplicationController::showMeterTrace() {
     auto &widget = view_.waveform();
     const auto &options = widget.options();
     widget.meterReadings(options.meter.shown ? &data_.meterReadings() : nullptr);
-    widget.trend(&data_.trendShown()); // Drawn while the copy is valid.
+    widget.trend(&data_.trendShown()); // Drawn while the copy is valid, in the record's own view.
     plot::MeterReadouts readouts;
     readouts.shown = options.meter.shown && (options.mode == plot::Mode::Time || options.mode == plot::Mode::SpectrumOverlay);
     if (readouts.shown) {
