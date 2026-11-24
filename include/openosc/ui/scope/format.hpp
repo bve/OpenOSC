@@ -12,6 +12,10 @@ public:
     // prefer: a prefix index (used: the one taken) kept within 5% past its range ("1020kHz", "0.98MHz").
     static bool quantity(double value, const char *unit, char *output, size_t capacity, unsigned precision = 4,
                          bool coarse = false, int prefer = -1, int *used = nullptr);
+    // Seconds in ms, s, min or h with `precision` significant digits that keep their trailing zeros
+    // ("3.50s", not "3.5s"): a value that grows steadily (a trend's time/div) keeps its width. The unit is
+    // the one the rounded value fits ("1.00min", never "60.0s"). Integers only (no float printf).
+    static bool steady(double seconds, unsigned precision, char *output, size_t capacity);
     // "64K" for a whole number of 1024 points, the plain count otherwise.
     static void points(uint32_t points, char *output, size_t capacity);
     // A count in at most five characters: exact below 1024, else three significant digits of

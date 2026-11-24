@@ -9,13 +9,14 @@
 #include <cstdio>
 #include <cstring>
 
+
 namespace openosc::ui {
 void ScopeScreen::activate(const ApplicationState &state) {
     measurements_=state.scope.measurements.valid() ? state.scope.measurements : scope::ReadoutSelection{};
     host_.scopeFooter().selection(measurements_);
     countersValid_=false; readoutsPainted_=false;
     valid_ = false;
-    status_ = "WAITING FOR DATA";
+    std::snprintf(status_, sizeof status_, "WAITING FOR DATA");
     automatic_=calibrating_=false;
     host_.status(status_, StatusTone::Warning);
     // Closing a panel reactivates this screen: a trace still on display keeps its labels.
@@ -61,23 +62,25 @@ void ScopeScreen::select(unsigned channel) {
 // next captures' maximum sample rate is halved (a held record stays as it was captured). A view away
 // from home (zoom, pan) keeps its marker in front of it (issue #111), in the GEN note's colour when
 // both are on; a GEN note too wide for the plot beside it leaves out the ADC remark, then the shape.
-// A valid trend copy under a rolling frame puts "TREND <elapsed>" (the copy's points over its rate) between
-// them; AutoSetup's trials keep a held trend's copy but show their own frames. The cards then have no
-// pending time/div (the record's own is shown).
-void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend) {
+// A valid trend copy under a rolling frame is a trend on show (AutoSetup's trials keep a held trend's copy
+// but show their own frames): its elapsed time goes to the status pill, and the cards have no pending
+// time/div (the record's own is shown).
+void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend, uint64_t nowUs) {
     const auto &model = host_.waveform().model();
     const bool trending = trend.sequence != 0 && model.hasFrame() && model.metadata().rolling;
     if (trending_ != trending) { trending_ = trending; cards(); }
+    // Running: the clock since the record's first sample, a second at a time (the copy grows a point at a
+    // time, tens of seconds late in a long record). Held: what it reached, or the copy's span for one
+    // shown held from the start.
+    int32_t seconds = -1;
+    if (trending && !statusHeld_ && nowUs >= trend.startUs) seconds = int32_t((nowUs - trend.startUs) / 1000000);
+    else if (trending) seconds = trendSeconds_ >= 0 ? trendSeconds_ : trend.rate.valid() ? int32_t(trend.size / trend.rate.value()) : -1;
+    if (trendSeconds_ != seconds) { trendSeconds_ = seconds; status(health_, statusHeld_); }
     if (focus_ == plot::Focus::Zoom) { zoomNote(); return; }
     auto &widget = host_.waveform();
-    char text[80], frequency[24]; // The view marker first, the GEN note after it: no buffer of its own (stack).
+    char text[64], frequency[24]; // The view marker first, the GEN note after it: no buffer of its own (stack).
     plot::ViewZoom::marker(widget.options(), widget.model(), text, sizeof text);
-    size_t view = std::strlen(text);
-    char elapsed[16];
-    if (trending && trend.rate.valid() && plot::Format::quantity(trend.size / trend.rate.value(), "s", elapsed, sizeof elapsed, 3)) {
-        std::snprintf(text + view, sizeof text - view, "%sTREND %s", view ? "  " : "", elapsed);
-        view = std::strlen(text);
-    }
+    const size_t view = std::strlen(text);
     const bool gen = output.enabled && output.applied.actualHz.valid() &&
                      plot::Format::quantity(output.applied.actualHz.value(), "Hz", frequency, sizeof frequency, 3);
     const unsigned shape = unsigned(output.requested.shape);
@@ -117,7 +120,8 @@ void ScopeScreen::cards() {
     const bool spectrum = widget.options().mode == plot::Mode::Spectrum;
     const double secondsPerDivision = framed && !spectrum
         ? plot::DisplayScale::secondsPerDivision(model.viewport(), shown) : shown.timebaseNs / 1e9;
-    plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
+    if (!(trending_ && !spectrum && plot::Format::steady(secondsPerDivision, 3, time, sizeof time)))
+        plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
     if (meter) std::snprintf(title, sizeof title, "Scale DMM");
@@ -151,7 +155,8 @@ void ScopeScreen::cards() {
     for (bool coarse : {false, true}) {
         if (Elements::textWidth(value, 11) <= ScreenLayout::ButtonWidth - 8) break;
         plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 2, coarse);
-        plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 2, coarse);
+        if (!(trending_ && !spectrum && plot::Format::steady(secondsPerDivision, 2, time, sizeof time)))
+            plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 2, coarse);
         std::snprintf(value, sizeof value, "%s %s", scale, time);
     }
     bar.item(0, title, value, *next, true);

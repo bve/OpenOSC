@@ -29,7 +29,8 @@ public:
     void meter(const Meter &meter);
     // The DMM trace's readouts and scale to the footer, each display pass (not under a panel).
     void meterReadouts(const plot::MeterReadouts &readouts);
-    void generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend);
+    // nowUs: the frames' clock (DataAccess::nowUs), for a running trend's elapsed time.
+    void generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend, uint64_t nowUs);
     // Settings > Display > Swap CH1/CH2: the plot, footer and cards relabelled at once (HOLD included).
     void channelView(const plot::ChannelView &view) { host_.channelView(view); cards(); }
     void counters(const scope::CounterSnapshot &snapshot);
@@ -65,7 +66,9 @@ private:
     plot::Focus focus_ = plot::Focus::Scale;
     bool panReverse_ = false;
     void zoomNote(); // Zoom & Pan's factor and arrows in the plot's note (the GEN note returns on the next pass).
-    const char *status_ = nullptr;
+    char status_[24] = ""; // The pill's text as shown: a trend's carries its elapsed time (status()).
+    // A trend's elapsed whole seconds (the copy's points over its rate) while trending_, else -1.
+    int32_t trendSeconds_ = -1;
     scope::TriggerMode triggerMode_ = scope::TriggerMode::Auto;
     scope::TriggerType triggerType_ = scope::TriggerType::Edge;
     DataStatus health_ = DataStatus::NoData;

@@ -20,8 +20,10 @@ void Painter::scales() {
                 text(label, 4 + int(slot) * 90, view.height - 14, palette_.channel(c), 90);
             }
         }
+    // A trend's time/div grows steadily: its digits keep their width (Format::steady), as on the card.
+    const double perDivision = DisplayScale::secondsPerDivision(view, m);
     if ((o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay) &&
-        Format::quantity(DisplayScale::secondsPerDivision(view, m), "s", value, sizeof value)) {
+        (trendShown() ? Format::steady(perDivision, 3, value, sizeof value) : Format::quantity(perDivision, "s", value, sizeof value))) {
         std::snprintf(label, sizeof label, "%s/div", value);
         text(label, view.width - 98, view.height - 14, palette_.readout, 96);
     }
