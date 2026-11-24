@@ -7,11 +7,12 @@
 
 namespace openosc {
 [[noreturn]] void RecoveryController::run() {
-    if (repairFailed_) message("FAT REPAIR FAILED", fatCheck_.error());
-    else showMain();
+    if (repairFailed_) { message("FAT REPAIR FAILED", fatCheck_.error()); installName_[0] = 0; }
+    else if (!installName_[0]) showMain();
     boot_diagnostics.stage = 4;
     while (true) {
         Watchdog::heartbeat(); // The one proof that Recovery's loop goes on (docs/WATCHDOG.md).
+        if (installName_[0]) installRequested();
         Board::service();
         usb_.state();
         usb_.hostReleased();
@@ -20,6 +21,18 @@ namespace openosc {
         serviceFormat();
         boot_diagnostics.action = uint32_t(state_) | (uint32_t(action_) << 8);
     }
+}
+// An install request of the application (SYST:RECovery:INSTall): the update and the start that follows
+// it, as the menu does them, without the keys. Any failure leaves its message; MENU opens the main menu.
+void RecoveryController::installRequested() {
+    Watchdog::expect(LongOperationMs);
+    std::snprintf(imagePath_, sizeof imagePath_, "%s/%s", storage::Layout::Update, installName_);
+    installName_[0] = 0;
+    if (!storageReady_ || !fs_.mounted()) { message("FAT ERROR", "FAT VOLUME NOT READY"); return; }
+    if (!update_.inspect(imagePath_)) { message("IMAGE REJECTED", update_.error()); return; }
+    action_ = Action::Update;
+    perform();
+    if (state_ == State::Confirm && action_ == Action::Launch) perform(); // Installed: the start offer, taken.
 }
 void RecoveryController::message(const char* title, const char* detail) {
     state_ = State::Message;
