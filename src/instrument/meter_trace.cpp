@@ -73,7 +73,6 @@ void DataAccess::breakMeterTrace() {
     meterGap_ = true;
     if (scopeHeld_) return;
     meterReadings_.gap(uint32_t(timeUs_ / 1000));
-    trend_.meterGap();
 }
 // The line in the function selected: started again when that function or its quantity is not the
 // line's (its scale, units and cursors with it); the same one (the trace's start, a restart's

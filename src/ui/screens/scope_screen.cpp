@@ -61,10 +61,12 @@ void ScopeScreen::select(unsigned channel) {
 // next captures' maximum sample rate is halved (a held record stays as it was captured). A view away
 // from home (zoom, pan) keeps its marker in front of it (issue #111), in the GEN note's colour when
 // both are on; a GEN note too wide for the plot beside it leaves out the ADC remark, then the shape.
-// A valid trend copy puts "TREND <elapsed>" (the copy's points over its rate) between them. The copy, not
-// the frame shown, says a trend is on: the cards then have no pending time/div (the record's own is shown).
+// A valid trend copy under a rolling frame puts "TREND <elapsed>" (the copy's points over its rate) between
+// them; AutoSetup's trials keep a held trend's copy but show their own frames. The cards then have no
+// pending time/div (the record's own is shown).
 void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend) {
-    const bool trending = trend.sequence != 0;
+    const auto &model = host_.waveform().model();
+    const bool trending = trend.sequence != 0 && model.hasFrame() && model.metadata().rolling;
     if (trending_ != trending) { trending_ = trending; cards(); }
     if (focus_ == plot::Focus::Zoom) { zoomNote(); return; }
     auto &widget = host_.waveform();

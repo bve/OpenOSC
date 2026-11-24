@@ -47,7 +47,7 @@ public:
     // The Scope's DMM trace: the readings its line is drawn from (nullptr: none).
     void meterReadings(const dmm::ReadingTrace *readings);
     // A trend's points (DataAccess::trendShown): drawn instead of the channels' traces and the DMM line
-    // while the copy is valid (it places its own points); nullptr: none.
+    // while the copy is valid, in the record's own view (it places its own points); nullptr: none.
     void trend(const scope::TrendView *view);
     const char *note() const { return note_ && !lv_obj_is_hidden(note_) ? lv_label_get_text(note_) : ""; } // On show.
     void service(uint32_t now);
