@@ -145,6 +145,7 @@ bool BodeSweep::start(const BodeSettings &settings, const BodeGrid &grid, const 
     request_.trigger.mode = TriggerMode::Auto;
     request_.trigger.channel = Channel::Ch1;
     request_.rollAuto = false;
+    request_.trend = false;
     // The smallest record (two channels of 32768): BodeTone reads the newest 32768 points, which must hold
     // the ten cycles timebaseFor() puts on the record; at 512K one of 262144 would leave about 1.25 of
     // them (FewCycles). The user's depth is the original's: restored with it.

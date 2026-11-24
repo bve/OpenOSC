@@ -28,7 +28,7 @@ public:
     void meter(const Meter &meter);
     // The DMM trace's readouts and scale to the footer, each display pass (not under a panel).
     void meterReadouts(const plot::MeterReadouts &readouts);
-    void generator(const generator::Snapshot &output, bool captureHalved);
+    void generator(const generator::Snapshot &output, bool captureHalved, bool trend);
     // Settings > Display > Swap CH1/CH2: the plot, footer and cards relabelled at once (HOLD included).
     void channelView(const plot::ChannelView &view) { host_.channelView(view); cards(); }
     void counters(const scope::CounterSnapshot &snapshot);

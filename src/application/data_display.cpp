@@ -20,6 +20,7 @@ void ApplicationController::showMeterTrace() {
     auto &widget = view_.waveform();
     const auto &options = widget.options();
     widget.meterReadings(options.meter.shown ? &data_.meterReadings() : nullptr);
+    widget.trend(&data_.trendShown()); // The painter takes it only for the frame it was published with.
     plot::MeterReadouts readouts;
     readouts.shown = options.meter.shown && (options.mode == plot::Mode::Time || options.mode == plot::Mode::SpectrumOverlay);
     if (readouts.shown) {
@@ -254,15 +255,20 @@ void ApplicationController::displayData(uint32_t now) {
         if (dataRefresh_) {
             auto next = data_.scopeMetadata();
             const auto &request = data_.scopeRequest();
-            next.timebaseNs = request.timebaseNs; // The metadata keeps the running capture's until it restarts.
             const auto &model = view_.waveform().model();
+            // The metadata keeps the running capture's until it restarts. A trend's time/div is its record's
+            // (it halves as the record grows), not the request's 20 s: no "Next" for it.
+            next.timebaseNs = request.trend && model.hasFrame() ? model.metadata().timebaseNs : request.timebaseNs;
             showTrigger(model.hasFrame() ? &model.metadata() : nullptr);
             view_.scopeContext(selectedChannel_,focus_,prefs_.panReverse != 0);
             view_.scopeSettings(next,selectedChannel_);
             syncCursorFocus();
             syncZoomFocus(); // X-Y, FFT or Roll now: Back to the card Zoom & Pan came from.
         }
-        view_.scopeGenerator(data_.generator().snapshot(), captureHalved);
+        const auto &trend = data_.trendShown();
+        const auto &model = view_.waveform().model();
+        view_.scopeGenerator(data_.generator().snapshot(), captureHalved,
+                             model.hasFrame() && trend.sequence && trend.sequence == model.metadata().sequence);
         {
             const auto &options = view_.waveform().options();
             char text[40];

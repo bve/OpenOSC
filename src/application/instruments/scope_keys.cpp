@@ -22,9 +22,16 @@ int axis(uint32_t keys, uint32_t negative, uint32_t positive) {
     view.notify(Tooltip::Done, text, now);
 }
 // Left/Right: the next capture's time/div, one 1-2-5 step, in RUN and HOLD alike (issue #7).
+// Past the last step is the trend (ScopeRequest::trend); one step back leaves it for the last time/div.
 void stepTimebase(ScopeRequest &request, uint32_t keys) {
-    if (keys & Keypad::Right) request.timebaseNs = scope::Timebases::step(request.timebaseNs, 1);
-    if (keys & Keypad::Left) request.timebaseNs = scope::Timebases::step(request.timebaseNs, -1);
+    if (keys & Keypad::Right) {
+        if (request.timebaseNs == scope::Timebases::Maximum) request.trend = true;
+        else if (!request.trend) request.timebaseNs = scope::Timebases::step(request.timebaseNs, 1);
+    }
+    if (keys & Keypad::Left) {
+        if (request.trend) { request.trend = false; request.timebaseNs = scope::Timebases::Maximum; }
+        else request.timebaseNs = scope::Timebases::step(request.timebaseNs, -1);
+    }
 }
 }
 void ApplicationController::setScopeFocus(plot::Focus focus) {

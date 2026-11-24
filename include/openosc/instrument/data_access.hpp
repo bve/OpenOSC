@@ -14,6 +14,7 @@
 #include "openosc/acquisition/background_reader.hpp"
 #include "openosc/acquisition/request.hpp"
 #include "openosc/acquisition/rolling.hpp"
+#include "openosc/acquisition/trend.hpp"
 #include "openosc/acquisition/arena.hpp"
 #include "openosc/acquisition/pulse_counters.hpp"
 #include "openosc/board/drivers.hpp"
@@ -165,6 +166,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // once, a gap); restarted when another function is selected in the Scope (under HOLD, at the first
     // reading after it) or a reading's quantity changes.
     const dmm::ReadingTrace &meterReadings() const { return meterReadings_; }
+    // The trend's copy on show (ScopeRequest::trend): valid for the frame of its sequence.
+    const scope::TrendView &trendShown() const { return trend_.shown(); }
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
     bool dmmRanged() const { return !meter_.typeK() && dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
@@ -467,6 +470,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void restartMeterLine(); // meterReadings_ in meterTraceFunction_ (meter_trace.cpp).
     void breakMeterTrace();
     bool meterColumn(const scope::FrameMetadata &record, ScopeRecorder::Meter &meter);
+    ScopeRecorder::Meter meterHeader() const; // The function and quantity of a CSV's dmm column, no readings.
     bool meterTraceAsked_ = false, meterTraceRunning_ = false;
     // Readings were missed since the last one kept (HOLD, a restart): the next is preceded by a gap.
     bool meterGap_ = false;
@@ -513,6 +517,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     scope::FrameStore store_{resources_, arena_};
     scope::PulseCounters counters_;
     scope::RollingBuffer rolling_{scope::AcquisitionArena::rollHistory(),scope::AcquisitionArena::RollWindow};
+    scope::TrendBuffer trend_{scope::AcquisitionArena::trendMemory()};
     uint8_t captureRegion_ = 0, retainedRegion_ = 0;
     scope::FrameView retained_;
     scope::FrameLease inspected_; // DataAccess's own look at a new frame, until the end of poll.
@@ -578,6 +583,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     uint64_t rollingConsumed_=0,rollingPublished_=0;
     uint32_t rollingAt_=0;
     bool rollingActive_=false,rollingLost_=false;
+    // serviceBackground is running (a frame is being drawn): the trend is written by poll alone.
+    bool backgroundPass_=false;
     scope::TriggerCache triggerCache_;
     scope::FrameLease readout_;
     uint32_t readoutRevision_ = 0;

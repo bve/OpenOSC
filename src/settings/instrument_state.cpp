@@ -8,6 +8,7 @@ ScopeRequest InstrumentState::scope(const Preferences &p) {
     request.recordPoints = p.scope.recordPoints;
     request.rollAuto=p.scope.rollAuto;
     request.longerRecord = p.scope.longerRecord;
+    request.trend=p.scope.trend!=0;
     request.trigger = {scope::Channel(p.scope.triggerSource), scope::Edge(p.scope.triggerEdge),
                        scope::TriggerMode(p.scope.triggerMode), int16_t(p.scope.triggerLevel)};
     request.trigger.position=p.scope.triggerPosition;
@@ -32,6 +33,7 @@ void InstrumentState::capture(const ScopeRequest &r, Preferences &p) {
     p.timebaseNs = r.timebaseNs; p.scope.recordPoints = r.recordPoints;
     p.scope.rollAuto=r.rollAuto;
     p.scope.longerRecord = r.longerRecord;
+    p.scope.trend=r.trend;
     p.scope.triggerSource = unsigned(r.trigger.channel); p.scope.triggerEdge = unsigned(r.trigger.edge);
     p.scope.triggerMode = unsigned(r.trigger.mode); p.scope.triggerLevel = r.trigger.level;
     p.scope.triggerPosition=r.trigger.position;

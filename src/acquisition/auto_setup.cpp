@@ -16,7 +16,7 @@ void AutoSetup::begin(const ScopeRequest &request,unsigned channel,uint32_t now)
     // Trials keep the record budget: DataAccess captures them into its own trial area at a fixed
     // depth, so the record on show (and a HOLD to return to) stays untouched.
     trial_.timebaseNs=SurveyTimebaseNs;
-    trial_.rollAuto=false;
+    trial_.rollAuto=false; trial_.trend=false;
     for (unsigned c=0;c<2;++c) if (trial_.frontend.enabled[c]) {
         trial_.frontend.range[c]=VoltageRanges::Count-1;
         trial_.frontend.position[c]=80;

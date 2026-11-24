@@ -5,7 +5,7 @@
 namespace openosc::calibration {
 ScopeRequest ZeroSampler::trial(const ScopeRequest &original,unsigned range,unsigned point) {
     auto request=original;
-    request.timebaseNs=1000000; request.rollAuto=false; // DataAccess takes these frames into its trial area.
+    request.timebaseNs=1000000; request.rollAuto=false; request.trend=false; // DataAccess takes these frames into its trial area.
     request.trigger={};
     for (unsigned c=0;c<2;++c) {
         request.frontend.enabled[c]=true; request.frontend.range[c]=range<ZeroProfile::Ranges ? range : ZeroProfile::Ranges-1;

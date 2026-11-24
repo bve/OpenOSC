@@ -170,6 +170,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   The Trigger menu supports Edge, Pulse width, Runt and Rise/fall time. [Trigger setup](docs/SCOPE_TRIGGERS.md)
   Hold **F3** to set the trigger level to the signal midpoint and pretrigger to 50%. Pan with **F2**
 - Continuous Roll mode for slow timebases (200 ms/div and slower, always past 20 s/div)
+- Trend, one more step after 1 h/div (**Acquisition → Time / div**, SCPI `:ACQuire:TRENd ON|OFF`): a
+  record from its start with the whole of it on screen. It keeps the min, max and mean of CH1, CH2 and the
+  multimeter for every point, and when its memory fills the time scale halves. **Save waveform CSV.gz** writes them
 - Record memory from 64K to 512K points across enabled channels. The record overview shows the
   budget used for the displayed capture. A label such as `<512K` means the capture plan reserves part
   of that budget, for example as DMA headroom at the fastest sample rates. The prefix depends on the
@@ -242,8 +245,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Save waveforms to `/openosc/CAPTURES` from **Analyze** with **Save waveform CSV.gz** or
   **Save waveform RAW.gz**. Both use streaming gzip compression. Decompress the file on a
   computer to recover the CSV or RAW data. With the DMM channel on, the CSV.gz also has its
-  readings in a `dmm` column. OpenOSC checks free space as it writes compressed bytes and removes
-  the temporary file if the save runs out of space.
+  readings in a `dmm` column (a trend's in `dmm_min`, `dmm_mean` and `dmm_max`). OpenOSC checks free
+  space as it writes compressed bytes and removes the temporary file if the save runs out of space.
 - **Settings → Files & USB → Waveforms** lists the saved waveforms with their sizes. F3 deletes
   the selected file after a confirmation. **Clear waveforms** deletes every waveform after a
   confirmation, and F4 stops it part way. Both cover files in `/openosc/CAPTURES` ending in

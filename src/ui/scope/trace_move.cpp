@@ -91,10 +91,13 @@ TraceMove::Change TraceMove::apply(ScopeRequest &request, Options &options, unsi
 void XyMode::enter(ScopeRequest &request, Options &options) {
     request.trigger.mode = scope::TriggerMode::Auto;
     request.timebaseNs = std::min(request.timebaseNs, MaximumTimebaseNs);
+    request.trend = false;
     options.persistenceMs = 0;
 }
 void XyMode::constrain(const Options &options, ScopeRequest &request) {
-    if (options.mode == Mode::XY) request.timebaseNs = std::min(request.timebaseNs, MaximumTimebaseNs);
+    if (options.mode != Mode::XY) return;
+    request.timebaseNs = std::min(request.timebaseNs, MaximumTimebaseNs);
+    request.trend = false;
 }
 bool ChannelDisplay::show(ScopeRequest &request, Options &options, unsigned channel, bool on) {
     if (channel > 1) return false;

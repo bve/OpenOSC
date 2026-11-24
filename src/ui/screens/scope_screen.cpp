@@ -61,12 +61,20 @@ void ScopeScreen::select(unsigned channel) {
 // next captures' maximum sample rate is halved (a held record stays as it was captured). A view away
 // from home (zoom, pan) keeps its marker in front of it (issue #111), in the GEN note's colour when
 // both are on; a GEN note too wide for the plot beside it leaves out the ADC remark, then the shape.
-void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved) {
+// A trend's frame shown puts "TREND <elapsed>" (the frame's points over its rate) between them.
+void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved, bool trend) {
     if (focus_ == plot::Focus::Zoom) { zoomNote(); return; }
     auto &widget = host_.waveform();
-    char text[64], frequency[24]; // The view marker first, the GEN note after it: no buffer of its own (stack).
+    char text[80], frequency[24]; // The view marker first, the GEN note after it: no buffer of its own (stack).
     plot::ViewZoom::marker(widget.options(), widget.model(), text, sizeof text);
-    const size_t view = std::strlen(text);
+    size_t view = std::strlen(text);
+    const auto &record = widget.model().metadata();
+    char elapsed[16];
+    if (trend && record.samplesPerSecond.valid() &&
+        plot::Format::quantity(record.samples / record.samplesPerSecond.value(), "s", elapsed, sizeof elapsed, 3)) {
+        std::snprintf(text + view, sizeof text - view, "%sTREND %s", view ? "  " : "", elapsed);
+        view = std::strlen(text);
+    }
     const bool gen = output.enabled && output.applied.actualHz.valid() &&
                      plot::Format::quantity(output.applied.actualHz.value(), "Hz", frequency, sizeof frequency, 3);
     const unsigned shape = unsigned(output.requested.shape);
