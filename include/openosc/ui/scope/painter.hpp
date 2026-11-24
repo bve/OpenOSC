@@ -43,7 +43,7 @@ public:
     // frame: the whole waveform object; the plot is frame less the PlotFrame margins. meter: the
     // readings of the Scope's DMM trace (Options::meter), drawn in Y-T and Y-T+FFT at every timebase.
     // trend: the min/max/mean points of a trend, drawn in place of the channels' traces and the DMM line
-    // while it belongs to the frame shown (trend.cpp).
+    // while it is valid (trend_drawing.cpp).
     Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette,
             bool inlineScales = true, TriggerMark trigger = {}, const dmm::ReadingTrace *meter = nullptr,
             const scope::TrendView *trend = nullptr)
@@ -63,9 +63,10 @@ private:
     void recordGapLabels(const RecordGaps &gaps);
     void traces();
     void meterTrace();
-    // A trend of the frame shown (the copy was published with it): drawn from its points, not from the
-    // projection of the frame's means.
+    // A valid trend copy, a rolling frame on show: drawn from the copy's points, placed by the copy itself,
+    // not from the projection of the frame's means.
     bool trendShown() const;
+    RecordGaps trendGaps() const; // The part of the window before the copy's first point.
     void trendTrace(unsigned channel, uint32_t color, uint8_t opacity, unsigned width); // The band and the mean line.
     void trendMeter();                                                                // The DMM's, as meterTrace's own scale.
     // The DMM trace's zero in plot rows (MeterTraceOptions::position), unrounded.

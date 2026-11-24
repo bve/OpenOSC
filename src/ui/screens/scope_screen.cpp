@@ -60,17 +60,18 @@ void ScopeScreen::select(unsigned channel) {
 // next captures' maximum sample rate is halved (a held record stays as it was captured). A view away
 // from home (zoom, pan) keeps its marker in front of it (issue #111), in the GEN note's colour when
 // both are on; a GEN note too wide for the plot beside it leaves out the ADC remark, then the shape.
-// A trend's frame shown puts "TREND <elapsed>" (the frame's points over its rate) between them.
-void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved, bool trend) {
+// A valid trend copy puts "TREND <elapsed>" (the copy's points over its rate) between them. The copy, not
+// the frame shown, says a trend is on: the cards then have no pending time/div (the record's own is shown).
+void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend) {
+    const bool trending = trend.sequence != 0;
+    if (trending_ != trending) { trending_ = trending; cards(); }
     if (focus_ == plot::Focus::Zoom) { zoomNote(); return; }
     auto &widget = host_.waveform();
     char text[80], frequency[24]; // The view marker first, the GEN note after it: no buffer of its own (stack).
     plot::ViewZoom::marker(widget.options(), widget.model(), text, sizeof text);
     size_t view = std::strlen(text);
-    const auto &record = widget.model().metadata();
     char elapsed[16];
-    if (trend && record.samplesPerSecond.valid() &&
-        plot::Format::quantity(record.samples / record.samplesPerSecond.value(), "s", elapsed, sizeof elapsed, 3)) {
+    if (trending && trend.rate.valid() && plot::Format::quantity(trend.size / trend.rate.value(), "s", elapsed, sizeof elapsed, 3)) {
         std::snprintf(text + view, sizeof text - view, "%sTREND %s", view ? "  " : "", elapsed);
         view = std::strlen(text);
     }
@@ -122,7 +123,7 @@ void ScopeScreen::cards() {
     // range changes. Show the next setting in the title until a record at that scale arrives.
     if (framed) {
         const bool volts = !meter && plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
-        const bool seconds = plot::DisplayScale::timePending(shown, widget.options(), next_);
+        const bool seconds = !trending_ && plot::DisplayScale::timePending(shown, widget.options(), next_);
         char pendingVolts[16] = "", pendingTime[16] = "";
         if (volts) {
             const auto scaleNext = plot::DisplayScale::channel(next_.channels[channel_], plot::ChannelOptions{});

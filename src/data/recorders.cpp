@@ -31,14 +31,15 @@ bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, const Meter 
     // measure the actual record in slices before opening a temporary file.
     size_t header = 0;
     if (format == Format::Csv) {
-        const auto &metadata = lease.view().metadata();
+        const auto metadata = csvMetadata(lease.view().metadata());
         const size_t row = trend_ ? Csv::trendRowLimit(metadata, trendMeter_) : Csv::scopeRowLimit(metadata, meter_ != nullptr);
         header = csvHeader(metadata);
         if (!row || !header) {
             status_ = DataStatus::InvalidArgument;
             return false;
         }
-        required_ = header + std::strlen(columns()) + uint64_t(metadata.samples) * row;
+        rows_ = metadata.samples;
+        required_ = header + std::strlen(columns()) + uint64_t(rows_) * row;
     } else
         required_ = stream_.size();
     const bool opened = file_.begin(storage::Layout::Captures, "CAP", format == Format::Raw ? "RAW" : "CSV", required_);
@@ -55,6 +56,12 @@ bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, const Meter 
     busy_ = true;
     status_ = DataStatus::Busy;
     return true;
+}
+scope::FrameMetadata ScopeRecorder::csvMetadata(const scope::FrameMetadata &frame) const {
+    // A trend's header describes the copy's points, which the leased frame may be a point or a merge behind.
+    auto metadata = frame;
+    if (trend_) { metadata.samples = trend_->size; metadata.ring = trend_->window; metadata.samplesPerSecond = trend_->rate; }
+    return metadata;
 }
 size_t ScopeRecorder::csvHeader(const scope::FrameMetadata &metadata) {
     size_t bytes = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
@@ -92,15 +99,13 @@ size_t ScopeRecorder::csvRow(size_t row, char *output, size_t capacity) {
 }
 void ScopeRecorder::measureCsv() {
     constexpr unsigned RowsPerService = 96;
-    const auto &frame = lease_.view();
-    const auto &metadata = frame.metadata();
-    for (unsigned i = 0; i < RowsPerService && offset_ < metadata.samples; ++i, ++offset_) {
+    for (unsigned i = 0; i < RowsPerService && offset_ < rows_; ++i, ++offset_) {
         const size_t bytes = csvRow(offset_, reinterpret_cast<char *>(buffer_), sizeof buffer_);
         if (!bytes) { status_ = DataStatus::InvalidArgument; cancel(); return; }
         required_ += bytes;
     }
-    if (offset_ < metadata.samples) return;
-    const size_t header = csvHeader(metadata);
+    if (offset_ < rows_) return;
+    const size_t header = csvHeader(csvMetadata(lease_.view().metadata()));
     if (!header) { status_ = DataStatus::InvalidArgument; cancel(); return; }
     if (!file_.begin(storage::Layout::Captures, "CAP", "CSV", required_)) {
         status_ = file_.status();
@@ -132,7 +137,7 @@ void ScopeRecorder::service() {
         offset_ += bytes;
         finishing_ = offset_ == stream_.size();
     } else {
-        while (offset_ < lease_.view().metadata().samples && sizeof buffer_ - bytes >= 180) {
+        while (offset_ < rows_ && sizeof buffer_ - bytes >= 180) {
             const size_t length = csvRow(offset_, reinterpret_cast<char *>(buffer_ + bytes), sizeof buffer_ - bytes);
             if (!length) {
                 status_ = DataStatus::InvalidArgument;
@@ -142,7 +147,7 @@ void ScopeRecorder::service() {
             bytes += length;
             ++offset_;
         }
-        finishing_ = offset_ == lease_.view().metadata().samples;
+        finishing_ = offset_ == rows_;
     }
     if (!bytes) {
         status_ = DataStatus::InvalidArgument;

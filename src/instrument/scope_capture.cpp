@@ -77,6 +77,9 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     const bool previousHeadroom = interleaveHeadroom_;
     if (!sameCh1Range(previous, r) || !interleaving(r)) interleaveHeadroom_ = false;
     request_ = r;
+    // Bank 3 is no trend's from here: a capture of a later start (deferred, or from serviceBackground under
+    // a draw) may write it before startCapture runs, and nothing may be drawn from it meanwhile.
+    if (!r.trend) trend_.forget();
     forcePending_ = false; forcedSequence_ = 0; // A force belongs to the acquisition it was given for.
     if (!describeNext(configuration_)) describeChannels(configuration_); // Conversions follow the request.
     // In a burst of setting changes only the last one starts a capture (poll waits for quiet): each
@@ -615,9 +618,10 @@ bool DataAccess::startCapture() {
         rolling_.reset(plan.count,averaging); rollingConsumed_=rollingPublished_=0; rollingLost_=false;
         rollingAt_=Board::milliseconds()-16;
     }
-    // Bank 3 is the trend's only while it runs: any other capture may write it.
+    // Bank 3 is the trend's only while it runs: any other capture may write it. An internal one (AutoSetup's
+    // or the zero's trials) takes the trial area and leaves it, and the frozen record on show, alone.
     if (rolling && request_.trend) trend_.reset(meterReadings_.quantity());
-    else trend_.forget();
+    else if (!internalCapture()) trend_.forget();
     if (!holdPending_) status_ = DataStatus::Ok; // A pending HOLD's retry keeps the fault until a record arrives.
     applyForce();
     return true;

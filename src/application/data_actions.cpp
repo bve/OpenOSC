@@ -114,7 +114,7 @@ bool ApplicationController::applyScope(const ScopeRequest &requested, uint32_t n
     const bool applied = mode == ScopeApply::Resume ? data_.resumeScope(request)
         : mode == ScopeApply::StageIfHeld && data_.scopeHeld() ? data_.stageScope(request) : data_.configureScope(request);
     if (!applied) return false;
-    if ((rolled || alone) && uiReady_) view_.notify(Tooltip::Advisory, rolled ? "Past 20 s/div: Roll, trigger Auto" : "DMM alone: trigger Auto", now);
+    if ((rolled || alone) && uiReady_) view_.notify(Tooltip::Advisory, rolled ? request.trend ? "Trend: trigger Auto" : "Past 20 s/div: Roll, trigger Auto" : "DMM alone: trigger Auto", now);
     const auto &active = data_.scopeRequest();
     if (uiReady_ && (active.trigger.channel != previousTrigger.channel || active.trigger.mode != previousTrigger.mode))
         view_.waveform().triggerLimit(0);

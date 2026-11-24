@@ -6,24 +6,27 @@
 
 namespace openosc::plot {
 // A trend (TrendBuffer) is drawn from the points it keeps, which the frame's means cannot show: each
-// column is the min and max of its points as a band and their mean as a line. The copy was published with
-// the frame, so it is drawn only while their sequences match.
+// column is the min and max of its points as a band and their mean as a line. The copy places its own
+// points over the plot, so it is drawn whenever it is valid, whichever frame the model holds meanwhile.
 bool Painter::trendShown() const {
-    const auto &metadata = model_.metadata();
-    return trend_ && trend_->points && trend_->sequence && trend_->sequence == metadata.sequence && trend_->size == metadata.samples &&
-           metadata.rolling && model_.viewport().width >= 2;
+    return trend_ && trend_->points && trend_->sequence && model_.metadata().rolling && model_.viewport().width >= 2;
+}
+RecordGaps Painter::trendGaps() const {
+    RecordGaps gaps;
+    gaps.width = model_.viewport().width;
+    gaps.before = trend_->before(gaps.width);
+    return gaps;
 }
 // A column with no point (before the record's start) breaks the line.
 void Painter::trendTrace(unsigned channel, uint32_t color, uint8_t opacity, unsigned width) {
     if (!model_.storage().traces[channel].enabled || !opacity) return;
     const auto &view = model_.viewport();
     const auto &axis = model_.axis(channel);
-    const uint32_t samples = model_.metadata().samples;
     Path band(layer_, area_, color, uint8_t(65U * opacity / 255), 1, model_.statistics());
     Path line(layer_, area_, color, opacity, width, model_.statistics());
     for (unsigned x = 0; x < view.width; ++x) {
         uint32_t first, last;
-        view.column(x, samples, first, last);
+        trend_->column(x, view.width, first, last);
         if (first >= last) {
             line.gap();
             continue;
@@ -60,12 +63,11 @@ void Painter::trendMeter() {
         meterBelow_ = meterBelow_ || y > bottom;
         return pixel(y);
     };
-    const uint32_t samples = model_.metadata().samples;
     Path band(layer_, area_, palette_.meter, 65, 1, model_.statistics());
     Path line(layer_, area_, palette_.meter, 255, 1, model_.statistics());
     for (unsigned x = 0; x < view.width; ++x) {
         uint32_t first, last;
-        view.column(x, samples, first, last);
+        trend_->column(x, view.width, first, last);
         double weighted = 0, low = 0, high = 0;
         uint32_t count = 0, missing = 0;
         for (uint32_t i = first; i < last; ++i) {

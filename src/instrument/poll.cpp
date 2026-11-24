@@ -134,10 +134,11 @@ void DataAccess::poll(uint32_t now) {
             const scope::TrendView *trend = nullptr;
             bool column = false;
             if (recordFormat_ == ScopeRecorder::Format::Csv) {
-                if (trend_.shown().sequence && trend_.shown().sequence == lease.view().metadata().sequence) {
-                    // A trend's CSV holds its own min/max/mean rows, the DMM's from the trend, not from the ReadingTrace.
+                if (trend_.shown().sequence) {
+                    // A trend's CSV holds the copy's own min/max/mean rows, the DMM's from the copy, not from the ReadingTrace.
                     trend = &trend_.shown();
                     meter = meterHeader();
+                    meter.quantity = trend->quantity;
                     column = meterTraceAsked_;
                 } else column = meterColumn(lease.view().metadata(), meter);
             }

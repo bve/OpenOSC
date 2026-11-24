@@ -102,7 +102,7 @@ void DataAccess::traceReading() {
     }
     // At a slow timebase an entry is the mean of the readings within its span (ReadingTrace::push).
     const uint32_t span = dmm::ReadingTrace::spanMs(request_.timebaseNs);
-    if (meterGap_) meterReadings_.gap(ms, span);
+    if (meterGap_) { meterReadings_.gap(ms, span); trend_.meterGap(); }
     meterGap_ = false;
     const float value = primary.valid() ? float(primary.si) : NAN;
     meterReadings_.push(ms, value, span);

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <new>
 
 namespace openosc::scope {
 // Record bank 3: the means (the DMA source of the published frame), the live record, the copy on show.
@@ -35,7 +36,19 @@ bool TrendView::values(const FrameMetadata &metadata, uint32_t index, float (&ou
     out[8] = reading ? points->dmmHigh[index] : NAN;
     return true;
 }
-TrendBuffer::TrendBuffer(uint16_t *memory) : memory_(reinterpret_cast<Memory *>(memory)) {
+void TrendView::column(unsigned x, unsigned width, uint32_t &first, uint32_t &last) const {
+    const int64_t missing = int64_t(window) - size; // Window positions before the first point.
+    const auto at = [&](unsigned edge) { return std::clamp<int64_t>(int64_t(edge) * window / width - missing, 0, size); };
+    first = uint32_t(at(x));
+    last = uint32_t(at(x + 1));
+}
+unsigned TrendView::before(unsigned width) const {
+    uint32_t first, last;
+    unsigned count = 0;
+    while (count < width && (column(count, width, first, last), first >= last)) ++count;
+    return count;
+}
+TrendBuffer::TrendBuffer(uint16_t *memory) : memory_(new (memory) Memory) {
     static_assert(sizeof(Memory) <= AcquisitionArena::BankBytes, "A trend and its copy fit one record bank");
     shown_.points = &memory_->shown;
 }
@@ -155,18 +168,20 @@ FrameView TrendBuffer::snapshot(const FrameMetadata &base) const {
     metadata.rollPhase = FrameMetadata::NoRollPhase; // Merged points: the base's phase is the Roll ring's.
     metadata.clearTrigger();
     metadata.samples = size_;
-    metadata.ring = Capacity;
+    // The window is the record, once the points have merged: it fills the plot, so the time/div grows with
+    // the record. Before the first merge the record fills the plot from the right, Capacity points wide.
+    const uint32_t window = windowPoints();
+    metadata.ring = window;
     metadata.origin = 0;
     metadata.samplesPerSecond = rate;
-    // The window is the whole store: Capacity points of the stored rate over ten divisions.
     const double period = double(base.samplesPerSecond.denominator) / base.samplesPerSecond.numerator;
-    metadata.timebaseNs = uint64_t(std::llround(double(Capacity) * perPoint_ * period * 1e8));
+    metadata.timebaseNs = uint64_t(std::llround(double(window) * perPoint_ * period * 1e8));
     // Each point lies at the middle of the samples it sums, as RollingBuffer::snapshot's do.
     metadata.timestampUs = startUs_ + uint64_t(std::llround(double(perPoint_ - 1) / 2 * period * 1e6));
     const uint16_t *banks[] = {memory().means, nullptr, nullptr, nullptr};
     return {metadata, banks, Capacity};
 }
-void TrendBuffer::publish(uint32_t sequence) {
+void TrendBuffer::publish(const FrameMetadata &published) {
     auto &live = memory().live;
     auto &shown = memory().shown;
     const uint32_t first = copyAll_ || shownSize_ > size_ ? 0 : shownSize_, count = size_ - first;
@@ -184,7 +199,9 @@ void TrendBuffer::publish(uint32_t sequence) {
     copyAll_ = false;
     shown_.size = size_;
     shown_.perPoint = perPoint_;
+    shown_.window = published.ring;
+    shown_.rate = published.samplesPerSecond;
     shown_.quantity = quantity_;
-    shown_.sequence = sequence;
+    shown_.sequence = published.sequence;
 }
 } // namespace openosc::scope

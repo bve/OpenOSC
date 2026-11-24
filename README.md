@@ -172,7 +172,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Continuous Roll mode for slow timebases (200 ms/div and slower, always past 20 s/div)
 - Trend, one more step after 1 h/div (**Acquisition → Time / div**, SCPI `:ACQuire:TRENd ON|OFF`): a
   record from its start with the whole of it on screen. It keeps the min, max and mean of CH1, CH2 and the
-  multimeter for every point, and when its memory fills the time scale halves. **Save CSV** writes them
+  multimeter for every point. The record fills the plot, and when its memory fills, neighbouring points
+  merge, so the time per division grows steadily. **Save CSV** writes them
 - Record memory from 64K to 512K points across enabled channels. The record overview shows the
   budget used for the displayed capture. A label such as `<512K` means the capture plan reserves part
   of that budget, for example as DMA headroom at the fastest sample rates. The prefix depends on the
