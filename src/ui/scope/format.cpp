@@ -86,6 +86,29 @@ bool Format::quantity(double value, const char *unit, char *output, size_t capac
     const int n = std::snprintf(output, capacity, "%s%s%s%s", sign ? "-" : "", number, prefixes[index], unit);
     return n > 0 && size_t(n) < capacity;
 }
+bool Format::steady(double seconds, unsigned precision, char *output, size_t capacity) {
+    static constexpr struct { double seconds, next; const char *unit; } units[] = {
+        {1e-3, 1000, "ms"}, {1, 60, "s"}, {60, 60, "min"}, {3600, 0, "h"}};
+    if (!output || !capacity || !std::isfinite(seconds) || seconds <= 0 || !precision || precision > 6) return false;
+    unsigned u = 0;
+    while (u + 1 < sizeof units / sizeof *units && seconds >= units[u + 1].seconds) ++u;
+    for (;;) {
+        const double value = seconds / units[u].seconds;
+        const unsigned digits = value >= 100 ? 3 : value >= 10 ? 2 : 1;
+        unsigned decimals = precision > digits ? precision - digits : 0;
+        unsigned long divisor = 1;
+        for (unsigned i = 0; i < decimals; ++i) divisor *= 10;
+        unsigned long n = static_cast<unsigned long>(std::lround(value * divisor));
+        unsigned long whole = n / divisor;
+        if (units[u].next && whole >= units[u].next) { ++u; continue; } // 59.96 s is 1.00min.
+        if (decimals && whole >= (digits == 3 ? 1000UL : digits == 2 ? 100UL : 10UL)) { // 9.995 rounds to 10.00.
+            --decimals; divisor /= 10; n = static_cast<unsigned long>(std::lround(value * divisor)); whole = n / divisor;
+        }
+        const int written = decimals ? std::snprintf(output, capacity, "%lu.%0*lu%s", whole, int(decimals), n % divisor, units[u].unit)
+                                     : std::snprintf(output, capacity, "%lu%s", n, units[u].unit);
+        return written > 0 && size_t(written) < capacity;
+    }
+}
 void Format::points(uint32_t points, char *output, size_t capacity) {
     if (!output || !capacity) return;
     if (points && !(points % 1024)) std::snprintf(output, capacity, "%luK", static_cast<unsigned long>(points / 1024));

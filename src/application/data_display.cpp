@@ -264,7 +264,7 @@ void ApplicationController::displayData(uint32_t now) {
             syncZoomFocus(); // X-Y, FFT or Roll now: Back to the card Zoom & Pan came from.
         }
         const auto &trend = data_.trendShown();
-        view_.scopeGenerator(data_.generator().snapshot(), captureHalved, trend);
+        view_.scopeGenerator(data_.generator().snapshot(), captureHalved, trend, data_.nowUs());
         {
             const auto &options = view_.waveform().options();
             char text[40];

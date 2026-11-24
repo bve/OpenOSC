@@ -202,6 +202,7 @@ void TrendBuffer::publish(const FrameMetadata &published) {
     shown_.window = published.ring;
     shown_.rate = published.samplesPerSecond;
     shown_.timestampUs = published.timestampUs;
+    shown_.startUs = startUs_;
     shown_.quantity = quantity_;
     shown_.sequence = published.sequence;
 }
