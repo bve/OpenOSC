@@ -15,6 +15,7 @@ void DataAccess::followMeterGenerator() {
 void DataAccess::restartDmmUart() {
     dmm_.abandon();
     framer_.reset();
+    meter_.interruptCharge(); // Readings are lost across the restart.
     if (!uart_.stop() || !uart_.start()) { status_ = DataStatus::HardwareError; return; }
     receiveErrors_ = uart_.errors();
     receiveOverflows_ = uart_.overflows();
@@ -30,6 +31,7 @@ void DataAccess::serviceDmmWatchdog(uint32_t now) {
         meterGeneratorBits_ = generator::controlBits(generator_.offConfirmed());
         frontend_.multimeter(meterGeneratorBits_);
         framer_.reset();
+        meter_.interruptCharge();
         dmmActivatedAtUs_ = std::min(dmmActivatedAtUs_, timeUs_);
         if (!uart_.start()) { status_ = uart_.status(); return; } // HardwareError: the bounded retries.
         receiveErrors_ = uart_.errors();
@@ -38,6 +40,7 @@ void DataAccess::serviceDmmWatchdog(uint32_t now) {
     case Action::PowerOff:
         if (!uart_.stop()) { watchdog_.stopFailed(timeUs_); status_ = DataStatus::HardwareError; return; }
         dmm_.abandon();
+        meter_.interruptCharge(); // The DMM chip goes off: no reading until it is back.
         frontend_.multimeterOff();
         dmmActivatedAtUs_ = timeUs_ + uint64_t(dmm::LinkWatchdog::OffMs) * 1000;
         status_ = DataStatus::NoData;
@@ -74,13 +77,17 @@ void DataAccess::poll(uint32_t now) {
     if (active_ && !stopping_ && measurement_ == MeasurementMode::Multimeter) {
         if (receiveErrors_ != uart_.errors() || receiveOverflows_ != uart_.overflows()) {
             framer_.reset();
+            meter_.interruptCharge(); // Bytes were lost: the ampere-hour run ends here, its charge stays.
             receiveErrors_ = uart_.errors();
             receiveOverflows_ = uart_.overflows();
             status_ = DataStatus::Overflow;
         }
         uint8_t byte, packet[dmm::Packet::Bytes];
         for (unsigned n = 0; n < 256 && uart_.read(byte); ++n) {
-            if (!framer_.push(byte, packet)) continue;
+            const uint32_t rejected = framer_.rejected();
+            const bool framed = framer_.push(byte, packet);
+            if (framer_.rejected() != rejected) meter_.interruptCharge(); // A packet failed its check: a reading lost.
+            if (!framed) continue;
             watchdog_.packet(timeUs_);
             if (meter_.accept(packet, sizeof packet, timeUs_)) {
                 status_ = meter_.latest().primary.status;

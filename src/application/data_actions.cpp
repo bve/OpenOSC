@@ -89,6 +89,9 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     panel_ = Panel::None;
     if (previousMeasurement != data_.measurementMode() && usb_) usb_->profileChanged(now);
     if (state_.mode == MeasurementMode::Multimeter) {
+        // Entering the DMM screen starts a new ampere-hour count (GitHub #132), also from GEN, where the
+        // DMM kept measuring (DataAccess::select resets only when its own mode changes).
+        data_.meter().resetCharge();
         const bool requested = data_.selectDmmFunction(dmm::Function(prefs_.meterFunction));
         meterRestore_.arm(requested);
         if (!requested && uiReady_) view_.notify(Tooltip::Critical, "DMM function selection failed",now);

@@ -17,5 +17,7 @@ struct MeterContext {
     bool showBar = true;
     bool recording = false; // CSV logging: " REC" on the state pill.
     dmm::Function selecting = dmm::Function::Unknown; // Being selected (boot, restart): its sign over an empty reading.
+    // The ampere-hour counter (Session::charge): shown in the meta row's secondary slot on DC current.
+    const dmm::ChargeCounter *charge = nullptr;
 };
 } // namespace openosc::ui

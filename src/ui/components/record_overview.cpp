@@ -1,7 +1,7 @@
 #include "openosc/ui/components/record_overview.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include <algorithm>
-#include <cstring>
+#include <cstdio>
 
 namespace openosc::ui {
 namespace {
@@ -67,6 +67,7 @@ OverviewGeometry OverviewGeometry::calculate(const scope::FrameMetadata &m, cons
     OverviewGeometry g;
     if (!m.valid() || inside < MinimumSpan) return g;
     g.points = m.samples * ((m.channels[0].enabled ? 1U : 0U) + (m.channels[1].enabled ? 1U : 0U));
+    g.budget = uint32_t(m.budgetK) * 1024;
     // Each point owns one unit of the record, so its last point still has a width.
     const int64_t length = int64_t(m.samples) << 16, last = int64_t(m.samples - 1) << 16;
     if (mode != plot::Mode::Spectrum && view.spanQ16) {
@@ -152,11 +153,24 @@ void RecordOverview::update(const plot::Model &model) {
     if (drawn_ && geometry == shown_ && split == split_ && analyzed == analyzedColor_) return;
     show(geometry, split, analyzed);
 }
+// The budget stays the caption whatever the rate (a stable setting, GitHub #131); "<" says the frame
+// holds fewer of its points, so it never claims samples the record does not have.
+void RecordOverview::captionText(const OverviewGeometry &g, char *output, size_t capacity) {
+    if (!output || !capacity) return;
+    if (!g.points) { std::snprintf(output, capacity, "--"); return; } // No frame on show.
+    if (!g.budget || g.points > g.budget) { plot::Format::compactPoints(g.points, output, capacity); return; }
+    char total[8];
+    plot::Format::compactPoints(g.budget, total, sizeof total);
+    std::snprintf(output, capacity, "%s%s", g.points < g.budget ? "<" : "", total);
+}
 void RecordOverview::show(const OverviewGeometry &g, bool split, uint32_t analyzedColor) {
     drawn_ = true;
-    char text[12] = "--"; // No frame on show.
-    if (g.points) plot::Format::compactPoints(g.points, text, sizeof text);
-    if (std::strcmp(lv_label_get_text(caption_), text)) lv_label_set_text(caption_, text);
+    char text[12];
+    captionText(g, text, sizeof text);
+    if (Elements::setText(caption_, text)) {
+        const unsigned size = Elements::textWidth(text) <= Layout::OverviewCaption.width ? 12 : 11;
+        lv_obj_set_style_text_font(caption_, Elements::font(size), 0);
+    }
     const auto place = [](lv_obj_t *object, int left, int width, int y, int height) {
         lv_obj_set_hidden(object, left < 0);
         if (left < 0) return;

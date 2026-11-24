@@ -11,7 +11,7 @@ public:
         for (auto &row:rows_) row.visible(false);
         for (auto *label:labels_) if (label) lv_obj_set_hidden(label,true);
     }
-    // Texts of one draw: title, path or notice, header, page counter, "More" (Settings uses five). Past
+    // Texts of one draw: title, uptime, path or notice, header, page counter, "More". Past
     // Labels the last one is reused rather than writing beyond the array.
     static constexpr unsigned Labels=6;
     lv_obj_t *text(lv_obj_t *parent,const char *value,int x,int y) {

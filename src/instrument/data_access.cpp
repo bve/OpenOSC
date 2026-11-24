@@ -82,8 +82,12 @@ bool DataAccess::select(MeasurementMode view) {
     if (previous == MeasurementMode::Multimeter && view != previous) watchdog_.left(Board::milliseconds());
     const bool restore = active_;
     active_ = false;
-    if (activate(view))
+    if (activate(view)) {
+        // The mode changed: leaving or entering the DMM starts a new ampere-hour count (GitHub #132). A
+        // refused switch keeps it; a clock change or a resume (activate alone) only ends its run (expire).
+        if (view != previous) meter_.resetCharge();
         return true;
+    }
     const auto failure = status_;
     if (restore && previous != view) {
         if (!uart_.stop() || !stopCapture(true) || !activate(previous))

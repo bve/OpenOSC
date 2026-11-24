@@ -163,11 +163,11 @@ void MeterSummary::palette(const MeterLook &look) {
 }
 void MeterSummary::visible(bool value) { lv_obj_set_hidden(root_, !value); }
 void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
-                          double reference, bool relative, bool peerRelative) {
+                          double reference, bool relative, bool peerRelative, const char *charge) {
     const double offset = relative ? reference : 0;
     if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) resolution_ = resolution;
     const bool temperature = result.primary.quantity == Quantity::Temperature;
-    bool changed = Elements::setText(secondary_, result.secondary.valid() ? result.secondaryText : "");
+    bool changed = Elements::setText(secondary_, result.secondary.valid() ? result.secondaryText : charge ? charge : "");
     if (relative) {
         char value[32], text[48];
         if (temperature) statisticText(reference, result.primary.quantity, value, sizeof value);

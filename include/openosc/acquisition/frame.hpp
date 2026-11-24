@@ -73,6 +73,10 @@ struct FrameMetadata {
     // in any file format, SCPI reply or the record's samples; a record cut elsewhere has none.
     uint32_t pretrigger = 0;
     TriggerEdge triggerEdge; // What triggerIndex was found for (known only while triggered).
+    // The record budget (points of every channel, in K) this capture was planned for; 0 for Roll, an
+    // internal capture or a loaded record. The plan may keep part of it spare (SamplePlan's DMA
+    // headroom), so samples can be fewer. Display only (the status bar): not in any file format or SCPI reply.
+    uint16_t budgetK = 0;
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
     // Immutable boot profile entry. Transferred file payloads already hold the corrected codes.

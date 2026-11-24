@@ -13,7 +13,7 @@ namespace openosc {
 void ApplicationView::build(const Theme &theme) {
     host_.clear(); battery_.clear();
     if (menu_) lv_obj_delete(menu_);
-    menuContent_.reset(); menuRetained_=false; draftPreviewObject_=nullptr;
+    menuContent_.reset(); menuRetained_=false; draftPreviewObject_=nullptr; menuUptime_=nullptr;
     if (toast_) lv_obj_delete(toast_);
     if (generatorIndicator_) lv_obj_delete(generatorIndicator_);
     if (usbIndicator_) lv_obj_delete(usbIndicator_);
@@ -275,6 +275,7 @@ void ApplicationView::applyScopeTheme(bool apply) {
 void ApplicationView::measurement(const ApplicationState &state) {
     if (unsigned(state.mode) >= InstrumentModeCount) return;
     mode_ = state.mode;
+    menuUptime_ = nullptr;
     lv_obj_set_hidden(menu_, true);
     bode_.hide();
     bodeHeader_ = false;
@@ -286,6 +287,7 @@ void ApplicationView::measurement(const ApplicationState &state) {
 }
 void ApplicationView::bodePlot(const ui::BodeViewData &data) {
     host_.overlay(true);
+    menuUptime_ = nullptr;
     lv_obj_set_hidden(menu_, true);
     if (!bodeHeader_) {
         bodeHeader_ = true;

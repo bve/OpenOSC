@@ -84,7 +84,7 @@ bool History::value(size_t index, double &output) const {
     return true;
 }
 void Session::reselect() {
-    resetStatistics();
+    resetStatistics(); // The charge stays: only a confirmed packet of another function resets it.
     settle_.clear();
     detector_.reselect(); // The old function's snapshot and window go with the selection.
     awaiting_ = false;
@@ -92,14 +92,17 @@ void Session::reselect() {
 Function Session::awaited() const { return awaiting_ ? awaited_ : Function::Unknown; }
 void Session::restart(Function function, uint64_t untilUs) {
     reselect();
+    if (!charge_.counting(function)) charge_.interrupt(); // Another function is awaited: no interval across the change.
     awaited_ = function;
     awaitUntilUs_ = untilUs;
     awaiting_ = true;
 }
 bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) {
     Result candidate;
-    if (!Decoder::decode(packet, bytes, candidate))
-        return false; // A bad packet changes nothing.
+    if (!Decoder::decode(packet, bytes, candidate)) {
+        charge_.interrupt(); // A reading was lost: no interval across it.
+        return false; // Nothing else changes.
+    }
     candidate.timestampUs = timestampUs;
     candidate.sequence = ++sequence_;
     rawBytes_ = uint8_t(bytes < sizeof raw_ ? bytes : sizeof raw_);
@@ -116,6 +119,9 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     const bool known = function != Function::Unknown;
     const bool functionChanged = known && function_ != ~0U && (unsigned(function) != function_ || candidate.currentInput != functionCurrent_);
     const bool settles = (known && function == awaited_) || timestampUs >= awaitUntilUs_;
+    // The charge reads the packet itself: the manual HOLD, the hold modes and the local REL only change
+    // what is shown. A selection not yet confirmed is not integrated.
+    charge_.observe(candidate, timestampUs, !awaiting_ || settles);
     // After an overload in Ohm, two readings are not shown: nothing below sees them (display, hold
     // mode, statistics, trend). Under HOLD the settling waits, as the factory decodes nothing then.
     if (functionChanged) settle_.clear();

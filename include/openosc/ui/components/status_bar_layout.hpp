@@ -21,7 +21,7 @@ struct StatusBarLayout {
     static constexpr int PillHeight = 17; // 4 px above and below the capitals, not 4/6.
     static constexpr Column BatteryIcon{Width - Margin - 15, 15}, BatteryText{Width - Margin - 32, 32};
     static constexpr int StatusX = Margin;
-    // Record overview: the total points of the frame on show, then the map of that record.
+    // Record overview: the displayed capture's budget and the map of its actual record.
     static constexpr Column Overview{BatteryText.x - Gap - 62, 62};
     static constexpr Column OverviewCaption{Overview.x, 32}; // The widest total ("48.8K", "1023") whole.
     static constexpr Column OverviewMap{OverviewCaption.right() + Tight, Overview.right() - OverviewCaption.right() - Tight};

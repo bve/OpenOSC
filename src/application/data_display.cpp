@@ -286,17 +286,19 @@ void ApplicationController::displayData(uint32_t now) {
         char word[sizeof lastMeterHoldWord_];
         meterHoldWord(word, sizeof word);
         const auto selecting = meterSelecting(); // Its sign over an empty reading (shownReading).
+        const double charge = meter.charge().coulombs(); // The charge remains live when the main digits are held.
         if (dataRefresh_ || (selecting == dmm::Function::Unknown && lastMeterSequence_ != meter.displayed().sequence) || lastMeterSelecting_ != selecting ||
-            lastMeterHold_ != meter.holding() || lastMeterStatus_ != status) {
+            lastMeterHold_ != meter.holding() || lastMeterStatus_ != status || lastMeterCharge_ != charge) {
             const ui::MeterContext context{&meter.statistics(), &meter.history(), &meter.relative(), prefs_.meter.display,
                                           bool(prefs_.meter.statistics), prefs_.meter.shownFace(), prefs_.meter.shownPalette(),
                                           &prefs_.meter.shownAppearance(), word, bool(prefs_.meter.bar), data_.meterLogger().active(),
-                                          selecting};
+                                          selecting, &meter.charge()};
             view_.multimeter(shownReading(meter, selecting), meter.holding(), status, context);
             lastMeterSelecting_ = selecting;
             lastMeterSequence_ = meter.displayed().sequence;
             lastMeterStatus_ = status;
             lastMeterHold_ = meter.holding();
+            lastMeterCharge_ = charge;
         } else if (std::strcmp(word, lastMeterHoldWord_))
             view_.multimeterStatus(shownReading(meter, selecting), meter.holding(), status,
                                    meter.relative().matches(shownReading(meter, selecting)), word);

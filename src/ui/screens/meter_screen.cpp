@@ -277,7 +277,11 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     host_.meterSummary().visible(true);
     host_.meterTrend().visible(context.display == 2);
     if (context.display == 2) host_.meterTrend().update(context.history, result.primary.quantity, reference, relative, result.peerRelative, result.unit);
+    // DC current: the charge since the function was chosen, in the meta row's secondary slot (which
+    // holds the AC frequency only), so it has its place in every layout, order and look.
+    char charge[24] = "";
+    if (context.charge && dmm::ChargeCounter::counts(function)) dmm::ChargeCounter::format(context.charge->ampereHours(), charge, sizeof charge);
     host_.meterSummary().update(result, context.display != 2 && (context.showStatistics || context.display == 1) ? statistics : nullptr,
-                                look_.color(MeterRole::Mode), reference, relative, result.peerRelative);
+                                look_.color(MeterRole::Mode), reference, relative, result.peerRelative, charge);
 }
 } // namespace openosc::ui

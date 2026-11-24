@@ -144,7 +144,10 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         probe.poll();
 #endif
         serviceRecovery(now);
-        if (uiReady_) view_.usbConnected(usb.connected());
+        if (uiReady_) {
+            view_.usbConnected(usb.connected());
+            view_.uptime(data_.nowUs());
+        }
         serviceAuto(now);
         serviceInstruments(now);
         serviceZeroUi(now);

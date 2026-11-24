@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/measurement/dmm/charge.hpp"
 #include "openosc/measurement/dmm/hold.hpp"
 #include "openosc/measurement/dmm/result.hpp"
 #include "openosc/measurement/dmm/relative.hpp"
@@ -81,7 +82,8 @@ public:
     bool held() const { return userHold_ || latest_.packetHold; }
     bool userHeld() const { return userHold_; }
     DataStatus status(uint64_t nowUs, uint64_t staleAfterUs) const;
-    void expire(uint64_t nowUs) { freshFromUs_ = nowUs; } // Readings before nowUs are stale.
+    // Readings before nowUs are stale (an activation, a resume): the charge's run ends there too.
+    void expire(uint64_t nowUs) { freshFromUs_ = nowUs; charge_.interrupt(); }
     // The last packet as decoded: its function, range, HOLD and REL flags for the commands, and the
     // raw stream (log, serial output). Settling readings (OverloadSettle) are here too.
     const Result &latest() const { return latest_; }
@@ -127,6 +129,12 @@ public:
     const Statistics &statistics() const { return stats_; }
     const History &history() const { return history_; }
     const RelativeReading &relative() const { return relative_; }
+    // The DC current's ampere-hour counter (ChargeCounter): fed by every decoded packet, HOLD or not;
+    // reset by a confirmed packet of another function and by entering or leaving the DMM (resetCharge,
+    // DataAccess and the controller); interruptCharge: readings were lost (UART, framing), the charge stays.
+    const ChargeCounter &charge() const { return charge_; }
+    void resetCharge() { charge_.reset(); }
+    void interruptCharge() { charge_.interrupt(); }
     // An accepted REL command restarts the statistics, as the factory's, even when REL was already so.
     // A hold mode's cycle ends first, so REL takes the live reading as its reference, never the mode's
     // snapshot: with the live reading not valid (OL, "--.") REL is refused and the cycle, its snapshot
@@ -150,7 +158,7 @@ public:
     // packets of the old function still in flight do not.
     void restart(Function function, uint64_t untilUs);
     // An accepted group key (a physical F1-F4): the statistics, the overload settling and a hold mode's
-    // snapshot restart; no function is awaited (the readings of the old one still in flight count until
+    // snapshot restart (the ampere-hour counter waits for the packets' function); no function is awaited (the readings of the old one still in flight count until
     // the controller's function change restarts the statistics again, as the factory's).
     void reselect();
     Function awaited() const; // The selection's target while awaited, else Unknown.
@@ -166,6 +174,7 @@ private:
     HoldDetector detector_;
     Statistics stats_;
     History history_;
+    ChargeCounter charge_;
     RelativeReading relative_;
     TemperatureSettings temperatureSettings_;
     std::optional<int16_t> startupJunction_, liveJunction_;

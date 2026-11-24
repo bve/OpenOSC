@@ -132,6 +132,7 @@ public:
     ui::BodeView &bode() { return bode_; }
     void bodePlot(const ui::BodeViewData &data);
     void powerHold(int percent, const char *title) { powerHold_.show(percent, title); } // PowerHold::percent; -1 hides.
+    void uptime(uint64_t elapsedUs);
     void service(uint32_t now);
 
 private:
@@ -139,7 +140,7 @@ private:
         return ui::Elements::label(parent, text, x, y);
     }
     static const lv_font_t *font(unsigned size) { return ui::Elements::font(size); }
-    void menuFrame(const char *title, bool instrument = false, bool retained = false);
+    void menuFrame(const char *title, bool instrument = false, bool retained = false, bool showUptime = false);
     static constexpr int MenuTop = ui::ScreenLayout::MenuTop, MenuHeight = ui::ScreenLayout::MenuHeight; // Above the cards.
     void choice(const ui::PropertyList &list, const ui::PropertyNavigator &navigator, int top); // The open list, if any.
     ui::ChoicePopup choicePopup_;
@@ -147,6 +148,8 @@ private:
     lv_obj_t *draftPreviewObject_ = nullptr;
     ui::MenuContent menuContent_;
     bool menuRetained_ = false;
+    lv_obj_t *menuUptime_ = nullptr;
+    uint32_t uptimeSeconds_ = 0;
     const Theme *theme_ = nullptr;
     ScopeAppearance scopeAppearance_;
     ui::ScopeLook scopeLook_; // ScopeStyles::look(*theme_, scopeAppearance_).

@@ -552,6 +552,10 @@ bool DataAccess::startCapture() {
     if (rolling) metadata.samples=metadata.ring=buffer.ringPoints(); // Roll runs the DMA ring continuously.
     metadata.samplesPerSecond = plan.rate;
     metadata.timebaseNs = request_.timebaseNs;
+    // The budget the user's record was planned for: the status bar names it, never the request staged
+    // later. Roll and internal captures (zero calibration, AutoSetup trials) name only what they hold.
+    static_assert(scope::RecordBudget::Minimum % 1024 == 0 && scope::RecordBudget::Maximum / 1024 <= UINT16_MAX);
+    if (!rolling && !internalCapture()) metadata.budgetK = uint16_t(request_.recordPoints / 1024);
     // The front end as this capture sets it (interleaved, CH1's range correction): its metadata says so.
     const auto frontend = appliedFrontend(request_);
     if (!frontend.interleave || rolling) interleave_.leave();

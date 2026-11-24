@@ -503,6 +503,7 @@ private:
     DataStatus lastScopeStatus_ = DataStatus::NoData;
     bool lastMeterHold_ = false, lastScopeHold_ = false;
     dmm::Function lastMeterSelecting_ = dmm::Function::Unknown;
+    double lastMeterCharge_ = 0;
     dmm::Function meterSelecting() const;
     char lastMeterHoldWord_[16] = ""; // The hold mode's state pill word as last shown.
     const char *saveProblem_ = nullptr, *saveWarned_ = nullptr; // store(): the power-off save's volume, its notice.

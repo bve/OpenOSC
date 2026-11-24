@@ -144,6 +144,9 @@ Captured on a ZT703S running OpenOSC.
   Tap **F3** to select Trigger and use Left/Right to adjust pretrigger. Tap **F3** again to cycle modes.
   Hold **F3** to set the trigger level to the signal midpoint and pretrigger to 50%. Pan with **F2**
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
+- Record memory from 64K to 512K points across enabled channels. The record overview shows the
+  budget used for the displayed capture. A label such as `<512K` indicates a shorter capture.
+  **Analyze → Acquisition → Captured** shows the exact number of points per channel.
 - In the default **Quick** profile, tap **AUTO** to start Auto Setup or cancel it in progress.
   Hold **AUTO** for 2 s in Y-T to open **Zoom & Pan**. Up/Down zoom the view, Left/Right pan, and
   **F4** returns to the previous card. The **Classic** profile uses a tap to reset pan and a hold to
@@ -186,6 +189,12 @@ Captured on a ZT703S running OpenOSC.
 - HOLD modes (**MENU → Measurement → Hold**): Manual, Delayed (after a countdown), Stable (waits
   for a stable reading) and Auto (holds every new stable reading)
 - Statistics, trend chart and CSV logging
+- Ampere-hour counter in DC current (A and mA): the signed charge since the function was selected,
+  shown as mAh or Ah beside the range. It counts while the readings are valid and arrive at most 2 s
+  apart (an overload, the meter's own HOLD or REL, a lost or corrupted reading, or a longer gap pauses
+  it, with nothing estimated for the missing time). Manual HOLD and REL change only the display. A
+  confirmed switch to another function or entering the multimeter screen resets it; a range change or
+  a repeated selection of the same function keeps it.
 - Large 72/80 px reading when the bar graph and statistics are off
 - Bar graph and analog dial scaled to the meter's range: 25,000 counts on ZT703S, 66,000 on ZT706S
 
@@ -214,6 +223,7 @@ Captured on a ZT703S running OpenOSC.
 **Interface and files**
 
 - LVGL-based user interface (English only)
+- The Settings header shows the time since the firmware started (hours, minutes and seconds)
 - Rearrangeable screens: on the oscilloscope, choose the order of the waveform, the measurements
   and the soft-keys (**Analyze → Layout**); on the multimeter, the order of the reading, the
   statistics/bar/trend, the dial and the soft-keys (**MENU → Layout**). Soft-keys are at the

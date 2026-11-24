@@ -39,8 +39,10 @@ public:
     static constexpr int CompactMetaX = 60, CompactRow = 14, CompactNameGap = 4, CompactMetaGap = 6;
     static constexpr unsigned CompactFont = 12;
     static constexpr int BarTop = 63, Height = 89; // The bar's rows: BarTop..Height.
+    // `charge`: the ampere-hour counter's text for the secondary slot when the reading has no secondary
+    // value of its own (DC current; null or empty: none).
     void update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
-                double reference = 0, bool relative = false, bool peerRelative = false);
+                double reference = 0, bool relative = false, bool peerRelative = false, const char *charge = nullptr);
     void bar(const dmm::Result &result, DataStatus status, uint32_t accent,
              const dmm::RelativeReading *relative = nullptr, dmm::TemperatureAxis *axis = nullptr) {
         bar_.update(result, status, accent, relative, axis);
