@@ -16,14 +16,30 @@ namespace openosc::ui {
 //   gap in both, a weak CH2 a gap in the phase, a phase wrap is not joined); the two cursors (the active
 //   one solid, the other dashed, each with its letter), the markers of the graphs shown.
 // - Table: PageRows points a page, the active cursor's row highlighted, the other's shaded, each with its
-//   letter: index, frequency, gain, phase and a note (why a point is invalid, a weak CH2, fewer averages
-//   than asked, the markers on it); below, the active point's stimulus and output (CH1/CH2 Vpp), V/div.
+//   letter: index, frequency, gain, phase and a note (why a point is invalid, else the markers on it, else
+//   a weak CH2 or fewer averages than asked: rowNote); below, the active point's stimulus and output
+//   (CH1/CH2 Vpp), V/div.
 // - Results: the run's peak, -3 dB bounds and bandwidth, gain and phase margins with their frequencies
 //   (scope::BodeResults, "--" where none qualifies), the run as it ran and the rules.
 // Plot and Table: a header (what is measured, the sweep's state and progress), the active cursor's point
 // (its letter, values or why it has none, a weak CH2's phase "--", the marker Up/Down went to), and the
 // cursors' difference B - A in Hz, dB and degrees ("--" where either point has no such value), with MENU
 // named as the key that swaps the active cursor.
+// What the gain's markers are called (GitHub #137), one decision for the plot's tags, the selected marker's
+// readout, the table and Results; the markers and their values stay BodeMarkers'/BodeResults' (the measured
+// extremum, the interpolated crossings):
+// - both -3 dB bounds found (a band-pass or a notch): the centre f0, the bounds f1 (lower) and f2 (upper);
+// - one bound of a response whose other side is a passband to the sweep's end (every valid point from that
+//   end to the extremum within RippleDb of it, no gap among them): a low-pass's (the upper bound) or a
+//   high-pass's (the lower) single corner, fc; the extremum Peak;
+// - else nothing is claimed: an interior peak with a falling side short of -3 dB, a gap that may hide a
+//   bound, an incomplete notch keep f1/f2, the centre Peak or Notch.
+struct BodeNames {
+    static constexpr float RippleDb = 1; // Passband ripple of a physical measurement (noise, a probe's own).
+    const char *centre = "Peak", *lower = "f1", *upper = "f2";
+    bool twoSided = false; // f0 between f1 and f2.
+    static BodeNames of(const scope::BodePoint *points, unsigned measured, const scope::BodeMarkers &markers);
+};
 enum class BodeDrive : uint8_t { FromGen, Dedicated, Low, High, Custom }; // What the sweep plays (setup).
 enum class BodeGraphs : uint8_t { Both, Gain, Phase }; // The plot's graphs (F3 steps through them, then the table).
 inline bool showsGain(BodeGraphs g) { return g != BodeGraphs::Phase; }
@@ -54,6 +70,17 @@ public:
     static constexpr int GainTop = 46, GainBottom = 104, PhaseTop = 112, PhaseBottom = 170;
     static constexpr int TableTop = 31, FooterA = 160, FooterB = 174;
     static constexpr int IndexWidth = 24; // The table's index column: three digits (GitHub #75).
+    static constexpr int NotchTagRoom = 4 + 13; // Under a notch's lowest gain: its centre tag's gap and height.
+    static constexpr int NoteWidth = 70;        // The table's note column.
+    // A verified notch's null in the phase (GitHub #136): its centre a weak CH2 in a run of weak CH2 points
+    // only (at most GapPoints, inside its -3 dB bounds), between shoulders with a phase on both sides, of
+    // opposite sign and at least GapStepDeg apart around the circle (-179 to +179 is a wrap of 2 degrees,
+    // not such a step). The phase pane then marks the gap at f0 (a dotted guide, labelled at the pane's
+    // middle): no value is drawn in it and no marker or result comes from it.
+    static constexpr unsigned GapPoints = 4;
+    static constexpr float GapStepDeg = 90;
+    static bool notchGap(const scope::BodePoint *points, unsigned measured, const scope::BodeMarkers &markers);
+
     static constexpr unsigned PageRows = scope::BodeCursor::PageRows;
     static_assert(PhaseBottom + 1 + Line <= Height, "Decade labels inside the plot's height");
     static_assert(RowC + Line <= GainTop, "The difference's row above the gain panel");
@@ -71,6 +98,10 @@ public:
     // Why an invalid point has no values: in a sentence (the cursor) and in a word or two (the table).
     static const char *reason(uint16_t flags);
     static const char *note(uint16_t flags);
+    // A table row's note (point `index`): why it is invalid, else its markers (BodeNames: "f0", "f1", "fc", ...)
+    // with "low CH2" after them where it fits NoteWidth, else "low CH2" or "part avg".
+    static const char *rowNote(const scope::BodePoint &point, unsigned index, const scope::BodeMarkers &markers,
+                               const BodeNames &names, char *buffer, size_t size);
     static const char *driveName(BodeDrive drive); // "From GEN", "Dedicated", ...
 
 private:

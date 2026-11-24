@@ -34,7 +34,7 @@ instrument, the SCPI reference, troubleshooting and pages for contributors.
 
 ## Screenshots
 
-Captured on a ZT703S running OpenOSC.
+Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T sweep in the current interface.
 
 <table>
   <tr>
@@ -44,6 +44,14 @@ Captured on a ZT703S running OpenOSC.
   <tr>
     <td align="center">Oscilloscope, two channels</td>
     <td align="center">Multimeter with charge counter</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/bode.png" width="320" alt="Bode analyzer: recorded twin-T sweep with f1 and f2 cutoffs and the f0 notch marker"></td>
+    <td><img src=".github/images/multimeter-range.png" width="320" alt="Multimeter: DC voltage on the 2.5 V range with bar graph ticks every 0.5 V"></td>
+  </tr>
+  <tr>
+    <td align="center">Bode plot (recorded sweep replay)</td>
+    <td align="center">Multimeter bar graph on the 2.5 V range</td>
   </tr>
   <tr>
     <td><img src=".github/images/scope-readouts.png" width="320" alt="Oscilloscope: two readouts per channel, time cursors and the STOP status word"></td>
@@ -62,11 +70,11 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">Interleave offset calibration</td>
   </tr>
   <tr>
-    <td><img src=".github/images/bode.png" width="320" alt="Bode analyzer: gain and phase of an RC filter from 100 Hz to 200 kHz"></td>
+    <td><img src=".github/images/bode-notch-table.png" width="320" alt="Bode table: the notch row is marked f0 and low CH2, with phase shown as dashes"></td>
     <td><img src=".github/images/multimeter-type-k.png" width="320" alt="Multimeter: Type K thermocouple reading 22.5 °C"></td>
   </tr>
   <tr>
-    <td align="center">Bode analyzer</td>
+    <td align="center">Bode table (recorded sweep replay)</td>
     <td align="center">Type K temperature</td>
   </tr>
   <tr>
@@ -146,7 +154,8 @@ Captured on a ZT703S running OpenOSC.
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
 - Record memory from 64K to 512K points across enabled channels. The record overview shows the
   budget used for the displayed capture. A label such as `<512K` indicates a shorter capture.
-  **Analyze → Acquisition → Captured** shows the exact number of points per channel.
+  The label keeps the same font size when the prefix appears. **Analyze → Acquisition → Captured**
+  shows the exact number of points per channel.
 - In the default **Quick** profile, tap **AUTO** to start Auto Setup or cancel it in progress.
   Hold **AUTO** for 2 s in Y-T to open **Zoom & Pan**. Up/Down zoom the view, Left/Right pan, and
   **F4** returns to the previous card. The **Classic** profile uses a tap to reset pan and a hold to
@@ -170,7 +179,9 @@ Captured on a ZT703S running OpenOSC.
 - Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view, event detail; decoded data saved as CSV
 - Bode analyzer (**Analyze → Bode (FRA)**): gain and phase of a circuit against frequency with the
-  built-in generator, cursors, −3 dB points, bandwidth, gain and phase margins, CSV export
+  built-in generator, cursors, −3 dB corner `fc` for low-pass and high-pass responses,
+  cutoffs `f1` and `f2` with measured center `f0` for band-pass and notch responses,
+  bandwidth, gain and phase margins, CSV export
 - Zero and gain calibration of both channels, stored as files and never written to the factory calibration
 - Selectable performance profiles: 200/100, 280/140 and 360/90 (core MHz / MS/s per channel),
   switched instantly without a restart
@@ -196,7 +207,8 @@ Captured on a ZT703S running OpenOSC.
   confirmed switch to another function or entering the multimeter screen resets it; a range change or
   a repeated selection of the same function keeps it.
 - Large 72/80 px reading when the bar graph and statistics are off
-- Bar graph labels follow the active range in measurement units. The 2.5 V range, for example, runs from 0 to 2.5 V in 0.5 V steps. The analog dial labels its scale in the reading's unit
+- Bar graph labels follow the active range in measurement units. The 2.5 V range runs from 0 to 2.5 V
+  in 0.5 V steps. The analog dial labels its scale in the reading's unit
 
 **Signal generator**
 
