@@ -39,8 +39,9 @@ private:
     bool scopeCommand(const Command &command);
     bool channelCommand(const Command &command);
     bool waveformCommand(const Command &command);
+    struct MeterMatch; // A DMM header as the measurement serves it now (meter.cpp).
     bool meterCommand(const Command &command);
-    bool meterHoldCommand(const Command &command); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
+    bool meterHoldCommand(const Command &command, MeterMatch &match); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
     bool generatorCommand(const Command &command);
     bool arbitraryCommand(const Command &command); // SOURce:ARBitrary: and SOUR:FUNC ARB's frequency (arbitrary.cpp).
     // BlockSink: SOUR:ARB:DATA's block goes to the backend's stage as it comes (arbitrary.cpp).

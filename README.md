@@ -316,6 +316,14 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   press. `AUTO` on the multimeter screen acts from 52 ms held. As on the panel, `REL` held longer than
   **Settings → Device → Power → Power-off hold**, counted from the start of the press, powers the device
   off, and `MODE` switching the instrument mode reconnects USB, so the reply is lost
+- The multimeter commands also work in the oscilloscope while its DMM channel is on. There a bare
+  `AUTO` stays the oscilloscope's Auto Setup (`AUTO?` and `AUTO ON|OFF` are the multimeter's), and
+  `SYSTem:DMM:HOLD ON|OFF`, `SYSTem:DMM:HOLD:ARM`, `SYSTem:DMM:RELative ON|OFF` and
+  `SYSTem:DMM:STATistics[:RESet]` return -221, as every multimeter command does with the DMM channel off
+- `DISPlay:TEXT "<text>"` shows a message in a box over any screen until a key is pressed (that
+  press does nothing else), `DISPlay:TEXT:CLEar` or the next message; `DISPlay:TEXT?` returns the
+  text on show, or `""`. The text is printable ASCII. On a dark screen the first key only wakes it;
+  REL/Power held still powers off, the message staying
 - USB Remote mode: the PC controls the device while the screen keeps showing live data
 - USB data works only in the 200/100 performance profile. Connect directly to a PC port:
   disconnects are known, especially through USB hubs.

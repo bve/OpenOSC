@@ -60,7 +60,8 @@ bool Engine::scopeCommand(const Command &c) {
         else { const unsigned function = meterFunctionKey(c.argument);
             if (function >= MeterFunctionCount) error(-224);
             else if (const int16_t code = backend_.meterTraceFunction(function)) error(code); }
-    } else if (match("AUToscale")) {
+    } else if (match("AUToscale") && ((!c.query && !*c.argument) || !Header::matches(c.header, "AUTO"))) {
+        // AUTO? and AUTO <bool>, the four letters only, are the DMM's auto range (meter.cpp).
         if (c.query || *c.argument) error(-108,c.query);
         else { backend_.releaseFrame(); if (!backend_.autoScale()) error(-221); }
     } else if (match("TRIGger:STATus")) {

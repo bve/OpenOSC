@@ -150,6 +150,12 @@ public:
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
     const char *toast() const { return toastShowing() ? lv_label_get_text(toast_) : ""; } // On show now.
     bool toastShowing() const { return notice_ != Notice::None; } // A notice is on show (store(): none over another).
+    // DISPlay:TEXT: a message for the person at the device, in a box over every screen (a notice over
+    // it) until a key takes it (dismissMessage: true when one was on show), its CLEar or the next one;
+    // "" takes it away. message(): the text on show, "" for none.
+    void message(const char *text);
+    const char *message() const { return messageShowing() ? lv_label_get_text(message_) : ""; }
+    bool dismissMessage();
     // The frequency response plot (GitHub #72), hidden until shown. Shown as a menu is: the
     // host's overlay (no Scope elements drawn under it, the keys' bar at the bottom), the menu box hidden.
     ui::BodeView &bode() { return bode_; }
@@ -193,6 +199,8 @@ private:
     ui::ScopeScreen scope_;
     ui::MeterScreen meter_;
     ui::GeneratorScreen generator_;
+    bool messageShowing() const { return message_ && !lv_obj_is_hidden(message_); }
+    lv_obj_t *message_ = nullptr;
     lv_obj_t *menu_ = nullptr, *toast_ = nullptr, *generatorIndicator_ = nullptr, *usbIndicator_ = nullptr, *fps_ = nullptr, *trigger_ = nullptr, *edge_ = nullptr, *channelTag_ = nullptr;
     static constexpr unsigned NoTriggerChannel = 2;
     unsigned channelTagChannel_ = NoTriggerChannel;

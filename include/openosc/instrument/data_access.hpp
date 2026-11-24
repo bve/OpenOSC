@@ -162,7 +162,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // The readings the trace draws: time on the frames' clock (nowUs), the value in SI, a slow
     // timebase's averaged into its entries (ReadingTrace::push). Kept through every capture, timebase
     // and measurement (a HOLD freezes them; a stop, a power cycle or a UART restart ends the line at
-    // once, a gap); restarted when the quantity of the function selected, or of a reading, changes.
+    // once, a gap); restarted when another function is selected in the Scope (under HOLD, at the first
+    // reading after it) or a reading's quantity changes.
     const dmm::ReadingTrace &meterReadings() const { return meterReadings_; }
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
@@ -180,7 +181,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool holdDmmRange();
     bool dmmRangeOpen() const { return dmm_.rangeOpen(); }
     void closeDmmRange();
-    // Auto: a synthetic hold (20, 22 HoldGapMs later); Manual: a synthetic short stroke (20, 21).
+    // Auto: a synthetic hold (20, 22 HoldGapMs later); Manual: a synthetic short stroke (20, 21). It and
+    // setDmmRange in the DMM, and in the Scope while its DMM trace runs (meterTraceRunning).
     bool setDmmAuto(bool automatic);
     // The manual HOLD (and the DMM's own, released by its key); off also ends a mode's cycle.
     bool holdMeter(bool held);
@@ -462,11 +464,14 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void serviceMeterTrace(uint32_t now);
     void stopMeterTrace();
     void traceReading(); // The session's newest reading into meterReadings_ (not held).
+    void restartMeterLine(); // meterReadings_ in meterTraceFunction_ (meter_trace.cpp).
     void breakMeterTrace();
     bool meterColumn(const scope::FrameMetadata &record, ScopeRecorder::Meter &meter);
     bool meterTraceAsked_ = false, meterTraceRunning_ = false;
     // Readings were missed since the last one kept (HOLD, a restart): the next is preceded by a gap.
     bool meterGap_ = false;
+    // The function last selected in the Scope, and the one meterReadings_ last started with.
+    dmm::Function meterTraceFunction_ = dmm::Function::Unknown, meterLineFunction_ = dmm::Function::Unknown;
     uint32_t meterTraceStarts_ = 0;
     static dmm::ReadingTrace::Reading *meterTraceMemory(); // Its ITCM (.meter_trace), or nullptr (meter_trace.cpp).
     dmm::ReadingTrace meterReadings_{meterTraceMemory()};

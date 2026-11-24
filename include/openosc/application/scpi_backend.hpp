@@ -19,6 +19,7 @@ public:
     int16_t showChannel(unsigned channel, bool on) override;
     unsigned meterTraceFunction() const override;
     int16_t meterTraceFunction(unsigned function) override;
+    bool meterTrace() const override;
     bool run(bool single) override;
     bool autoScale() override;
     bool forceTrigger() override;
@@ -81,6 +82,8 @@ public:
     uint32_t screenCapture() override;
     void screenEnd(uint32_t ticket) override;
     size_t screenRead(uint32_t ticket, uint32_t offset, uint8_t *out, size_t size) override;
+    bool message(const char *text) override;
+    const char *message() const override;
     bool factoryCalibration(FactoryCalibration &) const override;
     bool factoryRecordFormat(FactoryRecordReading &) const override;
     bool recovery() override;

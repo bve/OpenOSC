@@ -226,7 +226,8 @@ void Engine::dispatch(const Command &c) {
                                Header::matches(c.header, "MMEMory:DATA");
     if (c.query && *c.argument && !queryArgument) { error(-108,true); return; }
     if (common(c) || systemCommand(c) || generatorCommand(c) || decodeCommand(c)) return;
-    if (backend_.multimeter() ? meterCommand(c) : scopeCommand(c)) return;
+    // The Scope's own headers first (a bare AUTO is its AUToscale); the DMM's on its screen and in the Scope.
+    if ((!backend_.multimeter() && scopeCommand(c)) || meterCommand(c)) return;
     error(-113, c.query);
 }
 void Engine::reply(const char *format, ...) {

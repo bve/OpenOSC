@@ -23,7 +23,7 @@ dmm::ReadingTrace::Reading *DataAccess::meterTraceMemory() {
 }
 // Each pass: started while asked for in a running Scope, stopped otherwise. While it runs, as the DMM:
 // the packets into the session, LinkWatchdog (power by bit 13 alone, the UART by interrupt) and the
-// function commands. A clock change leaves it running with its UART stopped until restartClockUsers.
+// function and AUTO/RANGE commands. A clock change leaves it running with its UART stopped until restartClockUsers.
 void DataAccess::serviceMeterTrace(uint32_t now) {
     if (clockSuspended_) return;
     if (!meterTraceAsked_ || !initialized_ || !active_ || stopping_ || measurement_ != MeasurementMode::Oscilloscope) {
@@ -73,12 +73,23 @@ void DataAccess::breakMeterTrace() {
     meterGap_ = true;
     if (!scopeHeld_) meterReadings_.gap(uint32_t(timeUs_ / 1000));
 }
+// The line in the function selected: started again when that function or its quantity is not the
+// line's (its scale, units and cursors with it); the same one (the trace's start, a restart's
+// reselection) keeps it.
+void DataAccess::restartMeterLine() {
+    const auto quantity = dmm::Functions::reading(meterTraceFunction_);
+    if (quantity == Quantity::Unknown || (meterTraceFunction_ == meterLineFunction_ && quantity == meterReadings_.quantity())) return;
+    meterReadings_.reset(quantity);
+    meterGap_ = false;
+    meterLineFunction_ = meterTraceFunction_;
+}
 void DataAccess::traceReading() {
     const auto &reading = meter_.live();
     if (reading.sequence != meter_.latest().sequence) return; // Not shown: an overload's settling (OverloadSettle).
     // HOLD (none of the readings a held frame shows is overwritten), or the old function's readings while a
     // selection runs.
     if (scopeHeld_ || dmm_.selectionStatus() == DataStatus::Busy) { meterGap_ = true; return; }
+    if (meterTraceFunction_ != meterLineFunction_) restartMeterLine(); // A selection made under HOLD.
     const auto &primary = reading.primary;
     const auto ms = uint32_t(reading.timestampUs / 1000);
     if (primary.quantity != Quantity::Unknown && primary.quantity != meterReadings_.quantity()) {

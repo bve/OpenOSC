@@ -286,6 +286,14 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     navigator_.repeats(events.repeat & ~events.shortPress);
     navigator_.leftStep(prefs_.menuLeftStep);
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
+    // A key over the remote message (DISPlay:TEXT), on any screen, only takes it away: the rest of its
+    // stroke is taken as a wake takes it, an AUTO/RANGE one closed. REL/Power held still powers off.
+    if (events.any() && !(events.longPress & Keypad::Relative) && view_.dismissMessage()) {
+        InputService::wake();
+        autoKey_.cancel();
+        data_.closeDmmRange();
+        return;
+    }
     meterRangeKeys(events, now); // KEY5 in the DMM: its own press, release and hold events.
     scopeAutoKeys(events, now);  // KEY5 on the Scope waveform screen: the same events, its own actions.
     if (!(events.shortPress | events.longPress | events.repeat)) return;
