@@ -243,6 +243,13 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - [Fyfar](https://github.com/Fyfar) built a web app for the oscilloscope, multimeter, signal generator
   and Bode analyzer.
   It connects over USB via Web Serial. [OpenOSC Panel](https://github.com/Fyfar/openosc-panel)
+- `SYSTem:KEY <name>[,<ms>]` presses a panel key through the real input path: `F1`..`F4`, `MENU`, `UP`,
+  `DOWN`, `LEFT`, `RIGHT`, `MODE`, `HOLD`, `AUTO`, `REL`, held for `<ms>` (default 100, 30 to 10000);
+  `*OPC?` answers when the key is released and its press has been handled. The long press (1 s; 2 s
+  for `AUTO` and `REL`) counts from the debounced press, about 26 ms in, so `F1,1000` is still a short
+  press. `AUTO` on the multimeter screen acts from 52 ms held. As on the panel, `REL` held longer than
+  **Settings → Device → Power → Power-off hold**, counted from the start of the press, powers the device
+  off, and `MODE` switching the instrument mode reconnects USB, so the reply is lost
 - USB Remote mode: the PC controls the device while the screen keeps showing live data
 - USB data works only in the 200/100 performance profile. Connect directly to a PC port:
   disconnects are known, especially through USB hubs.

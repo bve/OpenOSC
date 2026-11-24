@@ -5,6 +5,7 @@
 #include <cstring>
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/board.hpp"
+#include "openosc/platform/input_service.hpp"
 #include "openosc/platform/clocks.hpp"
 #include <cstdio>
 #include <strings.h>
@@ -166,8 +167,10 @@ bool InstrumentBackend::screen(MeasurementMode mode) {
 }
 // The DMM entry's restore counts while it is owed (meterRestorePending): *OPC? does not report
 // complete between the function's confirmation and the range command it still triggers.
+bool InstrumentBackend::pressKey(uint32_t key, uint32_t ms) { return InputService::inject(key, ms); }
 bool InstrumentBackend::busy() const {
-    return application_.data_.dmmBusy() || application_.meterRestorePending() || application_.data_.zeroBusy() || application_.autoBusy();
+    return application_.data_.dmmBusy() || application_.meterRestorePending() || application_.data_.zeroBusy() || application_.autoBusy() ||
+           InputService::injecting();
 }
 uint32_t InstrumentBackend::operationTimeoutMs() const {
     if (application_.autoBusy()) return 602000;
@@ -176,6 +179,7 @@ uint32_t InstrumentBackend::operationTimeoutMs() const {
         return application_.data_.zeroOperation().calibration().durationMs()+14000+
                uint32_t(application_.data_.zeroOperation().calibration().original().timebaseNs/100000);
     if (application_.meterRestorePending()) return MeterRestore::ChainMs + 2000; // Selection + restore, and a packet.
+    if (InputService::injecting()) return KeyMaxMs + 2000; // The longest SYSTem:KEY hold, and a packet.
     return 10000;
 }
 DataStatus InstrumentBackend::operationStatus() const { return application_.data_.dmmCommandStatus(); }

@@ -1,5 +1,6 @@
 #include "openosc/scpi/engine.hpp"
 #include "openosc/data/decimal.hpp"
+#include "openosc/platform/input.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -58,6 +59,30 @@ bool Engine::common(const Command &c) {
             char count[16]; std::snprintf(count,sizeof count,"%lu",(unsigned long)ScreenBytes);
             reply("#%u%s",unsigned(std::strlen(count)),count);
             screenBinary_ = true; screenAt_ = 0;
+        }
+    } else if (match("SYSTem:KEY")) {
+        // SYSTem:KEY <name>[,<ms>]: a panel key held for ms (default 100) through the real input path; MODE,
+        // like the key, may reconnect USB (the reply is lost) and REL held past the power-off hold setting
+        // powers the device off.
+        static constexpr struct { const char *name; uint32_t key; } keys[] = {
+            {"F1",Keypad::F1},{"F2",Keypad::F2},{"F3",Keypad::F3},{"F4",Keypad::F4},{"MENU",Keypad::Menu},
+            {"UP",Keypad::Up},{"DOWN",Keypad::Down},{"LEFT",Keypad::Left},{"RIGHT",Keypad::Right},
+            {"MODE",Keypad::Mode},{"HOLD",Keypad::HoldSave},{"AUTO",Keypad::AutoRange},{"REL",Keypad::Relative}};
+        if (c.query) error(-108,true);
+        else if (!*c.argument) error(-109);
+        else {
+            const char *comma = std::strchr(c.argument, ',');
+            size_t size = comma ? size_t(comma - c.argument) : std::strlen(c.argument);
+            while (size && (c.argument[size - 1] == ' ' || c.argument[size - 1] == '\t')) --size;
+            char name[16]; size = std::min(size, sizeof name - 1); // A longer one matches no key anyway.
+            std::memcpy(name, c.argument, size); name[size] = 0;
+            size_t index = 0;
+            while (index < sizeof keys / sizeof *keys && !Header::word(name, keys[index].name)) ++index;
+            double ms = 100;
+            if (index == sizeof keys / sizeof *keys) error(-224);
+            else if (comma && !Header::number(comma + 1, ms)) error(-104);
+            else if (ms < Backend::KeyMinMs || ms > Backend::KeyMaxMs || ms != unsigned(ms)) error(-222);
+            else if (!backend_.pressKey(keys[index].key, unsigned(ms))) error(-221);
         }
     } else if (match("SYSTem:STALl")) {
         char text[sizeof response_ - 1]; // Whole entries that fit the reply (StallLog::text).

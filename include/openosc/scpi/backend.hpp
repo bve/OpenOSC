@@ -78,6 +78,10 @@ public:
     // USB profile: the device reconnects, as after MODE on the panel.
     virtual MeasurementMode screen() const = 0;
     virtual bool screen(MeasurementMode) = 0;
+    // SYSTem:KEY: the panel key `key` (Keypad::Key) held for `ms` as a person would hold it, through the
+    // real input path. False: an earlier one is still held or its events not taken yet, or no keys. busy() holds while it is.
+    static constexpr uint32_t KeyMinMs = 30, KeyMaxMs = 10000; // 30 ms clears the 25 ms debounce.
+    virtual bool pressKey(uint32_t, uint32_t) { return false; }
     virtual bool busy() const = 0;
     virtual uint32_t operationTimeoutMs() const { return 10000; }
     virtual DataStatus operationStatus() const = 0;
