@@ -34,7 +34,9 @@ struct Viewport {
     int positionX(int64_t positionQ16) const; // The x of a record position, clamped to +-4096.
     // The crossing's distance before triggerIndex this window is placed by (0: by the index). The
     // marker subtracts it too where the zoom-out clamp then moved the window: the crossing stays there.
-    uint32_t phaseQ16 = 0;
+    uint16_t phaseQ16 = 0; // Below one point.
+    // The Roll grid's remainder at the window's start. A negative value marks an ordinary window.
+    int16_t gridRemainder = -1;
     // Every record point lands in a column (the window spans at least a point per column).
     bool aggregates() const { return spanQ16 >= uint64_t(width - 1) * 65536; }
     // Column x's record points [first, last) of a record of `samples` (aggregating windows).
@@ -43,9 +45,12 @@ struct Viewport {
         return positionQ16 >= 0 ? positionQ16 / 65536 : -((-positionQ16 + 65535) / 65536);
     }
     bool operator==(const Viewport &o) const {
-        return startQ16 == o.startQ16 && spanQ16 == o.spanQ16 && width == o.width && height == o.height && phaseQ16 == o.phaseQ16;
+        return startQ16 == o.startQ16 && spanQ16 == o.spanQ16 && width == o.width && height == o.height && phaseQ16 == o.phaseQ16 &&
+               gridRemainder == o.gridRemainder;
     }
 private:
+    // An aggregating Roll window on the grid of its continuous history (FrameMetadata::rollPhase).
+    void rollGrid(const scope::FrameMetadata &m);
     // The window's Q16 length before the trigger: spanQ16 * point / (samples - 1), exact (floor)
     // without the 64-bit product, as quotient and remainder. The point is the trigger's index, or
     // with `anchored` (a locked time view) the record's pretrigger point (index - triggerShift).

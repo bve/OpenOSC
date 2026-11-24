@@ -172,14 +172,20 @@ private:
     uint64_t recordWaitUs() const; // One record's deadline after the settle (or the last record).
     void fail(Failure failure) { failure_ = failure; state_ = State::Failed; lease_.release(); }
 };
-// Markers over a finished (or partial) sweep: indices into the points (count when none).
+// Markers over a finished (or partial) sweep: indices into the points (count when none). The gain's
+// (BodeShape, GitHub #122): Peak, the centre (a notch's when `notch`), and the -3 dB bounds below (Lower,
+// f1) and above it (Upper, f2), each the nearer to its level of the two points it is crossed between. Then
+// the phase's, from Phase0 on.
 struct BodeMarkers {
-    enum Name : uint8_t { None, Peak, Minus3, Phase0, Phase180 }; // Peak first: the -3 dB is under it.
-    unsigned peak, minus3, phase0, phase180;
-    unsigned total = 0; // The count given to of(): what at() says for none.
+    enum Name : uint8_t { None, Peak, Lower, Upper, Phase0, Phase180 };
+    static constexpr unsigned Named = Phase180; // Names after None.
+    uint16_t peak = 0, lower = 0, upper = 0, phase0 = 0, phase180 = 0;
+    uint16_t total = 0; // The count given to of(): what at() says for none.
+    bool notch = false;
     static BodeMarkers of(const BodePoint *points, unsigned count);
     unsigned at(Name name) const { // Its point, or total (None too).
-        return name == Peak ? peak : name == Minus3 ? minus3 : name == Phase0 ? phase0 : name == Phase180 ? phase180 : total;
+        return name == Peak ? peak : name == Lower ? lower : name == Upper ? upper : name == Phase0 ? phase0
+             : name == Phase180 ? phase180 : total;
     }
 };
 // Where the user looks: one selected point shared by the plot and the table (Left/Right one point),

@@ -28,6 +28,11 @@
 // - The run as it ran (its settings, the drive that played) is kept apart from the setup: the results,
 //   the Results page and the CSV are of it, whatever the setup says after. While its CSV is written the
 //   points stay as they are: no new sweep starts.
+// - The setup is the user's (GitHub #124): Preferences::bode, saved with the other settings at power-off.
+//   Each opening of the panel takes it from there (the boot's, a Reload's or the factory defaults); a
+//   committed row writes its own field back, and only a changed value asks for the save. The drive's
+//   limit clamps what plays and what the rows show; the saved start and stop stay as chosen (a lower
+//   drive and back keeps them).
 #include "openosc/application/controller.hpp"
 #include "openosc/acquisition/bode.hpp"
 #include "openosc/acquisition/bode_analysis.hpp"
@@ -37,6 +42,7 @@
 #include "openosc/generator/module_link.hpp"
 #include "openosc/generator/module_recovery.hpp"
 #include "openosc/platform/input.hpp"
+#include "openosc/settings/bode_preferences.hpp"
 #include "openosc/ui/editors/scope_actions.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include <algorithm>
@@ -49,6 +55,16 @@ namespace {
 using Sweep = scope::BodeSweep;
 using Settings = scope::BodeSettings;
 using Drive = ui::BodeDrive;
+using Setup = BodePreferences;
+// The saved setup's lists are the sweep's (indices into its choices) and its defaults the sweep's.
+static_assert(Setup::Densities == sizeof Settings::PointsChoices / sizeof *Settings::PointsChoices &&
+              Setup::Settles == sizeof Settings::SettleChoices / sizeof *Settings::SettleChoices &&
+              Setup::Averages == sizeof Settings::AverageChoices / sizeof *Settings::AverageChoices &&
+              Setup::Drives == unsigned(Drive::Custom) + 1, "BodePreferences' lists are the setup's");
+static_assert(Setup::Steps[Setup{}.start] == Settings{}.startMillihertz && Setup::Steps[Setup{}.stop] == Settings{}.stopMillihertz &&
+              Settings::PointsChoices[Setup{}.density] == Settings{}.pointsPerDecade &&
+              Settings::SettleChoices[Setup{}.settle] == Settings{}.settleMs &&
+              Settings::AverageChoices[Setup{}.averages] == Settings{}.averages, "BodePreferences' defaults are the sweep's");
 // The session: ITCM (.bode, zeroed at reset), built in place on first use. Nothing of it in DTCM.
 struct BodeSession {
     Settings settings;
@@ -63,8 +79,9 @@ struct BodeSession {
     bool results = false;      // The Results page (over Plot/Table).
     ui::BodeGraphs graphs = ui::BodeGraphs::Both; // The plot's graphs (F3: Both, Gain, Phase, then Table).
     bool setupFromResult = false;
+    // The setup's drive and Custom DAC codes (with `settings`: Preferences::bode as of the panel's opening, adopt()).
     Drive drive = Drive::FromGen;
-    uint16_t customLow = 0, customHigh = 1600; // Custom DAC codes (the Low level's span by default).
+    uint16_t customLow = 0, customHigh = 0;
     // The run as it ran: its settings and the drive that played (Results, CSV), its results.
     Settings run;
     generator::Settings excitation;
@@ -99,30 +116,32 @@ template <class Output> Confirmation confirmation(const Output &output, bool on)
     if (output.busy() || output.recovering() || output.status() == DataStatus::Busy) return Confirmation::Pending;
     return Confirmation::Failed;
 }
-constexpr int32_t CodeMax = 4095, CodeCoarse = 100; // Custom DAC codes: 0..4095, Left/Right 1, Up/Down 100.
+constexpr int32_t CodeMax = Setup::CodeMax, CodeCoarse = 100; // Custom DAC codes: 0..4095, Left/Right 1, Up/Down 100.
 alignas(8) __attribute__((section(".bode"))) unsigned char storage[sizeof(BodeSession)];
 bool built = false;
 BodeSession &session() {
     if (!built) { new (storage) BodeSession(); built = true; }
     return *reinterpret_cast<BodeSession *>(storage);
 }
-// The frequencies offered for the start and the stop: 1-2-5 from 1 Hz below the limit, then the limit.
-// The ZT703S's limit is below 500 kHz (DacCapabilities: 344 kHz at most), so the steps above it are the module's.
-constexpr uint64_t Steps[] = {1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000,
-                              10000000, 20000000, 50000000, 100000000, 200000000, 500000000, 1000000000, 2000000000,
-                              5000000000};
+// The frequencies offered for the start and the stop (BodePreferences::Steps below the limit, then the
+// limit). frequencyAt: a saved step at or above the limit, or Setup::Limit, plays at the limit.
 unsigned frequencies(uint64_t maximum) {
     unsigned n = 0;
-    while (n < sizeof Steps / sizeof *Steps && Steps[n] < maximum) ++n;
+    while (n < Setup::StepCount && Setup::Steps[n] < maximum) ++n;
     return n + 1;
 }
 uint64_t frequencyAt(unsigned index, uint64_t maximum) {
-    return index < sizeof Steps / sizeof *Steps && Steps[index] < maximum ? Steps[index] : maximum;
+    return index < Setup::StepCount && Setup::Steps[index] < maximum ? Setup::Steps[index] : maximum;
 }
 unsigned indexOf(uint64_t millihertz, uint64_t maximum) {
     const unsigned n = frequencies(maximum);
     for (unsigned i = 0; i < n; ++i) if (frequencyAt(i, maximum) >= millihertz) return i;
     return n - 1;
+}
+// A start or stop as the setup saves it: its step, or Setup::Limit when it is the limit on offer.
+uint8_t savedStep(uint64_t millihertz, uint64_t maximum) {
+    const unsigned index = indexOf(millihertz, maximum);
+    return index + 1 < frequencies(maximum) ? uint8_t(index) : Setup::Limit;
 }
 template <size_t N> unsigned choiceOf(const uint32_t (&values)[N], uint32_t value) {
     for (unsigned i = 0; i < N; ++i) if (values[i] == value) return i;
@@ -162,11 +181,21 @@ struct Drives {
 generator::Settings excitationOf(const BodeSession &s, const generator::Settings &gen) {
     return Drives::excitation(gen, s.drive, s.customLow, s.customHigh);
 }
-// The sine's highest frequency for the drive chosen, at the clock the setup saw (ZT703S).
-void limit(BodeSession &s, const generator::Settings &gen) {
+// The saved setup into the session (the panel's opening): the lists and the drive (a drive this board
+// does not offer plays From GEN, the saved one kept); the start and the stop follow with limit().
+void adopt(BodeSession &s, const Setup &setup) {
+    s.settings.pointsPerDecade = Settings::PointsChoices[setup.density % Setup::Densities];
+    s.settings.settleMs = Settings::SettleChoices[setup.settle % Setup::Settles];
+    s.settings.averages = Settings::AverageChoices[setup.averages % Setup::Averages];
+    s.drive = setup.drive < Drives::Count ? Drive(setup.drive) : Drive::FromGen;
+    s.customLow = setup.customLow; s.customHigh = setup.customHigh;
+}
+// The sine's highest frequency for the drive chosen, at the clock the setup saw (ZT703S), and the saved
+// start and stop under it.
+void limit(BodeSession &s, const generator::Settings &gen, const Setup &setup) {
     s.maximum = Drives::maximum(excitationOf(s, gen), s.timerHz);
-    if (s.settings.stopMillihertz > s.maximum) s.settings.stopMillihertz = s.maximum;
-    if (s.settings.startMillihertz > s.maximum) s.settings.startMillihertz = s.maximum;
+    s.settings.startMillihertz = frequencyAt(setup.start, s.maximum);
+    s.settings.stopMillihertz = frequencyAt(setup.stop, s.maximum);
 }
 // The generator's timer clock the limits need: true with it read (or none needed, the ZT706S module).
 bool readClock(DataAccess &data, BodeSession &s) {
@@ -223,7 +252,7 @@ private:
 class Rows final : public ui::PropertyList {
 public:
     enum Row : uint8_t { Start, Stop, Density, Settle, Averages, Level, LowCode, HighCode, Run, Plot, Results, SaveCsv, Count };
-    Rows(BodeSession &s, const generator::Settings &gen) : s_(s), gen_(gen) {
+    Rows(BodeSession &s, const generator::Settings &gen, const Setup &setup) : s_(s), gen_(gen), setup_(setup) {
         for (unsigned r = 0; r < Count; ++r) {
             const bool custom = r == LowCode || r == HighCode, result = r >= Plot;
             if ((custom && s.drive != Drive::Custom) || (result && !s.measured)) continue;
@@ -307,13 +336,31 @@ public:
         case Averages: if (index >= 3) return false; t.averages = Settings::AverageChoices[index]; return true;
         case Level:
             if (index >= Drives::Count) return false;
-            s_.drive = Drive(index); limit(s_, gen_); return true;
+            s_.drive = Drive(index); limit(s_, gen_, setup_); return true;
         default: return false;
         }
+    }
+    // Row i's value as committed into the saved setup; true when that changed it (a save is due). Out of
+    // line: a leaf, its frame off bodeKeys' (the start of a sweep below it is that chain's deepest).
+    [[gnu::noinline]] bool keep(unsigned i, Setup &setup) const {
+        const auto before = setup;
+        const auto &t = s_.settings;
+        switch (at(i)) {
+        case Start: setup.start = savedStep(t.startMillihertz, s_.maximum); break;
+        case Stop: setup.stop = savedStep(t.stopMillihertz, s_.maximum); break;
+        case Density: setup.density = uint8_t(choiceOf(Settings::PointsChoices, t.pointsPerDecade)); break;
+        case Settle: setup.settle = uint8_t(choiceOf(Settings::SettleChoices, t.settleMs)); break;
+        case Averages: setup.averages = uint8_t(choiceOf(Settings::AverageChoices, t.averages)); break;
+        case Level: setup.drive = uint8_t(s_.drive); break;
+        case LowCode: case HighCode: setup.customLow = s_.customLow; setup.customHigh = s_.customHigh; break;
+        default: break;
+        }
+        return setup != before;
     }
 private:
     BodeSession &s_;
     const generator::Settings &gen_;
+    const Setup &setup_;
     Row rows_[Count]{};
     unsigned n_ = 0;
 };
@@ -382,7 +429,7 @@ void followB(BodeSession &s, unsigned before) {
 // phase's crossings); false (nothing changed) when there is none.
 bool jumpShown(scope::BodeCursor &cursor, bool up, const BodeSession &s) {
     auto at = cursor;
-    for (unsigned k = 0; k < 4; ++k) {
+    for (unsigned k = 0; k < scope::BodeMarkers::Named; ++k) {
         if (!at.jump(up, s.points, s.measured)) return false;
         const bool phase = at.marker >= scope::BodeMarkers::Phase0;
         if (phase ? ui::showsPhase(s.graphs) : ui::showsGain(s.graphs)) { cursor = at; return true; }
@@ -425,7 +472,8 @@ void ApplicationController::openBode(uint32_t now) {
     auto &s = session();
     if (!restore(data_, s, now)) { view_.notify(Tooltip::Unavailable, "Bode: the last sweep's restore is pending", now); return; } // Never two sessions' originals.
     if (!readClock(data_, s)) { view_.notify(Tooltip::Critical, "Generator clock unknown: switch GEN on and off", now); return; }
-    limit(s, data_.generator().settings());
+    adopt(s, prefs_.bode); // The saved setup (GitHub #124): the boot's, a Reload's or the defaults.
+    limit(s, data_.generator().settings(), prefs_.bode);
     panel_ = Panel::Bode;
     s.cursor.table = false; s.cursor.marker = scope::BodeMarkers::None; s.results = false; // The plot first.
     s.setupFromResult = false;
@@ -435,7 +483,7 @@ void ApplicationController::showBode(bool plot) {
     auto &s = session();
     if (!plot) {
         view_.bode().hide();
-        const Rows rows(s, data_.generator().settings());
+        const Rows rows(s, data_.generator().settings(), prefs_.bode);
         navigator_.reset(rows.index(Rows::Run));
         view_.properties(rows, navigator_);
         return;
@@ -468,7 +516,7 @@ void ApplicationController::startBodeSweep(uint32_t now) {
     // The DAC clock and the generator's level (amplitude) as they are now (a host may have changed either
     // since the setup opened, e.g. over SCPI while the result showed): the limit, then the grid, from them.
     if (!readClock(data_, s)) { view_.notify(Tooltip::Critical, "Generator clock unknown: switch GEN on and off", now); return; }
-    limit(s, data_.generator().settings());
+    limit(s, data_.generator().settings(), prefs_.bode);
     const auto grid = scope::BodeGrid::of(s.settings, 1000, s.maximum);
     if (!grid.valid()) { view_.notify(Tooltip::Unavailable, "Bode: Stop must be above Start", now); return; }
     if (!restore(data_, s, now)) { view_.notify(Tooltip::Unavailable, "Bode: the last sweep's restore is pending", now); return; }
@@ -517,21 +565,27 @@ void ApplicationController::bodeKeys(const KeyEvents &events, uint32_t keys, uin
     // the sweep goes on (its CSV waits while the image is written). A short HOLD stays as it was: nothing here.
     if (events.longPress & Keypad::HoldSave) { startScreenshot(now); return; }
     if (!view_.bode().visible()) { // SETUP rows.
-        Rows rows(s, data_.generator().settings());
         using Outcome = ui::PropertyNavigator::Outcome;
-        const auto outcome = navigator_.keys(keys, rows);
+        Outcome outcome;
+        Rows::Row row;
+        { // The rows the keys act on end here: `shown` below takes their stack slot.
+            Rows rows(s, data_.generator().settings(), prefs_.bode);
+            outcome = navigator_.keys(keys, rows);
+            row = rows.at(navigator_.row());
+            // A committed row into the saved setup (GitHub #124): saved at power-off, a value that is already saved asks nothing.
+            if (outcome == Outcome::Changed && rows.keep(navigator_.row(), prefs_.bode)) changed(now);
+        }
         if (outcome == Outcome::Back) {
             if (s.setupFromResult) showBode(true);
             else openPanel(Panel::Analyze, ui::ScopeActions(view_.waveform().options()), ui::ScopeActions::Bode);
             return;
         }
         if (outcome == Outcome::Activate) {
-            const auto row = rows.at(navigator_.row());
             if (row == Rows::Run) { startBodeSweep(now); return; }
             if (row == Rows::Plot || row == Rows::Results) { s.results = row == Rows::Results; showBode(true); return; }
             if (row == Rows::SaveCsv) saveBodeCsv(now);
         }
-        const Rows shown(s, data_.generator().settings()); // A drive's change shows or hides Custom's codes.
+        const Rows shown(s, data_.generator().settings(), prefs_.bode); // A drive's change shows or hides Custom's codes.
         view_.properties(shown, navigator_);
         return;
     }

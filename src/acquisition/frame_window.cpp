@@ -23,6 +23,7 @@ FrameView FrameView::slice(uint32_t first,uint32_t count) const {
     const bool wraps=uint64_t(metadata.origin)+first+count-1>UINT32_MAX;
     metadata.origin=uint32_t(metadata.origin+first);
     if (!wraps || !(metadata.ring&(metadata.ring-1))) metadata.origin%=metadata.ring;
+    if (metadata.hasRollPhase()) metadata.rollPhase += first;
     metadata.samples=count;
     if (metadata.triggered && metadata.triggerIndex>=first && metadata.triggerIndex-first<count) metadata.triggerIndex-=first;
     else metadata.clearTrigger();

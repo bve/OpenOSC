@@ -36,7 +36,7 @@ struct BodeViewData {
     bool second = false;           // The active cursor is B.
     bool results = false;          // The Results page.
     BodeGraphs graphs = BodeGraphs::Both; // The plot's graphs.
-    scope::BodeMarkers markers{0, 0, 0, 0, 0};
+    scope::BodeMarkers markers;
     const scope::BodeResults *analysis = nullptr;     // The run's results,
     const scope::BodeSettings *run = nullptr;         // its settings
     const generator::Settings *excitation = nullptr;  // and the drive it played.

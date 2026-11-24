@@ -29,28 +29,62 @@ void keepWorst(BodeCrossing &kept, double hz, double value) {
 }
 } // namespace
 
+BodeShape BodeShape::of(const BodePoint *points, unsigned count) {
+    BodeShape s;
+    s.center = s.lower = s.upper = uint16_t(count);
+    if (!points) return s;
+    unsigned high = count, low = count;
+    for (unsigned i = 0; i < count; ++i)
+        if (gained(points[i])) {
+            if (high == count || points[i].gainDb > points[high].gainDb) high = i;
+            if (low == count || points[i].gainDb < points[low].gainDb) low = i;
+        }
+    if (high == count) return s;
+    // The highest or lowest valid gain on one side of `at` (none: the value at `at`).
+    const auto extreme = [&](unsigned at, int direction, bool highest) {
+        float value = points[at].gainDb;
+        for (int i = int(at) + direction; i >= 0 && i < int(count); i += direction)
+            if (gained(points[i])) value = highest ? std::fmax(value, points[i].gainDb) : std::fmin(value, points[i].gainDb);
+        return value;
+    };
+    const float below = extreme(low, -1, true), above = extreme(low, 1, true);
+    const float rise = std::fmin(below, above) - points[low].gainDb;
+    const float drop = points[high].gainDb - std::fmax(extreme(high, -1, false), extreme(high, 1, false));
+    s.found = true;
+    s.notch = rise >= NotchDb && rise > drop;
+    s.center = uint16_t(s.notch ? low : high);
+    s.lowerLevel = s.notch ? below - 3 : points[high].gainDb - 3;
+    s.upperLevel = s.notch ? above - 3 : s.lowerLevel;
+    // Outwards from the centre through neighbouring valid points to the first crossing of the level.
+    const auto bound = [&](int direction, float level) {
+        for (int i = s.center; ; i += direction) {
+            const int j = i + direction;
+            if (j < 0 || j >= int(count) || !gained(points[j])) return uint16_t(count); // The sweep's end, or a gap.
+            double t;
+            const bool beyond = s.notch ? points[j].gainDb >= level : points[j].gainDb <= level;
+            if (beyond && between(points[i].gainDb, points[j].gainDb, level, t)) return uint16_t(j);
+        }
+    };
+    s.lower = bound(-1, s.lowerLevel);
+    s.upper = bound(1, s.upperLevel);
+    return s;
+}
+
 BodeResults BodeResults::of(const BodePoint *points, unsigned measured) {
     BodeResults r;
     if (!points) return r;
-    for (unsigned i = 0; i < measured; ++i)
-        if (gained(points[i]) && (!r.peak || points[i].gainDb > r.peakDb)) {
-            r.peak = true; r.peakIndex = i; r.peakHz = points[i].frequencyHz; r.peakDb = points[i].gainDb;
-        }
-    if (r.peak) { // -3 dB: outwards from the peak through neighbouring valid points only.
-        const double level = double(r.peakDb) - 3;
-        const auto search = [&](int direction, BodeCrossing &out) {
-            for (int i = int(r.peakIndex); ; i += direction) {
-                const int j = i + direction;
-                if (j < 0 || j >= int(measured) || !gained(points[j])) return; // The sweep's end, or a gap.
-                double t;
-                if (points[j].gainDb <= level && between(points[i].gainDb, points[j].gainDb, level, t)) {
-                    out = {true, float(frequencyAt(points[i], points[j], t)), float(level)};
-                    return;
-                }
-            }
+    const auto shape = BodeShape::of(points, measured);
+    if (shape.found) {
+        const auto &c = points[shape.center];
+        r.peak = true; r.notch = shape.notch; r.peakIndex = shape.center; r.peakHz = c.frequencyHz; r.peakDb = c.gainDb;
+        const auto crossing = [&](unsigned outer, int direction, float level, BodeCrossing &out) {
+            if (outer >= measured) return;
+            const auto &p = points[outer - direction], &q = points[outer];
+            double t;
+            if (between(p.gainDb, q.gainDb, level, t)) out = {true, float(frequencyAt(p, q, t)), level};
         };
-        search(-1, r.lower);
-        search(1, r.upper);
+        crossing(shape.lower, -1, shape.lowerLevel, r.lower);
+        crossing(shape.upper, 1, shape.upperLevel, r.upper);
         if (r.lower.found && r.upper.found) { r.bandwidth = true; r.bandwidthHz = r.upper.hz - r.lower.hz; }
     }
     // Margins: between neighbours that both have a phase, the second unwrapped nearest the first.

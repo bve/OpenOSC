@@ -50,6 +50,7 @@ struct TriggerEdge {
 };
 struct FrameMetadata {
     static constexpr uint32_t MaximumRing = 524288; // Points a capture, Roll or imported ring may hold.
+    static constexpr uint64_t NoRollPhase = UINT64_MAX;
     uint64_t timestampUs = 0;
     uint64_t timebaseNs = 0; // Display division; zero means fit the complete legacy record.
     Rational samplesPerSecond;
@@ -59,23 +60,27 @@ struct FrameMetadata {
     // A capture the trigger was forced on (TFOR): placed at the force point unless `triggered` (an
     // edge the settings ask for is in the data). Not part of any record or file format.
     bool forced = false;
+    bool eventKnown = false, pretriggerKnown = false;
     // A triggered record whose edge is not at its configured pretrigger point (TriggerRecord::select:
     // no edge the ring holds the whole record around): triggerIndex minus that point. The view places
     // the edge where the pretrigger point is. Zero for every other record; not in any file format.
     int32_t triggerShift = 0;
-    int32_t eventOffset = 0; bool eventKnown = false; // The comparator event, in points from triggerIndex (WAV:EVENt?).
-    TriggerEdge triggerEdge; // What triggerIndex was found for (known only while triggered).
+    int32_t eventOffset = 0; // The comparator event, in points from triggerIndex (WAV:EVENt?).
     // The record's configured pretrigger point, (samples - 1) * position / 1000 of the settings it was
     // cut with (TriggerRecord::select), also when no edge qualified (Auto's newest points, a forced
     // record, an edge Noise reject refused): an untriggered record shows its trigger position marker
     // there (GitHub #65), a place only, never a trigger (not `triggered`, no TRIG'D). Display only: not
     // in any file format, SCPI reply or the record's samples; a record cut elsewhere has none.
-    uint32_t pretrigger = 0; bool pretriggerKnown = false;
+    uint32_t pretrigger = 0;
+    TriggerEdge triggerEdge; // What triggerIndex was found for (known only while triggered).
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
     // Immutable boot profile entry. Transferred file payloads already hold the corrected codes.
     const InterleaveMatch *interleaveMatch = nullptr;
+    // Point 0's index since this Roll history started. Display metadata omitted from files and SCPI.
+    uint64_t rollPhase = NoRollPhase;
     ChannelMetadata channels[2];
+    bool hasRollPhase() const { return rolling && rollPhase != NoRollPhase; }
     bool valid() const;
     // No trigger: not triggered, index and shift zero (the one reset of all three).
     void clearTrigger() { triggered = false; triggerIndex = 0; triggerShift = 0; eventOffset = 0; eventKnown = false; triggerEdge = {}; }

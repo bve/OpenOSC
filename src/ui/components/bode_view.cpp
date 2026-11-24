@@ -174,10 +174,14 @@ void BodeView::readout(lv_layer_t *layer, int y) const {
         } else std::snprintf(s, sizeof s, "#%u  %s  %s dB  phase %s  low CH2", d.cursor.point + 1, f, g, NoValue);
     }
     text(layer, s, x, y, room, foreground_);
-    static constexpr const char *Names[] = {"", "Peak", "-3 dB", "0\xc2\xb0", "\xc2\xb1" "180\xc2\xb0"};
+    static constexpr const char *Names[] = {"", "Peak", "-3 dB f1", "-3 dB f2", "0\xc2\xb0", "\xc2\xb1" "180\xc2\xb0"};
     char right[24] = "";
     uint32_t color = phase_;
-    if (d.cursor.marker != Markers::None) { std::snprintf(right, sizeof right, "%s", Names[d.cursor.marker % 5]); color = accent_; }
+    if (d.cursor.marker != Markers::None) {
+        const unsigned k = d.cursor.marker % (Markers::Named + 1);
+        std::snprintf(right, sizeof right, "%s", k == Markers::Peak && d.markers.notch ? "Notch" : Names[k]);
+        color = accent_;
+    }
     else if (p.valid() && (p.flags & Point::Partial)) { std::snprintf(right, sizeof right, "fewer averages"); color = muted_; }
     else if (p.valid() && p.ch1Vpp > 0) {
         char v[16]; plot::Format::quantity(p.ch1Vpp, "Vpp", v, sizeof v, 3);
@@ -335,14 +339,47 @@ void BodeView::plot(lv_layer_t *layer) const {
     };
     cursorLine(d.other, false);
     cursorLine(d.cursor.point, true);
+    const auto gainMarker = [&](unsigned name, const Point &point) {
+        // Draw the cutoff at its interpolated position; cursor jumps still select a measured point.
+        if (d.analysis) {
+            const auto *edge = name == Markers::Lower ? &d.analysis->lower :
+                               name == Markers::Upper ? &d.analysis->upper : nullptr;
+            if (edge && edge->found) return lv_point_t{fx(edge->hz), g.y(edge->value)};
+        }
+        return lv_point_t{fx(point.frequencyHz), g.y(point.gainDb)};
+    };
     for (unsigned k = Markers::Peak; k <= Markers::Phase180; ++k) {
         const unsigned i = d.markers.at(Markers::Name(k));
         const bool onPhase = k >= Markers::Phase0;
         if (i >= d.measured || !d.points || (onPhase ? !phase || !d.points[i].phased() : !gain || !d.points[i].valid())) continue;
         const auto &p = d.points[i];
-        const int xx = fx(p.frequencyHz), yy = onPhase ? ph.y(p.phaseDeg) : g.y(p.gainDb);
+        const auto at = onPhase ? lv_point_t{fx(p.frequencyHz), ph.y(p.phaseDeg)} : gainMarker(k, p);
+        const int xx = at.x, yy = at.y;
         if (k == d.cursor.marker) box(layer, xx - 4, yy - 4, xx + 4, yy + 4, foreground_);
         box(layer, xx - 2, yy - 2, xx + 2, yy + 2, accent_);
+    }
+    // The gain's markers tagged (GitHub #122): f1 and f2 on the -3 dB bounds, fc on the centre between
+    // both. Beside the trace's open side: under a peak's markers, over a notch's (else the other side).
+    // A tag that would leave the gain graph or touch one placed before it (f1, f2, then fc) is left out.
+    if (!gain || !d.points) return;
+    int16_t left[3], right[3], top[3]; // The tags placed (16-bit: LVGL draws on the main stack).
+    unsigned tags = 0;
+    const bool bounds = d.markers.lower < d.measured && d.markers.upper < d.measured;
+    for (const auto k : {Markers::Lower, Markers::Upper, Markers::Peak}) {
+        const unsigned i = d.markers.at(k);
+        if (i >= d.measured || !d.points[i].valid() || (k == Markers::Peak && !bounds)) continue;
+        const char *tag = k == Markers::Peak ? "fc" : k == Markers::Lower ? "f1" : "f2";
+        const auto at = gainMarker(k, d.points[i]);
+        const int w = width(tag), yy = at.y;
+        const int x = std::clamp(int(at.x) - w / 2, Left, Right - w);
+        int y = d.markers.notch ? yy - 17 : yy + 4;
+        if (y < g.top || y + 13 > g.bottom) y = d.markers.notch ? yy + 4 : yy - 17;
+        bool clear = y >= g.top && y + 13 <= g.bottom;
+        for (unsigned t = 0; t < tags && clear; ++t)
+            clear = x + w + 1 < left[t] || right[t] + 1 < x || y + 13 < top[t] || top[t] + 13 < y;
+        if (!clear) continue;
+        left[tags] = int16_t(x); right[tags] = int16_t(x + w); top[tags++] = int16_t(y);
+        text(layer, tag, x, y, w + 1, accent_);
     }
 }
 void BodeView::table(lv_layer_t *layer) const {
@@ -382,12 +419,13 @@ void BodeView::table(lv_layer_t *layer) const {
         // The note: why not, a weak CH2, fewer averages than asked, else the markers on it.
         const char *noted = !p.valid() ? note(p.flags) : !p.phased() ? "low CH2" : (p.flags & Point::Partial) ? "part avg" : nullptr;
         if (!noted) {
-            static constexpr const char *Tags[] = {"", "Peak", "-3dB", "0\xc2\xb0", "180\xc2\xb0"};
+            static constexpr const char *Tags[] = {"", "Peak", "f1", "f2", "0\xc2\xb0", "180\xc2\xb0"};
             b[0] = 0;
             for (unsigned k = Markers::Peak; k <= Markers::Phase180; ++k)
                 if (d.markers.at(Markers::Name(k)) == i) {
                     const size_t used = std::strlen(b);
-                    std::snprintf(b + used, sizeof b - used, "%s%s", used ? " " : "", Tags[k]);
+                    const char *tag = k == Markers::Peak && d.markers.notch ? "Notch" : Tags[k];
+                    std::snprintf(b + used, sizeof b - used, "%s%s", used ? " " : "", tag);
                 }
             noted = b;
         }
@@ -414,11 +452,12 @@ void BodeView::results(lv_layer_t *layer) const {
     const bool any = r && r->peak;
     if (any) { Decimal::fixed(r->peakDb, 2, f, sizeof f); std::snprintf(value, sizeof value, "%s dB", f); frequency(r->peakHz, f, sizeof f); std::snprintf(where, sizeof where, "at %s", f); }
     else { std::snprintf(value, sizeof value, "%s", NoValue); where[0] = 0; }
-    row("Peak gain", value, where);
+    const bool notch = any && r->notch;
+    row(notch ? "Notch gain" : "Peak gain", value, where);
     row("-3 dB low", any ? hertz(r->lower) : NoValue, "");
     row("-3 dB high", any ? hertz(r->upper) : NoValue, "");
     if (any && r->bandwidth) frequency(r->bandwidthHz, value, sizeof value); else std::snprintf(value, sizeof value, "%s", NoValue);
-    row("Bandwidth", value, "");
+    row(notch ? "Notch width" : "Bandwidth", value, "");
     const auto margin = [&](const char *label, const scope::BodeCrossing *c, const char *unit, unsigned decimals) {
         if (c && c->found) {
             signedFixed(c->value, decimals, f, sizeof f); std::snprintf(value, sizeof value, "%s%s", f, unit);
@@ -454,7 +493,9 @@ void BodeView::runLines(lv_layer_t *layer, int y) const {
         else std::snprintf(s, sizeof s, "Drive: sine, %s level", level);
         text(layer, s, Margin, y + Line, Width - 2 * Margin, muted_);
     }
-    text(layer, "-3 dB: nearest each side of the peak", Margin, y + 2 * Line, Width - 2 * Margin, muted_);
+    const bool notch = d.analysis && d.analysis->peak && d.analysis->notch;
+    text(layer, notch ? "-3 dB: each side's passband, from the notch" : "-3 dB: nearest each side of the peak", Margin,
+         y + 2 * Line, Width - 2 * Margin, muted_);
     text(layer, "Margins: the smallest; -- none qualifies", Margin, y + 3 * Line, Width - 2 * Margin, muted_);
 }
 // The selected point's stimulus and output (Vpp), or why it has none; its V/div on the right.

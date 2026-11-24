@@ -47,7 +47,10 @@ bool Model::projectTime(const scope::FrameView &frame, bool fresh, const ColumnC
         trace.zero = axes_[c < 2 ? c : 0].origin;
     }
     const bool aggregate = viewport_.aggregates();
-    const bool adaptive = aggregate && options_.averaging <= 1 && options_.reduction == Reduction::Adaptive;
+    // A Roll record keeps its envelope: Adaptive decides from the whole screen's noise, so a change of
+    // that decision would redraw all of the history in the other form.
+    const bool adaptive = aggregate && options_.averaging <= 1 && options_.reduction == Reduction::Adaptive &&
+                          !frame.metadata().hasRollPhase();
     int32_t excursion[2] = {};
     auto &screen = storage_.screen;
     screen.count[0] = screen.count[1] = 0;

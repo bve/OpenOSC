@@ -30,7 +30,7 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
         const uint64_t triggerPosition = centered ? spanQ16 / 2 : pretrigger(m, anchored);
         startQ16 += int64_t(m.triggerIndex) * 65536 - origin - int64_t(triggerPosition);
         // The crossing, not the first sample past it, at the trigger's place (GitHub #34).
-        if (phase < 65536 && phased(m, o)) { phaseQ16 = phase; startQ16 -= phase; }
+        if (phase < 65536 && phased(m, o)) { phaseQ16 = uint16_t(phase); startQ16 -= phase; }
     }
     // Without a trigger, Auto still needs captured history on both sides of the initial window: its
     // pretrigger point (#65) is placed as a trigger there would be, so the marker keeps its place at
@@ -43,7 +43,25 @@ bool Viewport::calculate(const scope::FrameMetadata &m, const Options &o, unsign
                   : (int64_t(record) - int64_t(spanQ16)) / 2;
     // An explicitly centered held trigger can leave part of the viewport outside the record.
     if (o.zoomOut > 1 && !centered) startQ16 = std::clamp<int64_t>(startQ16, origin, origin + int64_t(record - spanQ16));
+    gridRemainder = -1;
+    if (m.hasRollPhase() && aggregates() && (o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay)) rollGrid(m);
     return true;
+}
+// Columns are cells of one grid over the continuous Roll history: cell k starts at the absolute Q16
+// position floor(k * length / width). The window ends with the cell holding its last point, so a
+// completed cell keeps its points as the history grows and only moves by whole columns; the newest
+// cell grows. The grid repeats every window length. Two shifts by eight reduce the sample index
+// to a Q16 phase without overflowing, even after a long uninterrupted recording.
+void Viewport::rollGrid(const scope::FrameMetadata &m) {
+    const uint64_t length = spanQ16 + 65536;
+    const uint64_t phase = (((m.rollPhase % length) << 8) % length) << 8;
+    const int64_t end = (int64_t(phase) + startQ16) % int64_t(length);
+    const uint64_t past = end < 0 ? uint64_t(end + int64_t(length)) : uint64_t(end);
+    // The first cell starting at or after `past`: ceil(past * width / length).
+    const uint64_t cell = (past * width + length - 1) / length;
+    const uint64_t boundary = cell * length;
+    gridRemainder = int16_t(boundary % width);
+    startQ16 += int64_t(boundary / width - past);
 }
 uint64_t Viewport::requestedSpanQ16(const scope::FrameMetadata &m, const Options &o) {
     if (!m.valid() || !o.valid()) return 0;
@@ -71,8 +89,9 @@ uint64_t Viewport::place(const scope::FrameMetadata &m, uint32_t point) const {
 }
 void Viewport::column(unsigned x, uint32_t samples, uint32_t &first, uint32_t &last) const {
     const uint64_t length = spanQ16 + 65536;
-    const int64_t start = floorSample(startQ16 + int64_t(length * x / width));
-    const int64_t end = floorSample(startQ16 + int64_t(length * (x + 1) / width));
+    const unsigned remainder = unsigned(std::max<int>(0, gridRemainder));
+    const int64_t start = floorSample(startQ16 + int64_t((remainder + length * x) / width));
+    const int64_t end = floorSample(startQ16 + int64_t((remainder + length * (x + 1)) / width));
     first = uint32_t(std::clamp<int64_t>(start, 0, samples));
     last = uint32_t(std::clamp<int64_t>(end, 0, samples));
 }
@@ -80,7 +99,15 @@ int64_t Viewport::position(unsigned x) const { return startQ16 + int64_t(spanQ16
 int Viewport::positionX(int64_t positionQ16) const {
     if (!spanQ16 || width < 2)
         return 0;
-    const int64_t value = (positionQ16 - startQ16) * (width - 1) / int64_t(spanQ16);
+    const int64_t delta = positionQ16 - startQ16;
+    if (gridRemainder >= 0) {
+        // Invert the rounded sample boundaries used by column(), including their fractional phase.
+        const int64_t offset = (delta + 65536) * width - 1 - gridRemainder;
+        const int64_t length = int64_t(spanQ16) + 65536;
+        const int64_t value = offset >= 0 ? offset / length : -((-offset + length - 1) / length);
+        return int(std::clamp<int64_t>(value, -4096, 4096));
+    }
+    const int64_t value = delta * (width - 1) / int64_t(spanQ16);
     return int(std::clamp<int64_t>(value, -4096, 4096));
 }
 namespace {

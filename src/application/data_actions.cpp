@@ -193,12 +193,22 @@ bool ApplicationController::markTriggerEditor() {
     request.trigger = triggerEditor_.settings();
     return triggerEditor_.levelBounds(triggerBounds(request));
 }
-bool ApplicationController::triggerMidpoint(uint32_t now) {
+bool ApplicationController::triggerMidpoint(uint32_t now, bool pretrigger) {
     auto request = data_.scopeRequest();
+    if (pretrigger) request.trigger.position = 500; // Applied with the level: one restart.
     scope::FrameLease frame;
     double midpoint;
     if (!data_.acquireScopeWait(frame) || !ui::TriggerEditor::midpoint(frame.view(), request.trigger.channel, midpoint)) {
-        view_.notify(Tooltip::Unavailable, "50% needs a completed channel capture",now);
+        frame.release(); // Applying restarts capture, which needs every frame lease back.
+        if (!pretrigger || request.same(data_.scopeRequest())) {
+            view_.notify(Tooltip::Unavailable, "50% needs a completed channel capture",now);
+            return false;
+        }
+        if (!applyScope(request, now, ScopeApply::StageIfHeld)) {
+            view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
+            return false;
+        }
+        view_.notify(Tooltip::Advisory, "Pretrigger 50%; level needs a capture",now);
         return false;
     }
     const unsigned source = unsigned(request.trigger.channel);
@@ -207,12 +217,15 @@ bool ApplicationController::triggerMidpoint(uint32_t now) {
     const double exact = scope::TriggerLevel::inFrame(midpoint, record, target);
     frame.release(); // Applying restarts capture, which needs every frame lease back.
     request.trigger.level = triggerBounds(request).nearest(exact);
-    if (!applyEdited(request,now,LevelIntent::Set)) { view_.notify(Tooltip::Unavailable, "Finish data transfer first",now); return false; }
+    const bool applied = pretrigger ? applyScope(request, now, ScopeApply::StageIfHeld)
+                                    : applyEdited(request, now, LevelIntent::Set);
+    if (!applied) { view_.notify(Tooltip::Unavailable, "Finish data transfer first", now); return false; }
     const auto place = triggerPlace(data_.scopeRequest());
     const double remainder = exact - place.level;
     const bool limited = std::abs(remainder) > .5;
     triggerFollow_.anchor(place, remainder, limited);
     if (limited) pulseTriggerLimit(now);
+    if (pretrigger) view_.notify(Tooltip::Done, "Trigger level and pretrigger 50%", now);
     return true;
 }
 bool ApplicationController::restoreStartupOutput(const PreferencesResult &applied) {

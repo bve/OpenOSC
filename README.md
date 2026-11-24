@@ -141,14 +141,16 @@ Captured on a ZT703S running OpenOSC.
 
 - Two channels, 20 mV/div to 10 V/div, timebase from 10 ns/div to 20 s/div
 - Trigger modes Auto, Normal and Single, with adjustable pre/post-trigger position and Center trigger.
-  Tap **F3** to select Trigger, tap again to cycle modes, or hold it to set the level to 50%
+  Tap **F3** to select Trigger and use Left/Right to adjust pretrigger. Tap **F3** again to cycle modes.
+  Hold **F3** to set the trigger level to the signal midpoint and pretrigger to 50%. Pan with **F2**
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
 - In the default **Quick** profile, tap **AUTO** to start Auto Setup or cancel it in progress.
   Hold **AUTO** for 2 s in Y-T to open **Zoom & Pan**. Up/Down zoom the view, Left/Right pan, and
   **F4** returns to the previous card. The **Classic** profile uses a tap to reset pan and a hold to
   start Auto Setup. Choose the profile and the **F2**/**F4** hold actions in **Settings → Display → Scope shortcuts**
 - Hold **F1** to choose the selected channel's probe ratio, including 10000:1 (**X10K** on the Position card).
-  Hold **F2** for Home view or Reset zoom & pan. Hold **F4** to open the assigned editor
+  Hold **F2** for Home view or Reset zoom & pan. Hold **F4** to open the assigned editor.
+  Returning from the Cursor settings shortcut selects the first enabled cursor for arrow-key control
 - Configurable on-screen measurements, two per channel in the footer, time and level cursors
 - Hardware frequency counter with an averaged on-screen overlay
 - XY, MATH and reference waveforms; sin(x)/x and spline interpolation, fading or infinite persistence, Glow

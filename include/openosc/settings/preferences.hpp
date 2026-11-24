@@ -9,6 +9,7 @@
 #include "openosc/platform/idle_policy.hpp"
 #include "openosc/power/battery.hpp"
 #include "openosc/settings/tooltips.hpp"
+#include "openosc/settings/bode_preferences.hpp"
 #include <cstdint>
 
 namespace openosc {
@@ -26,14 +27,16 @@ struct Preferences {
     // steps and offset in mV; zero (older files) shows the factory scale. One word with batteryDisplay.
     int8_t batteryGainPermille = 0;
     int16_t batteryOffsetMv = 0;
-    uint32_t panReverse = 0;                  // Left/Right pan: 0 moves the view, 1 the waveform.
-    uint32_t clockIndicator = 0;              // Scope top bar L/M/H run profile glyph: 0 off (older files), 1 on.
-    uint32_t holdTime = 2;                    // REL power-off hold: HoldTimes index.
+    // Bytes beside batteryOffsetMv, with bode after them: the space four 32-bit words took (sizeof checked below).
+    uint8_t panReverse = 0;                   // Left/Right pan: 0 moves the view, 1 the waveform.
+    uint8_t clockIndicator = 0;               // Scope top bar L/M/H run profile glyph: 0 off (older files), 1 on.
+    uint8_t holdTime = 2;                     // REL power-off hold: HoldTimes index.
     static constexpr uint32_t HoldTimes[] = {1000, 1500, 2000};
     uint32_t holdMs() const { return HoldTimes[holdTime < 3 ? holdTime : 2]; }
     // Settings > Files & USB > USB controller: 1 enabled (USB data where the clock allows it, 200 MHz),
     // 0 disabled (the OTG controller stays off; Recovery's USB disk is not affected). Older files: enabled.
-    uint32_t usbController = 1;
+    uint8_t usbController = 1;
+    BodePreferences bode; // Analyze > Bode setup (GitHub #124), in the file's scope object.
     uint32_t generatorShape = 0, generatorDutyPermille = 500;
     uint64_t generatorMillihertz = 1000000; // uint64: the ZT706S module reaches 10 MHz = 1e10 mHz.
     uint32_t generatorLevel = 0, generatorMinimumCode = 1000, generatorMaximumCode = 3000;
@@ -51,7 +54,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && holdTime < 3 && usbController <= 1 &&
+               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && holdTime < 3 && usbController <= 1 && bode.valid() &&
                generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&
@@ -66,4 +69,8 @@ struct Preferences {
                     RunModes[scope.runMode].maximumSampleRate(),scope::RecordBudget::Maximum,sampling);
     }
 };
+#if defined(__arm__)
+// Several stacks hold a Preferences (the load's candidate and its parse's, the defaults): it must not grow.
+static_assert(sizeof(Preferences) <= 632, "Preferences grew: it sits on the stack");
+#endif
 } // namespace openosc

@@ -1,4 +1,5 @@
 #include "openosc/acquisition/bode.hpp"
+#include "openosc/acquisition/bode_analysis.hpp"
 #include "openosc/acquisition/ranges.hpp"
 #include "openosc/acquisition/timebases.hpp"
 #include <algorithm>
@@ -284,29 +285,19 @@ bool BodeSweep::step(BodePort &port) {
 }
 
 BodeMarkers BodeMarkers::of(const BodePoint *points, unsigned count) {
-    BodeMarkers m{count, count, count, count, count};
+    BodeMarkers m;
+    m.peak = m.lower = m.upper = m.phase0 = m.phase180 = m.total = uint16_t(count);
     if (!points) return m;
-    for (unsigned i = 0; i < count; ++i)
-        if (points[i].valid() && (m.peak == count || points[i].gainDb > points[m.peak].gainDb)) m.peak = i;
-    if (m.peak < count) { // The point nearest 3 dB under the peak where it is crossed, above the peak, else below.
-        const float level = points[m.peak].gainDb - 3;
-        const auto nearer = [&](unsigned crossed, unsigned before) {
-            return std::fabs(points[before].gainDb - level) < std::fabs(points[crossed].gainDb - level) ? before : crossed;
-        };
-        const auto find = [&](int direction) {
-            unsigned before = m.peak;
-            for (int at = int(m.peak) + direction; at >= 0 && at < int(count); at += direction) {
-                const unsigned i = unsigned(at);
-                if (!points[i].valid()) { before = count; continue; }
-                if (before < count && points[before].gainDb > level && points[i].gainDb <= level)
-                    return nearer(i, before);
-                before = i;
-            }
-            return count;
-        };
-        m.minus3 = find(1);
-        if (m.minus3 == count) m.minus3 = find(-1);
-    }
+    const auto shape = BodeShape::of(points, count);
+    m.peak = shape.center; m.notch = shape.notch;
+    // Of the two points a bound is crossed between, the one nearer its level.
+    const auto nearer = [&](unsigned outer, int direction, float level) {
+        if (outer >= count) return uint16_t(count);
+        const unsigned inner = outer - direction;
+        return uint16_t(std::fabs(points[inner].gainDb - level) < std::fabs(points[outer].gainDb - level) ? inner : outer);
+    };
+    m.lower = nearer(shape.lower, -1, shape.lowerLevel);
+    m.upper = nearer(shape.upper, 1, shape.upperLevel);
     // Phase crossings between neighbouring points with a phase (valid, CH2 not weak): through 0, and
     // through +-180 (the wrap); an invalid or weak point between them is a gap nothing crosses.
     unsigned previous = count;
@@ -314,8 +305,8 @@ BodeMarkers BodeMarkers::of(const BodePoint *points, unsigned count) {
         if (!points[i].phased()) { previous = count; continue; }
         if (previous < count) {
             const float a = points[previous].phaseDeg, b = points[i].phaseDeg;
-            if (m.phase0 == count && ((a > 0) != (b > 0)) && std::fabs(a - b) < 180) m.phase0 = i;
-            if (m.phase180 == count && std::fabs(a - b) >= 180) m.phase180 = i;
+            if (m.phase0 == count && ((a > 0) != (b > 0)) && std::fabs(a - b) < 180) m.phase0 = uint16_t(i);
+            if (m.phase180 == count && std::fabs(a - b) >= 180) m.phase180 = uint16_t(i);
         }
         previous = i;
     }
@@ -331,8 +322,8 @@ void BodeCursor::page(int pages, unsigned measured) { step(pages * int(PageRows)
 bool BodeCursor::jump(bool next, const BodePoint *points, unsigned measured) {
     const auto markers = BodeMarkers::of(points, measured);
     unsigned name = marker;
-    for (unsigned k = 0; k < 4; ++k) {
-        name = next ? name % 4 + 1 : name <= 1 ? 4 : name - 1;
+    for (unsigned k = 0; k < BodeMarkers::Named; ++k) {
+        name = next ? name % BodeMarkers::Named + 1 : name <= 1 ? BodeMarkers::Named : name - 1;
         const unsigned at = markers.at(BodeMarkers::Name(name));
         if (at < measured) { marker = BodeMarkers::Name(name); point = at; return true; }
     }

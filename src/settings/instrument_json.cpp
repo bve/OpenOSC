@@ -2,6 +2,7 @@
 #include "openosc/settings/arrangement_json.hpp"
 #include "openosc/settings/color_value.hpp"
 #include "openosc/settings/scope_appearance_json.hpp"
+#include "openosc/acquisition/bode.hpp"
 #include <cstring>
 
 namespace openosc {
@@ -231,6 +232,56 @@ void encodeDecoder(JsonObject scope, const decoding::Settings &d) {
     can["source"] = canSources[unsigned(d.can.source)]; can["difference_mv"] = d.can.differenceMv;
     can["data_bitrate"] = d.can.dataBitrate; can["data_sample_point"] = d.can.dataSamplePointPermille;
 }
+// scope.bode (GitHub #124): the Bode setup, written only when it differs from the defaults. Each field
+// stands alone (as scope.keys): a missing or damaged one keeps its default, the rest of the file kept.
+// The frequencies in hertz, one of BodePreferences::Steps, or "limit" (the drive's highest sine); the
+// lists by their values; the Custom drive's codes as a [low, high] pair.
+constexpr const char *bodeDrives[] = {"gen", "dedicated", "low", "high", "custom"}; // ui::BodeDrive.
+static_assert(sizeof bodeDrives / sizeof *bodeDrives == BodePreferences::Drives);
+using BodeChoices = scope::BodeSettings;
+static_assert(sizeof BodeChoices::PointsChoices / sizeof *BodeChoices::PointsChoices == BodePreferences::Densities &&
+              sizeof BodeChoices::SettleChoices / sizeof *BodeChoices::SettleChoices == BodePreferences::Settles &&
+              sizeof BodeChoices::AverageChoices / sizeof *BodeChoices::AverageChoices == BodePreferences::Averages);
+void bodeFrequency(JsonObjectConst object, const char *name, uint8_t &index) {
+    const auto value = object[name];
+    if (value.is<const char *>() && !std::strcmp(value.as<const char *>(), "limit")) { index = BodePreferences::Limit; return; }
+    if (!value.is<uint32_t>()) return;
+    for (uint8_t i = 0; i < BodePreferences::StepCount; ++i)
+        if (BodePreferences::Steps[i] == uint64_t(value.as<uint32_t>()) * 1000) { index = i; return; }
+}
+template<size_t N> void bodeChoice(JsonObjectConst object, const char *name, uint8_t &index, const uint32_t (&values)[N]) {
+    if (!object[name].is<uint32_t>()) return;
+    for (uint8_t i = 0; i < N; ++i) if (values[i] == object[name].as<uint32_t>()) { index = i; return; }
+}
+void bode(JsonObjectConst object, BodePreferences &output) {
+    BodePreferences b;
+    bodeFrequency(object, "start_hz", b.start);
+    bodeFrequency(object, "stop_hz", b.stop);
+    bodeChoice(object, "points_per_decade", b.density, BodeChoices::PointsChoices);
+    bodeChoice(object, "settle_ms", b.settle, BodeChoices::SettleChoices);
+    bodeChoice(object, "averages", b.averages, BodeChoices::AverageChoices);
+    option(object, "drive", b.drive, bodeDrives);
+    const auto codes = object["custom_codes"].as<JsonArrayConst>();
+    if (codes.size() == 2 && codes[0].is<uint32_t>() && codes[1].is<uint32_t>() &&
+        BodePreferences::codes(codes[0].as<uint32_t>(), codes[1].as<uint32_t>())) {
+        b.customLow = uint16_t(codes[0].as<uint32_t>()); b.customHigh = uint16_t(codes[1].as<uint32_t>());
+    }
+    output = b;
+}
+void encodeBode(JsonObject scope, const BodePreferences &b) {
+    if (b == BodePreferences{}) return;
+    auto object = scope.createNestedObject("bode");
+    const auto frequency = [&](const char *name, uint8_t index) {
+        if (index < BodePreferences::StepCount) object[name] = uint32_t(BodePreferences::Steps[index] / 1000);
+        else object[name] = "limit";
+    };
+    frequency("start_hz", b.start); frequency("stop_hz", b.stop);
+    object["points_per_decade"] = BodeChoices::PointsChoices[b.density];
+    object["settle_ms"] = BodeChoices::SettleChoices[b.settle];
+    object["averages"] = BodeChoices::AverageChoices[b.averages];
+    object["drive"] = bodeDrives[b.drive];
+    auto codes = object.createNestedArray("custom_codes"); codes.add(b.customLow); codes.add(b.customHigh);
+}
 }
 bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Preferences &output) {
     auto &s = output.scope;
@@ -283,6 +334,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
     if (scope["appearance"].is<JsonObjectConst>()) ScopeAppearanceJson::parse(scope["appearance"].as<JsonObjectConst>(), s.appearance);
     if (scope["decoder"].is<JsonObjectConst>()) decoder(scope["decoder"].as<JsonObjectConst>(), s.decoder);
     if (scope["keys"].is<JsonObjectConst>()) keys(scope["keys"].as<JsonObjectConst>(), s.keys);
+    if (scope["bode"].is<JsonObjectConst>()) bode(scope["bode"].as<JsonObjectConst>(), output.bode);
     if (meter.containsKey("range_function")) { // The owner of range_index; absent: unknown.
         if (!meter["range_function"].is<const char *>()) return false;
         unsigned f = 0;
@@ -367,6 +419,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     auto keys = scope.createNestedObject("keys");
     keys["auto"] = autoKeys[unsigned(s.keys.automatic)]; keys["f2_hold"] = resetHolds[unsigned(s.keys.reset)];
     keys["f4_hold"] = shortcuts[unsigned(s.keys.destination())];
+    encodeBode(scope, values.bode);
     meter["display"] = displays[values.meter.display]; meter["statistics"] = bool(values.meter.statistics); meter["bar_graph"] = bool(values.meter.bar);
     meter["auto"] = bool(values.meter.automatic); meter["range_index"] = values.meter.range;
     meter["face"] = faces[values.meter.face]; meter["palette"] = palettes[values.meter.palette];

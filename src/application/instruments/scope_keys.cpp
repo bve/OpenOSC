@@ -7,11 +7,18 @@
 #include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/ui/scope/view_zoom.hpp"
 #include <algorithm>
+#include <cstdio>
 
 namespace openosc {
 namespace {
 int axis(uint32_t keys, uint32_t negative, uint32_t positive) {
     return (keys & positive ? 1 : 0) - (keys & negative ? 1 : 0);
+}
+// Its own frame, after the apply has returned: the text is not on the stack during the capture restart.
+[[gnu::noinline]] void notifyPretrigger(ApplicationView &view, unsigned position, bool held, uint32_t now) {
+    char text[32];
+    std::snprintf(text, sizeof text, "Pretrigger %u.%u%%%s", position / 10, position % 10, held ? " for RUN" : "");
+    view.notify(Tooltip::Done, text, now);
 }
 // Left/Right: the next capture's time/div, one 1-2-5 step, in RUN and HOLD alike (issue #7).
 void stepTimebase(ScopeRequest &request, uint32_t keys) {
@@ -163,7 +170,7 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
         if (fine) view_.notify(Tooltip::Unavailable, "No record to move", now); // Once per press: a held key repeats silently.
         horizontal = 0;
     }
-    const auto change = focus_ == plot::Focus::Trigger || focus_ == plot::Focus::Zoom // Pan only: no channel moves.
+    const auto change = focus_ == plot::Focus::Zoom // Pan only: no channel moves.
         ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &model, false)}
         : plot::TraceMove::apply(request, options, selectedChannel_, held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
                                  &model);
@@ -172,6 +179,30 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
         view_.waveform().configure(options);
         if (!held) queuePlotSave(now);
     }
+}
+// Issue #123: the Trigger card's Left/Right set the pretrigger, the share of the next records before their
+// trigger, 0-100 %: a press 1 %, a held key 5 %. Right adds history before the trigger. Held (HOLD or a
+// finished Single), it is staged for the next capture and the held record and its view stay (as Center
+// trigger); Roll has no trigger to place.
+void ApplicationController::movePretrigger(uint32_t arrows, uint32_t now, bool fine) {
+    const int direction = axis(arrows, Keypad::Left, Keypad::Right);
+    if (!direction) return;
+    auto request = data_.scopeRequest();
+    if (request.rolling()) {
+        if (fine) view_.notify(Tooltip::Unavailable, "Pretrigger: not in Roll", now);
+        return;
+    }
+    const int position = std::clamp(int(request.trigger.position) + direction * (fine ? 10 : 50), 0, 1000);
+    if (position == request.trigger.position) {
+        if (fine) view_.notify(Tooltip::Unavailable, position ? "Pretrigger at 100%" : "Pretrigger at 0%", now);
+        return;
+    }
+    request.trigger.position = uint16_t(position);
+    if (!applyScope(request, now, ScopeApply::StageIfHeld)) {
+        view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
+        return;
+    }
+    notifyPretrigger(view_, unsigned(position), data_.scopeHeld(), now);
 }
 bool ApplicationController::holdKeys(uint32_t keys, uint32_t now) {
     if (!(keys & Keypad::HoldSave)) return false;
@@ -265,10 +296,8 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         if (request.trigger.level == (delta > 0 ? bounds.high : bounds.low)) pulseTriggerLimit(now); // Each press against it.
         return;
     }
-    if (focus_ == plot::Focus::Position || focus_ == plot::Focus::Trigger) { // Left/Right move the record in both, as on the factory firmware.
-        moveTrace(arrows, now, fine);
-        return;
-    }
+    if (focus_ == plot::Focus::Trigger) { movePretrigger(arrows, now, fine); return; } // F2 keeps the pan (issue #123).
+    if (focus_ == plot::Focus::Position) { moveTrace(arrows, now, fine); return; }
     scaleKeys(arrows, now);
 }
 // F1: Up/Down the selected channel's V/div, Left/Right the time/div, one standard step each, in RUN
@@ -345,7 +374,7 @@ bool ApplicationController::scopeHoldKeys(uint32_t holds, uint32_t now) {
     syncCursorFocus();
     if (holds & Keypad::F1) openProbe(now);
     else if (holds & Keypad::F2) resetView(now);
-    else if (holds & Keypad::F3) triggerMidpoint(now); // 50 %, as on the factory firmware.
+    else if (holds & Keypad::F3) triggerMidpoint(now, true); // Level 50 %, as on the factory firmware, and pretrigger 50 % (#123).
     else openShortcut(now);
     dataRefresh_ = true;
     return true;

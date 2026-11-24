@@ -215,6 +215,7 @@ private:
     void syncCursorFocus();
     void openAnalyze(unsigned row);
     void enterCursors(uint32_t now);
+    void focusCursors(); // The Cursor card on its first line drawn, nothing changed or saved (GitHub #125).
     void showTrigger(const scope::FrameMetadata *shown);
     void beginHeldView();
     void followNextCapture(); // A held record is shown at the next capture's time/div and V/div (issues #7, #93).
@@ -252,7 +253,11 @@ private:
     void finishAutoStep(uint32_t now);
     bool centerTrigger(uint32_t now);
     void moveCursor(uint32_t keys, uint32_t now, bool fine);
-    bool triggerMidpoint(uint32_t now);
+    // The level at 50 % of the newest record's channel; with `pretrigger` (F3 held, issue #123) also the
+    // pretrigger at 50 %, set even when no record gives a midpoint.
+    bool triggerMidpoint(uint32_t now, bool pretrigger = false);
+    // The Trigger card's Left/Right (issue #123): the next captures' pretrigger.
+    void movePretrigger(uint32_t arrows, uint32_t now, bool fine);
     scope::TriggerLevel::Bounds triggerBounds(const ScopeRequest &request);
     int triggerStep(int direction, bool fine);
     // The level at the upper (+1) or lower (-1) end of triggerBounds on the screen (the channel's

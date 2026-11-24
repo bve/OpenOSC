@@ -19,7 +19,20 @@ void ApplicationController::backPanel() {
     const bool child = panel_ == Panel::Display || panel_ == Panel::Measurements || panel_ == Panel::Acquisition ||
                        panel_ == Panel::Decoder;
     if (child && analyzeRow_ != ~0U) { openAnalyze(analyzeRow_); return; }
+    // The F4 hold's cursor settings (openShortcut: the section alone, no Analyze under it).
+    const bool cursorShortcut = panel_ == Panel::Display && sectionDirect_ && plotControls_.group == plot::Controls::Group::Cursors;
     closePanel();
+    if (cursorShortcut) focusCursors();
+}
+// Back on the waveform from the cursor settings (GitHub #125): the Cursor card selected on the first line
+// drawn (Time A, or Level A with Voltage only), so the arrows move it at once; the lines and channel are
+// those the settings left. No line to move (both off, X-Y): the focus stays where it was, or leaves a
+// Cursor card that has nothing to move (syncCursorFocus).
+void ApplicationController::focusCursors() {
+    const auto &options = view_.waveform().options();
+    if (!plot::CursorControl::available(options)) { syncCursorFocus(); return; }
+    cursors_.enter(options.cursors);
+    setScopeFocus(plot::Focus::Cursor);
 }
 void ApplicationController::closePanel() {
     analyzeRow_ = ~0U;
