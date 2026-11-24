@@ -86,8 +86,10 @@ bool Engine::systemCommand(const Command &c) {
         if (const int e = path(p, true, file, sizeof file)) { error(int16_t(e), true); return true; }
         if (*p) { error(-108, true); return true; }
         endFile();
-        if (!(stage_ = claimStage(this))) { error(-200, true); return true; } // Both stages stream (two sessions).
-        if (const int e = backend_.fileOpen(file, bytes)) { endFile(); error(int16_t(e), true); return true; }
+        const uint32_t generation = generation_; // FatFs waits run USB's background pass: it may reset us.
+        if (const int e = backend_.fileOpen(file, bytes)) { error(int16_t(e), true); return true; }
+        if (generation != generation_) { backend_.fileClose(); return true; }
+        if (!(stage_ = claimStage(this))) { backend_.fileClose(); error(-200, true); return true; } // Both stages stream.
         char count[16]; std::snprintf(count, sizeof count, "%lu", (unsigned long)bytes);
         reply("#%u%s", unsigned(std::strlen(count)), count);
         fileBinary_ = true; fileRead_ = 0; fileBytes_ = bytes;

@@ -29,7 +29,9 @@ void Engine::endFile() {
 }
 void Engine::fillStage() {
     if (!fileBinary_ || stageAt_ < stageEnd_ || fileRead_ == fileBytes_) return;
+    const uint32_t generation = generation_;
     const size_t n = backend_.fileRead(fileRead_, stage_, std::min<size_t>(fileBytes_ - fileRead_, StageBytes));
+    if (generation != generation_) return; // Reset by the background pass during the read.
     if (!n) { padding_ += fileBytes_ - fileRead_; fileRead_ = fileBytes_; errors_.push(-250); return; } // Shrunk or unreadable.
     fileRead_ += uint32_t(n); stageAt_ = 0; stageEnd_ = uint16_t(n);
 }

@@ -49,7 +49,7 @@ void InstrumentUsb::transfer(uint32_t now) {
         if (serialEngine_.available()) {
             const auto count = serialEngine_.read(serialPipe.transmit,usb::TransferBytes);
             if (count && usb::transmit(1,count,generation_)) serialZlp_ = !(count & 63);
-        } else if (serialZlp_ && usb::transmit(1,0,generation_)) serialZlp_ = false;
+        } else if (serialZlp_ && !serialEngine_.more() && usb::transmit(1,0,generation_)) serialZlp_ = false; // Not mid-file.
     }
 }
 void InstrumentUsb::background(uint32_t now) {
