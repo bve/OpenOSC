@@ -23,6 +23,7 @@ struct TrendView {
     uint32_t sequence = 0;                          // Of the frame published with the copy; 0: no valid copy.
     uint32_t size = 0, perPoint = 1, window = 0;    // Points stored; ADC points in each; points the plot spans.
     Rational rate;                                  // Stored points per second.
+    uint64_t timestampUs = 0;                       // Of the middle of the first point, as the frame's.
     Quantity quantity = Quantity::Unknown;          // Of the DMM values.
     // CH1 min, mean, max; CH2 min, mean, max (volts, by `metadata`'s channels); DMM min, mean, max (SI): NaN
     // for a channel that is off, an uncalibrated one and a DMM point without a reading.

@@ -78,8 +78,9 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     if (!sameCh1Range(previous, r) || !interleaving(r)) interleaveHeadroom_ = false;
     request_ = r;
     // Bank 3 is no trend's from here: a capture of a later start (deferred, or from serviceBackground under
-    // a draw) may write it before startCapture runs, and nothing may be drawn from it meanwhile.
-    if (!r.trend) trend_.forget();
+    // a draw) may write it before startCapture runs, and nothing may be drawn from it meanwhile. AutoSetup's
+    // and the zero's trials take the trial area instead: a held trend stays for their end to return to.
+    if (!r.trend && !internalCapture()) trend_.forget();
     forcePending_ = false; forcedSequence_ = 0; // A force belongs to the acquisition it was given for.
     if (!describeNext(configuration_)) describeChannels(configuration_); // Conversions follow the request.
     // In a burst of setting changes only the last one starts a capture (poll waits for quiet): each

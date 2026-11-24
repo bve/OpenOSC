@@ -39,7 +39,7 @@ public:
 private:
     bool writeCsvHeader(size_t bytes);
     void measureCsv();
-    // The CSV's metadata: the frame's, a trend copy's points, window and rate in a trend.
+    // The CSV's metadata: the frame's; in a trend, with the copy's sequence, timestamp, points, window and rate.
     scope::FrameMetadata csvMetadata(const scope::FrameMetadata &frame) const;
     // The CSV's metadata lines into buffer_, the "# dmm:" line with a dmm column and a trend's "# trend:" line: their
     // bytes, 0 when they do not fit.
