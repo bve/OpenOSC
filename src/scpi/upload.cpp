@@ -12,15 +12,7 @@ namespace {
 int uploadArguments(const char *text, char *name, size_t size, uint32_t &offset) {
     const auto skip = [](const char *p) { while (*p == ' ' || *p == '\t') ++p; return p; };
     const char *p = text;
-    if (*p != '"' && *p != '\'') return *p ? -104 : -109;
-    const char quote = *p++;
-    size_t length = 0;
-    while (*p && *p != quote) {
-        if (*p == '/' || *p == '\\' || length + 1 >= size) return -224;
-        name[length++] = *p++;
-    }
-    if (*p++ != quote || !length) return length ? -104 : -224;
-    name[length] = 0;
+    if (const int code = Header::quoted(p, name, size)) return code;
     p = skip(p);
     if (*p++ != ',') return -109;
     p = skip(p);

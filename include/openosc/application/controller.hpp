@@ -103,6 +103,7 @@ private:
     void recoveryFromSettings(uint32_t now);
     void serviceRecovery(uint32_t now);
     bool recoveryPending_=false;
+    char recoveryInstall_[FirmwareUpload::NameBytes]{}; // The image the coming Recovery installs and starts ("": its menu).
     uint32_t recoveryAt_=0;
     void confirmShutdown(ShutdownAction action);
     using ConfirmHandler=void (ApplicationController::*)(uint32_t);

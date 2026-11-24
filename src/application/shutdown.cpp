@@ -12,6 +12,7 @@
 #include "openosc/usb/instrument_usb.hpp"
 
 namespace openosc {
+static_assert(RecoveryRequest::NameBytes == FirmwareUpload::NameBytes, "Recovery request name");
 void ApplicationController::confirmShutdown(ShutdownAction action) {
     confirmAction_=action;
     confirmOperation(ui::Confirmation(action),&ApplicationController::requestShutdown);
@@ -62,7 +63,7 @@ public:
     void finish(ShutdownAction action) override {
         if (action == ShutdownAction::PowerOff) PowerControl::powerOff();
         if (action == ShutdownAction::Restart) NVIC_SystemReset();
-        RecoveryRequest::restart(); // Recovery re-initialises the NOR itself and repairs the volume.
+        RecoveryRequest::restart(a_.recoveryInstall_[0] ? a_.recoveryInstall_ : nullptr); // Recovery re-initialises the NOR itself and repairs the volume.
     }
     bool resume() override;
 private:

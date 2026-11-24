@@ -212,9 +212,17 @@ bool InstrumentBackend::generatorStartup(bool restore) {
 }
 bool InstrumentBackend::remote() const { return application_.remote_; }
 bool InstrumentBackend::remote(bool value) { return application_.setRemote(value); }
-bool InstrumentBackend::recovery() {
+bool InstrumentBackend::recovery(const char *install) {
     auto &a=application_;
     if (a.recoveryPending_ || a.shutdown_!=ShutdownAction::None || a.shots_.busy() || a.data_.zeroBusy()) return false;
+    if (install) { // The image is there, and no upload is still writing the volume (a detached one is cleaned first).
+        char path[FirmwareUpload::PathBytes];
+        FILINFO info{};
+        a.upload_.service();
+        if (a.upload_.open() || !FirmwareUpload::path(install, path, sizeof path) ||
+            f_stat(path, &info) != FR_OK || (info.fattrib & AM_DIR)) return false;
+        std::snprintf(a.recoveryInstall_, sizeof a.recoveryInstall_, "%s", install);
+    } else a.recoveryInstall_[0] = 0;
     a.recoveryPending_=true; a.recoveryAt_=Board::milliseconds()+250;
     return true;
 }

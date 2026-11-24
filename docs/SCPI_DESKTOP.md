@@ -105,6 +105,10 @@ buffers busy returns `-200`. `MMEM:UPL:END?` closes the file, replaces
 in decimal. An upload is canceled when its session ends or the device shuts
 down.
 
+`SYST:REC:INST "FILENAME"` restarts into Recovery, which installs
+`/openosc/UPDATE/FILENAME` and starts the new firmware without a key press.
+A Recovery older than this command stops in its menu instead.
+
 ## Serial decoder results
 
 Select **UART (TTL)**, **RS-232**, **RS-485** or **DMX512** on the instrument under
