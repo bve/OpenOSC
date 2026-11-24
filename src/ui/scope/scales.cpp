@@ -1,3 +1,4 @@
+#include "openosc/acquisition/trend.hpp"
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include "openosc/ui/scope/painter.hpp"
@@ -22,8 +23,9 @@ void Painter::scales() {
         }
     // A trend's time/div grows steadily: its digits keep their width (Format::steady), as on the card.
     const double perDivision = DisplayScale::secondsPerDivision(view, m);
+    const bool trend = trend_ && trend_->sequence && m.rolling;
     if ((o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay) &&
-        (trendShown() ? Format::steady(perDivision, 3, value, sizeof value) : Format::quantity(perDivision, "s", value, sizeof value))) {
+        (trend ? Format::steady(perDivision, 3, value, sizeof value) : Format::quantity(perDivision, "s", value, sizeof value))) {
         std::snprintf(label, sizeof label, "%s/div", value);
         text(label, view.width - 98, view.height - 14, palette_.readout, 96);
     }

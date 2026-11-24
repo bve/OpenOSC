@@ -209,7 +209,10 @@ void ApplicationController::displayData(uint32_t now) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
         dataAt_ = now;
         if (state_.mode == MeasurementMode::Oscilloscope) {
-            if (panel_ != Panel::Bode) view_.captureStatus(data_.status(), data_.scopeHeld());
+            if (panel_ != Panel::Bode) {
+                view_.captureStatus(data_.status(), data_.scopeHeld());
+                view_.scopeTrend(data_.trendShown(), data_.nowUs()); // The pill shows above a menu: its clock goes on.
+            }
         } else if (state_.mode == MeasurementMode::Multimeter) {
             const auto &meter = data_.meter();
             char word[sizeof lastMeterHoldWord_];
@@ -263,8 +266,8 @@ void ApplicationController::displayData(uint32_t now) {
             syncCursorFocus();
             syncZoomFocus(); // X-Y, FFT or Roll now: Back to the card Zoom & Pan came from.
         }
-        const auto &trend = data_.trendShown();
-        view_.scopeGenerator(data_.generator().snapshot(), captureHalved, trend, data_.nowUs());
+        view_.scopeTrend(data_.trendShown(), data_.nowUs());
+        view_.scopeGenerator(data_.generator().snapshot(), captureHalved);
         {
             const auto &options = view_.waveform().options();
             char text[40];

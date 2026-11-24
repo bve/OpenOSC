@@ -62,20 +62,7 @@ void ScopeScreen::select(unsigned channel) {
 // next captures' maximum sample rate is halved (a held record stays as it was captured). A view away
 // from home (zoom, pan) keeps its marker in front of it (issue #111), in the GEN note's colour when
 // both are on; a GEN note too wide for the plot beside it leaves out the ADC remark, then the shape.
-// A valid trend copy under a rolling frame is a trend on show (AutoSetup's trials keep a held trend's copy
-// but show their own frames): its elapsed time goes to the status pill, and the cards have no pending
-// time/div (the record's own is shown).
-void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend, uint64_t nowUs) {
-    const auto &model = host_.waveform().model();
-    const bool trending = trend.sequence != 0 && model.hasFrame() && model.metadata().rolling;
-    if (trending_ != trending) { trending_ = trending; cards(); }
-    // Running: the clock since the record's first sample, a second at a time (the copy grows a point at a
-    // time, tens of seconds late in a long record). Held: what it reached, or the copy's span for one
-    // shown held from the start.
-    int32_t seconds = -1;
-    if (trending && !statusHeld_ && nowUs >= trend.startUs) seconds = int32_t((nowUs - trend.startUs) / 1000000);
-    else if (trending) seconds = trendSeconds_ >= 0 ? trendSeconds_ : trend.rate.valid() ? int32_t(trend.size / trend.rate.value()) : -1;
-    if (trendSeconds_ != seconds) { trendSeconds_ = seconds; status(health_, statusHeld_); }
+void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalved) {
     if (focus_ == plot::Focus::Zoom) { zoomNote(); return; }
     auto &widget = host_.waveform();
     char text[64], frequency[24]; // The view marker first, the GEN note after it: no buffer of its own (stack).
@@ -94,6 +81,20 @@ void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalve
         if (!view || Elements::textWidth(text, 12) <= room) break;
     }
     widget.note(text, gen ? host_.theme().generator : host_.theme().cursor);
+}
+// A valid trend copy under a rolling frame is a trend on show (AutoSetup's trials keep a held trend's copy
+// but show their own frames): its elapsed time goes to the status pill, and the cards have no pending
+// time/div (the record's own is shown). Running, the time is the clock since the record's first sample,
+// a second at a time (the copy grows a point at a time, tens of seconds late in a long record); held,
+// what it reached, or the copy's span for one shown held from the start.
+void ScopeScreen::trend(const scope::TrendView &copy, uint64_t nowUs) {
+    const auto &model = host_.waveform().model();
+    const bool trending = copy.sequence != 0 && model.hasFrame() && model.metadata().rolling;
+    if (trending_ != trending) { trending_ = trending; cards(); }
+    int32_t seconds = -1;
+    if (trending && !statusHeld_ && nowUs >= copy.startUs) seconds = int32_t((nowUs - copy.startUs) / 1000000);
+    else if (trending) seconds = trendSeconds_ >= 0 ? trendSeconds_ : copy.rate.valid() ? int32_t(copy.size / copy.rate.value()) : -1;
+    if (trendSeconds_ != seconds) { trendSeconds_ = seconds; status(health_, statusHeld_); }
 }
 // Zoom & Pan (issue #96): its factor and what the arrows do, in place of the GEN note.
 void ScopeScreen::zoomNote() {
