@@ -77,7 +77,7 @@ private:
     void background(uint32_t now);
     void synchronize();
     void transfer(uint32_t now); // The CDC byte stream.
-    void serviceTmc(uint32_t now, bool dispatch);
+    void serviceTmc(uint32_t now); // Main poll: also dispatches.
     void releaseOutNak();
     void release(bool setUp); // USBD_DeInit when anything was set up, then UsbCore::powerOff.
     static bool connect(void *context, usb::QuietAttach::Kind kind); // QuietAttach's one way onto the bus.

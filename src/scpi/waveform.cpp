@@ -270,7 +270,8 @@ bool Engine::waveformCommand(const Command &c) {
             if (number < 100 || number > scope::RecordDepth::Maximum || number != uint32_t(number)) { error(-222, true); return true; }
             waveEnvelope_ = uint32_t(number);
         }
-        const auto *f = frame();
+        // A new record each query in RUN (the backend waits for one newer than the last); HOLD repeats its own.
+        const auto *f = frame(!waitingWaveform_);
         if (!f) { waitFrame(envelope ? "ENV" : "FRAM"); return true; }
         waitingWaveform_ = false;
         const auto &m = f->metadata();

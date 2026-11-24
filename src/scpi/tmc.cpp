@@ -77,7 +77,7 @@ size_t Tmc::packet(uint8_t *output, size_t capacity) {
         transfer_ = std::min<size_t>(requested_, engine_.available());
         std::memset(reply_, 0, sizeof reply_); reply_[0] = 2; reply_[1] = requestTag_; reply_[2] = ~requestTag_;
         for (unsigned i = 0; i < 4; ++i) reply_[4+i] = uint8_t(transfer_ >> (8*i));
-        reply_[8] = transfer_ == engine_.available();
+        reply_[8] = transfer_ == engine_.available() && !engine_.more(); // EOM: the message ends here.
         outputPadding_ = (4 - (transfer_ & 3)) & 3; total_ = 12 + transfer_ + outputPadding_;
         replyAt_ = 0; requested_ = 0; generation_ = engine_.outputGeneration(); active_ = true; ended_ = false; inData_ = 0;
     }

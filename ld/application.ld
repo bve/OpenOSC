@@ -59,7 +59,7 @@ SECTIONS {
     /* The frequency response session (GitHub #72, both boards: its settings, sweep and 256 points), zeroed
        at reset in 64-bit ECC words, built in place on first use. */
     .bode (NOLOAD) : { . = ALIGN(8); _sbode = .; KEEP(*(.bode)) . = ALIGN(8); _ebode = .; } > ITCM
-    /* SCPI WAV:MEAS? RECord's one record-readouts job (any session), zeroed at reset, built in place on first use. */
+    /* SCPI: WAV:MEAS? RECord's one record-readouts job (any session) and two MMEM:DATA? 512 B stages; zeroed at reset. */
     .scpi_measure (NOLOAD) : { . = ALIGN(8); _sscpi_measure = .; KEEP(*(.scpi_measure)) . = ALIGN(8); _escpi_measure = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")

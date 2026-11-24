@@ -26,6 +26,7 @@ public:
     void discardOutput();
     uint8_t statusByte() const;
     uint32_t outputGeneration() const { return generation_; } // Moves when pending output is dropped (reset, discard).
+    bool more() const { return !fileDone(); } // Output still to come after available() (a file being staged).
 private:
     bool common(const Command &command);
     bool scopeCommand(const Command &command);
@@ -37,8 +38,16 @@ private:
     bool decodeCommand(const Command &command); // DECode: (decode.cpp).
     bool systemCommand(const Command &command); // Idle settings and MMEMory: (system.cpp), either profile.
     void endFile();
-    bool fileBinary_ = false; // MMEM:DATA?: the open file, fileAt_ of fileBytes_ sent.
-    uint32_t fileAt_ = 0, fileBytes_ = 0;
+    // MMEM:DATA?: FatFs is read only here, in the foreground poll (never in USB's background pass,
+    // which can run inside a FAT write): fileRead_ of fileBytes_ staged, stage_[stageAt_..stageEnd_) unsent.
+    void fillStage();
+    static constexpr size_t StageBytes = 512; // A FAT sector a refill.
+    static uint8_t *claimStage(const Engine *owner); // One of two ITCM stages (system.cpp); null: both in use.
+    static void releaseStage(const Engine *owner);
+    bool fileDone() const { return !fileBinary_ || (fileRead_ == fileBytes_ && stageAt_ == stageEnd_); }
+    bool fileBinary_ = false;
+    uint32_t fileRead_ = 0, fileBytes_ = 0;
+    uint8_t *stage_ = nullptr; uint16_t stageAt_ = 0, stageEnd_ = 0;
     void endDecode();                           // The CSV export lets go (reset, abort, done).
     void dispatch(const Command &command);
     void reply(const char *format, ...);

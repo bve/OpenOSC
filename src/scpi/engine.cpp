@@ -22,7 +22,17 @@ void Engine::endDecode() {
     decodeTicket_ = decodeTotal_ = decodeSent_ = 0;
     decodeBinary_ = waitingDecode_ = false;
 }
-void Engine::endFile() { if (fileBinary_) backend_.fileClose(); fileBinary_ = false; fileAt_ = fileBytes_ = 0; }
+void Engine::endFile() {
+    if (fileBinary_) backend_.fileClose();
+    if (stage_) releaseStage(this);
+    fileBinary_ = false; fileRead_ = fileBytes_ = 0; stage_ = nullptr; stageAt_ = stageEnd_ = 0;
+}
+void Engine::fillStage() {
+    if (!fileBinary_ || stageAt_ < stageEnd_ || fileRead_ == fileBytes_) return;
+    const size_t n = backend_.fileRead(fileRead_, stage_, std::min<size_t>(fileBytes_ - fileRead_, StageBytes));
+    if (!n) { padding_ += fileBytes_ - fileRead_; fileRead_ = fileBytes_; errors_.push(-250); return; } // Shrunk or unreadable.
+    fileRead_ += uint32_t(n); stageAt_ = 0; stageEnd_ = uint16_t(n);
+}
 void Engine::endScreen() {
     if (screenTicket_) backend_.screenEnd(screenTicket_);
     screenTicket_ = 0;
@@ -48,7 +58,7 @@ void Engine::reset() {
 }
 size_t Engine::available() const {
     return responseSize_ - responseAt_ + (binary_ ? binaryBytes_ - binarySent_ : 0) + (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
-           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + (fileBinary_ ? fileBytes_ - fileAt_ : 0) + padding_ + unsigned(suffix_);
+           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + (fileBinary_ ? stageEnd_ - stageAt_ : 0) + padding_ + unsigned(suffix_);
 }
 size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!output || !capacity) return 0;
@@ -89,14 +99,13 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
         else { used += n; screenAt_ += uint32_t(n); }
         if (screenAt_ == ScreenBytes) endScreen(); // Every byte sent (or owed as padding): the buffer is free.
     }
-    if (fileBinary_ && used < capacity && responseAt_ == responseSize_ && fileAt_ < fileBytes_) {
-        const size_t n = backend_.fileRead(fileAt_, output + used, std::min<size_t>(fileBytes_ - fileAt_, capacity - used));
-        if (!n) { padding_ = fileBytes_ - fileAt_; fileAt_ = fileBytes_; errors_.push(-250); } // Shrunk or unreadable.
-        else { used += n; fileAt_ += uint32_t(n); }
+    if (fileBinary_ && used < capacity && responseAt_ == responseSize_ && stageAt_ < stageEnd_) { // Staged bytes only.
+        const size_t n = std::min<size_t>(stageEnd_ - stageAt_, capacity - used);
+        std::memcpy(output + used, stage_ + stageAt_, n); used += n; stageAt_ = uint16_t(stageAt_ + n);
     }
     while (used < capacity && padding_) { output[used++] = 0; --padding_; }
     if (used < capacity && suffix_ && !padding_ && (!binary_ || binarySent_ == binaryBytes_) && (!decodeBinary_ || decodeSent_ == decodeTotal_) &&
-        (!screenBinary_ || screenAt_ == ScreenBytes) && (!fileBinary_ || fileAt_ == fileBytes_)) {
+        (!screenBinary_ || screenAt_ == ScreenBytes) && fileDone()) {
         output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false; screenBinary_ = false;
         endFile();
     }
@@ -115,7 +124,8 @@ void Engine::poll(uint32_t now) {
     if (inputPending_ && uint32_t(now - inputAt_) >= 3000) {
         parser_.reset(); inputPending_ = false; errors_.push(-102);
     }
-    if (available()) {
+    fillStage(); // The next file bytes, here in the foreground.
+    if (available() || !fileDone()) {
         if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
         return;
     }

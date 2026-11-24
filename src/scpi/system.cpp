@@ -38,7 +38,15 @@ int path(const char *&p, bool name, char *out, size_t size) {
     const int n = std::snprintf(out, size, "%s/%s", storage::Layout::Root, folder);
     return n > 0 && size_t(n) < size ? 0 : -257;
 }
+alignas(8) __attribute__((section(".scpi_measure"))) uint8_t stages[2][512]; // Zeroed at reset.
+const Engine *stageOwners[2] = {};
 } // namespace
+uint8_t *Engine::claimStage(const Engine *owner) {
+    static_assert(sizeof stages[0] == StageBytes);
+    for (unsigned i = 0; i < 2; ++i) if (stageOwners[i] == owner || !stageOwners[i]) { stageOwners[i] = owner; return stages[i]; }
+    return nullptr;
+}
+void Engine::releaseStage(const Engine *owner) { for (auto &o : stageOwners) if (o == owner) o = nullptr; }
 bool Engine::systemCommand(const Command &c) {
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
     const bool power = match("SYSTem:POWer:TIMeout"), timeout = match("SYSTem:DISPlay:TIMeout"), dim = match("SYSTem:DISPlay:DIM");
@@ -78,11 +86,12 @@ bool Engine::systemCommand(const Command &c) {
         if (const int e = path(p, true, file, sizeof file)) { error(int16_t(e), true); return true; }
         if (*p) { error(-108, true); return true; }
         endFile();
-        if (const int e = backend_.fileOpen(file, bytes)) { error(int16_t(e), true); return true; }
+        if (!(stage_ = claimStage(this))) { error(-200, true); return true; } // Both stages stream (two sessions).
+        if (const int e = backend_.fileOpen(file, bytes)) { endFile(); error(int16_t(e), true); return true; }
         char count[16]; std::snprintf(count, sizeof count, "%lu", (unsigned long)bytes);
         reply("#%u%s", unsigned(std::strlen(count)), count);
-        fileBinary_ = true; fileAt_ = 0; fileBytes_ = bytes;
-        if (!bytes) endFile();
+        fileBinary_ = true; fileRead_ = 0; fileBytes_ = bytes;
+        if (!bytes) endFile(); else fillStage();
     } else if (match("MMEMory:DELete")) {
         const char *p = c.argument;
         char file[200];
