@@ -298,6 +298,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
     s.interleave = board::Current::Features.adcInterleave ? 2 : legacyInterleave;
     if (!number(scope, "interleave_mode", s.interleave)) return false;
     if (!(scope.containsKey("run_mode") ? number(scope,"run_mode",s.runMode) : boolean(scope,"high_performance",s.runMode)) || !boolean(scope,"roll_auto",s.rollAuto) ||
+        !boolean(scope, "longer_record", s.longerRecord) ||
         !choice(scope, "factory_record_format", s.factoryRecordFormat, factoryRecordFormats) ||
         !choice(meter, "display", output.meter.display, displays) ||
         !boolean(meter, "statistics", output.meter.statistics) || !boolean(meter, "bar_graph", output.meter.bar) || !boolean(meter,"auto",output.meter.automatic) ||
@@ -391,6 +392,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     scope["record_points"] = s.recordPoints;
     scope["run_mode"] = s.runMode;
     scope["roll_auto"]=bool(s.rollAuto);
+    if (!s.longerRecord) scope["longer_record"] = false;
     scope["interleave"]=s.interleave == 1;
     // Both: older ZT703S firmware reads only the boolean, so Auto reaches it as Off.
     if (board::Current::Features.interleaveControl()) scope["interleave_mode"] = s.interleave;

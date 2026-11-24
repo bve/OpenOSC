@@ -13,7 +13,8 @@ public:
     // picks the vertical step); the caller multiplies `horizontal` for a held key.
     static Change apply(ScopeRequest &request, Options &options, unsigned channel, bool held, int horizontal, int vertical, bool fine,
                         const Model *model = nullptr);
-    // `horizontal` steps of panStep(model, fine), within panLimits (without them, +-PanFull).
+    // `horizontal` steps of panStep(model, fine) on the grid of whole steps from pan 0, within panLimits
+    // (without them, +-PanFull); from between two grid points, the first step goes to the next one.
     static bool pan(Options &options, int horizontal, const Model *model = nullptr, bool fine = false);
     // The pans of a Y-T or Y-T+FFT time window on `model`'s record (issue #89): its window reaches at
     // most half its span past either end of the record (a zoomed-out window none), and pan 0 is always

@@ -1,5 +1,6 @@
 #include "openosc/ui/application_view.hpp"
 #include "openosc/ui/components/scope_styles.hpp"
+#include "openosc/acquisition/trigger_level.hpp"
 #include <cstdio>
 #include <cstring>
 #include "openosc/ui/scope/format.hpp"
@@ -221,7 +222,7 @@ void ApplicationView::refreshTriggerColors(unsigned channel) {
 void ApplicationView::scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel) {
     char level[24];
     if (!channel.calibrated || !channel.probeDenominator ||
-        !plot::Format::quantity((trigger.level - channel.zeroCode) * channel.voltsPerCode * channel.probeNumerator / channel.probeDenominator, "V", level, sizeof level, 3))
+        !plot::Format::quantity(scope::TriggerLevel::shownVolts(trigger.level, channel), "V", level, sizeof level, 3))
         std::snprintf(level, sizeof level, "%d", trigger.level);
     if (!trigger_ || !edge_) return;
     if (std::strcmp(lv_label_get_text(trigger_), level)) { lv_label_set_text(trigger_, level); placeFps(); }

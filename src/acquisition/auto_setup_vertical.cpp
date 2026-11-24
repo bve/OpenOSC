@@ -12,8 +12,11 @@ bool AutoSetup::vertical(const FrameView &frame,SignalSummary (&summaries)[2],ui
         auto &range=trial_.frontend.range[c];
         const auto s=summaries[c]=Analyzer::summarize(frame,Channel(c),false); // Extrema: the edges come later, on the band.
         if (!s.valid) continue;
+        // A shorter trial follows the trigger source's period. A slower signal
+        // on the other channel may show just one plateau, so keep its survey range.
+        const bool adjust = c == channel_ || trial_.timebaseNs >= SurveyTimebaseNs;
         if (s.minimum<=-125 || s.maximum>=125) {
-            if (range+1<VoltageRanges::Count) { ++range; change=true; }
+            if (adjust && range+1<VoltageRanges::Count) { ++range; change=true; }
             else clipped|=1U<<c;
             continue;
         }
@@ -26,10 +29,11 @@ bool AutoSetup::vertical(const FrameView &frame,SignalSummary (&summaries)[2],ui
         if (s.maximum-s.minimum<4 && peak<4) {
             // Below 4 codes the signal is under 4 codes' worth: go straight to the range that would
             // show that much within 3 divisions (10 V/div to 500 mV/div to 40 mV/div), not one step.
-            if (range) { range=std::min(range-1,rangeFor(4*channel.voltsPerCode*1000)); change=true; }
+            if (adjust && range) { range=std::min(range-1,rangeFor(4*channel.voltsPerCode*1000)); change=true; }
             continue;
         }
         usable|=1U<<c;
+        if (!adjust) continue;
         const double peakMillivolts=peak*channel.voltsPerCode*1000;
         const double divisions=peakMillivolts/VoltageRanges::millivolts(range);
         // Hysteresis avoids alternating ranges because of one noisy ADC code.

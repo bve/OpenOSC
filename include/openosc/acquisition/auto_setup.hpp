@@ -16,6 +16,7 @@ public:
     const ScopeRequest &request() const { return trial_; }
     const ScopeRequest &original() const { return original_; }
 private:
+    static constexpr uint64_t SurveyTimebaseNs = 1000000;
     bool vertical(const FrameView &frame,SignalSummary (&summary)[2],uint8_t &usable);
     // Edges of a channel within its band, and the period most of them agree on (if any).
     struct Periodicity { uint32_t edges=0; double hertz=0; bool coherent=false; };

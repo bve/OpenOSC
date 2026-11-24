@@ -83,19 +83,25 @@ struct DacCapabilities {
     // The DAC stream: TIM6 TRGO -> DAC2 -> DMAMUX2 -> BDMA2 from SRAM4, one halfword per update (only
     // BDMA2 reaches DAC2 on PA6; it has no FIFO or burst). Measured on a ZT703S (issue #23,
     // build/reviews/issue23-200mhz-display/hardware/dac-rate-sweep.json, dac-period-sweep.json,
-    // candidate-280.json): with a 200 MHz timer clock updates every 25, 24, 23 and 22 ticks streamed
-    // through 4 s of polls, every 21 and 20 ticks (9.5, 10 MS/s) underran (DAC2 SR DMAUDR1); with
-    // 280 MHz every 28 ticks (10 MS/s) streams. A short observation, not a silicon limit: an update
-    // takes at least MinimumTimerTicks (25, kept as margin over 22) and the rate stays at most
-    // MaximumSamplesPerSecond (nothing faster was measured). TIM6 runs at the core clock on every run
-    // mode (APB1 = HCLK/2, timer x2).
-    static constexpr uint32_t MaximumSamplesPerSecond = 10000000, MinimumTimerTicks = 25;
+    // candidate-280.json): with a 200 MHz timer clock updates every 22 to 25 ticks streamed through 4 s
+    // of polls, every 21 and 20 ticks (9.5, 10 MS/s) underran (DAC2 SR DMAUDR1); with 280 MHz every 28
+    // ticks (10 MS/s) streams. A short observation, not a silicon limit: an update takes at least
+    // MinimumTimerTicks and the rate stays at most MaximumSamplesPerSecond (nothing faster was measured).
+    // The 200 MHz profile takes SlowProfileTimerTicks (32, 6.25 MS/s) in their place (GitHub #128):
+    // with a capture at 25 or 50 MSa/s and the Screen readouts repainting, 800 points every 25 ticks
+    // underran within 4 to 14 s, every 26 ticks in 3 s and every 27 in 25 s, while 31 and 32 streamed
+    // for about a minute (build/reviews/issues-127-130). TIM6 runs at the core clock on every run mode
+    // (APB1 = HCLK/2, timer x2).
+    static constexpr uint32_t MaximumSamplesPerSecond = 10000000, MinimumTimerTicks = 25, SlowProfileTimerTicks = 32;
     static constexpr unsigned MinimumPoints = 28, MaximumPoints = 1024;
-    // The fewest timer ticks per DAC update at `timerHz`.
+    // The fewest timer ticks per DAC update at `timerHz`: 32 on the 200 MHz profile; on the others the
+    // 10 MS/s ceiling, at least MinimumTimerTicks (280 MHz: 28, 360 MHz: 36).
     static constexpr uint32_t minimumDivider(uint32_t timerHz) {
+        if (timerHz == RunModes[0].coreHz) return SlowProfileTimerTicks;
         const uint32_t rate = uint32_t((uint64_t(timerHz) + MaximumSamplesPerSecond - 1) / MaximumSamplesPerSecond);
         return rate > MinimumTimerTicks ? rate : MinimumTimerTicks;
     }
+    static_assert(RunModes[0].coreHz == 200000000, "SlowProfileTimerTicks was measured on the 200 MHz profile");
     // The highest frequency of a shape and level with the DAC timer at `timerHz`: the shape's own
     // maximum, and for a DAC output at most MinimumPoints samples per period at the fastest update
     // (a Dedicated square is TIM13 PWM from 1 kHz: not limited by the stream). `timerHz` 0: the highest

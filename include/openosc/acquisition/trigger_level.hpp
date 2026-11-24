@@ -41,6 +41,13 @@ public:
             return {closest, closest};
         }
     };
+    // The level's voltage at the probe tip as the screen shows it (issue #127), for a calibrated channel. The
+    // comparator and the samples have whole codes only, and a vertical position puts the zero between two
+    // of them: the level is counted in whole codes from the code nearest the zero, so that code reads 0 V
+    // and each step is one code. It differs from the code's exact voltage by under half a code.
+    static double shownVolts(int level, const ChannelMetadata &channel) {
+        return (level - std::round(channel.zeroCode)) * channel.voltsPerCode * channel.probeNumerator / channel.probeDenominator;
+    }
     // The level, set in the codes of the next capture, as a code of a record captured under other settings.
     static double inFrame(double level, const ChannelMetadata &settings, const ChannelMetadata &frame) {
         if (!settings.calibrated || !frame.calibrated || settings.voltsPerCode <= 0 || frame.voltsPerCode <= 0)

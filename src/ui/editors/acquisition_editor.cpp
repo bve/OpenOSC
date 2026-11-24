@@ -10,17 +10,17 @@ constexpr unsigned Timebases = sizeof scope::Timebases::Values / sizeof *scope::
 }
 PropertyKind AcquisitionEditor::kind(unsigned row) const {
     switch (row) {
-    case Timebase: case Memory: return PropertyKind::Choice;
+    case Timebase: case Memory: case DeepMemory: return PropertyKind::Choice;
     case Rolling: return PropertyKind::Toggle;
     default: return PropertyKind::Info;
     }
 }
 void AcquisitionEditor::name(unsigned row, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Time / div", "Record memory", "Captured", "Sample rate", "Rolling"};
+    static constexpr const char *names[] = {"Time / div", "Record memory", "Captured", "Sample rate", "Rolling", "Deep memory"};
     std::snprintf(output, capacity, "%s", row < Fields ? names[row] : "");
 }
 unsigned AcquisitionEditor::options(unsigned row) const {
-    return row == Timebase ? Timebases : row == Memory ? scope::RecordBudget::StepCount : row == Rolling ? 2 : 0;
+    return row == Timebase ? Timebases : row == Memory ? scope::RecordBudget::StepCount : row == Rolling || row == DeepMemory ? 2 : 0;
 }
 unsigned AcquisitionEditor::option(unsigned row) const {
     if (row == Timebase) {
@@ -31,7 +31,7 @@ unsigned AcquisitionEditor::option(unsigned row) const {
         for (unsigned i = 0; i < scope::RecordBudget::StepCount; ++i) if (scope::RecordBudget::Steps[i] == request_.recordPoints) return i;
         return scope::RecordBudget::StepCount;
     }
-    return row == Rolling ? request_.rollAuto : 0;
+    return row == Rolling ? request_.rollAuto : row == DeepMemory ? !request_.longerRecord : 0;
 }
 void AcquisitionEditor::optionName(unsigned row, unsigned index, char *output, size_t capacity) const {
     if (row == Timebase && index < Timebases) plot::Format::quantity(scope::Timebases::Values[index] / 1000000000.0, "s", output, capacity);
@@ -39,6 +39,7 @@ void AcquisitionEditor::optionName(unsigned row, unsigned index, char *output, s
         char total[16]; plot::Format::points(scope::RecordBudget::Steps[index], total, sizeof total);
         std::snprintf(output, capacity, "%s total points", total);
     } else if (row == Rolling) std::snprintf(output, capacity, "%s", index ? "Auto" : "Off");
+    else if (row == DeepMemory) std::snprintf(output, capacity, "%s", index ? "Higher sample rate" : "Longer record");
     else if (capacity) output[0] = 0;
 }
 void AcquisitionEditor::value(unsigned row, char *output, size_t capacity) const {
@@ -62,6 +63,7 @@ bool AcquisitionEditor::choose(unsigned row, unsigned index) {
     if (row == Timebase) request_.timebaseNs = scope::Timebases::Values[index];
     else if (row == Memory) request_.recordPoints = scope::RecordBudget::Steps[index];
     else if (row == Rolling) request_.rollAuto = index;
+    else if (row == DeepMemory) request_.longerRecord = index == 0;
     else return false;
     return true;
 }

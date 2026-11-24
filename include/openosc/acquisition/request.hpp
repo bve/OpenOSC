@@ -12,9 +12,14 @@ struct ScopeRequest {
     uint32_t recordPoints = scope::RecordBudget::Default;
     uint32_t probeNumerator[2] = {1, 1}, probeDenominator[2] = {1, 1};
     bool rollAuto=true;
+    bool longerRecord = true;
     bool rolling() const { return rollAuto && timebaseNs>=200000000 && trigger.mode==scope::TriggerMode::Auto; }
     unsigned channels() const { return scope::RecordBudget::channels(frontend.enabled[0], frontend.enabled[1]); }
     uint32_t depth() const { return scope::RecordBudget::perChannel(recordPoints, channels()); } // Points per channel.
+    // At a fixed timebase, depth beyond the default budget can extend the captured time.
+    uint32_t windowPoints() const {
+        return longerRecord ? scope::RecordBudget::perChannel(scope::RecordBudget::Default, channels()) : 0;
+    }
     // The one channel switch for every caller (panel, SCPI, settings): the record budget stays the
     // same total, the last channel on stays on, and the trigger moves to a channel that remains.
     bool setChannel(unsigned channel, bool on) {
@@ -29,6 +34,7 @@ struct ScopeRequest {
     }
     bool same(const ScopeRequest &other) const {
         if (timebaseNs != other.timebaseNs || recordPoints != other.recordPoints || rollAuto!=other.rollAuto ||
+            longerRecord != other.longerRecord ||
             trigger.channel != other.trigger.channel || trigger.edge != other.trigger.edge ||
             trigger.mode != other.trigger.mode || trigger.level != other.trigger.level || trigger.position!=other.trigger.position ||
             trigger.reject != other.trigger.reject) return false;

@@ -154,7 +154,7 @@ bool DataAccess::samplePlan(scope::SamplePlan &plan, const scope::CaptureBuffer 
     return scope::SamplePlan::calculate(request_.timebaseNs,depth,maximumRate,capacity,plan,
                                         rolling ? scope::SamplePlan::FullSpeedHeadroom
                                                 : scope::SamplePlan::headroom(buffer,maximumRate*perTransfer),
-                                        perTransfer);
+                                        perTransfer, rolling || internalCapture() ? 0 : request_.windowPoints());
 }
 // What keeps a request from interleaving on this build and clock (InterleaveRule): the ZT706S's
 // factory rule, or the ZT703S's selectable one with the user's choice (in a probe build, the probe's
@@ -332,7 +332,8 @@ scope::AcquisitionArena::Geometry DataAccess::recordGeometry() const {
     if (!Arena::record(request_.recordPoints,ch1,ch2,0,standard) || Arena::fullRate(standard))
         return Arena::geometry(request_.recordPoints,ch1,ch2,false);
     const uint32_t half=captureRateLimit()/2;
-    const bool fast=scope::SamplePlan::calculate(request_.timebaseNs,request_.depth(),2*half,standard.ringPoints(),plan) &&
+    const bool fast=scope::SamplePlan::calculate(request_.timebaseNs, request_.depth(), 2 * half, standard.ringPoints(), plan,
+                                                scope::SamplePlan::FullSpeedHeadroom, 1, request_.windowPoints()) &&
                     plan.rate.value()>half;
     return Arena::geometry(request_.recordPoints,ch1,ch2,fast);
 }

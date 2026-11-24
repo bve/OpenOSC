@@ -52,8 +52,19 @@ bool TraceMove::pan(Options &options, int horizontal, const Model *model, bool f
     int32_t low = -Options::PanFull, high = Options::PanFull;
     if (model) panLimits(options, *model, low, high);
     // The timebase or a stored setting may leave the pan outside today's limits.
-    const int32_t start = std::clamp(options.panPpb, low, high);
-    const auto next = int32_t(std::clamp<int64_t>(start + int64_t(horizontal) * panStep(model, fine), low, high));
+    const int64_t start = std::clamp(options.panPpb, low, high), step = panStep(model, fine);
+    // Issues #127, #129: the steps land on whole steps from pan 0. A pan between them (a limit, DISPLAY's
+    // Pan, another time/div or zoom) first goes to the nearest one that way, so returning reaches 0.
+    const int64_t below = start / step - (start % step < 0);
+    const int64_t offset = start - below * step;
+    const int64_t above = below + (offset != 0);
+    // Consecutive records can lose a few points to lane alignment, moving the grid by a
+    // fraction of a pixel. Keep the same grid index through that rounding.
+    const int64_t tolerance = std::max<int64_t>(1, step / 256);
+    int64_t grid = horizontal > 0 ? below : above;
+    if (offset <= tolerance) grid = below;
+    else if (step - offset <= tolerance) grid = above;
+    const auto next = int32_t(std::clamp<int64_t>((grid + horizontal) * step, low, high));
     const bool changed = next != options.panPpb;
     options.panPpb = next;
     return changed;

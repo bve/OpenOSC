@@ -42,7 +42,7 @@ public:
 };
 class AcquisitionEditor final : public ScopeEditor {
 public:
-    enum Row : unsigned { Timebase, Memory, Captured, Rate, Rolling, Fields };
+    enum Row : unsigned { Timebase, Memory, Captured, Rate, Rolling, DeepMemory, Fields };
     const char *title() const override { return "ACQUISITION"; }
     void snapshot(const scope::FrameMetadata &metadata) { metadata_ = metadata; }
     void value(unsigned row, char *output, size_t capacity) const override;

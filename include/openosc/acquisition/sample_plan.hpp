@@ -30,25 +30,29 @@ struct SamplePlan {
     // so the points come at up to pointsPerTransfer x maximumRate and in groups of 4 x that (one
     // transfer per lane), and `headroom` is in points.
     static bool calculate(uint64_t timebaseNs, uint32_t depth, uint32_t maximumRate, uint32_t ringPoints, SamplePlan &out,
-                          uint32_t headroom = FullSpeedHeadroom, uint32_t pointsPerTransfer = 1) {
+                          uint32_t headroom = FullSpeedHeadroom, uint32_t pointsPerTransfer = 1, uint32_t windowPoints = 0) {
         const uint32_t granule = 4 * pointsPerTransfer;
         if (timebaseNs < 10 || timebaseNs > 20000000000ULL || !RecordDepth::valid(depth) || ringPoints < depth ||
             !maximumRate || maximumRate > MaximumSampleRate || (pointsPerTransfer != 1 && pointsPerTransfer != 2) ||
             depth % granule) return false;
         const uint64_t pointRate = uint64_t(maximumRate) * pointsPerTransfer;
-        // The record always uses the full depth: past the screen it serves panning,
-        // HOLD zoom-out and FFT resolution, as in the factory firmware.
+        // The record still uses the requested depth. A separate window budget keeps the sample
+        // rate independent of added record memory, leaving the extra samples for panning and zoom-out.
+        // A zero window budget puts as much of the record on screen as the rate cap allows.
         SamplePlan plan;
         plan.count = depth;
-        uint64_t numerator = uint64_t(plan.count-1)*100000000;
+        const uint32_t visible = windowPoints ? std::clamp(windowPoints, granule, depth) : depth;
+        uint64_t numerator = uint64_t(visible - 1) * 100000000;
         uint64_t denominator = timebaseNs;
-        if (numerator > pointRate*denominator) {
-            numerator = pointRate; denominator=1;
-            // A record longer than the screen still needs ring headroom: with no
-            // pretrigger, servicing the edge must not let the ring overwrite it.
-            if (ringPoints - plan.count < headroom)
-                plan.count = ringPoints > headroom + granule ? (ringPoints - headroom) & ~(granule - 1) : granule;
+        const bool limited = numerator > pointRate * denominator;
+        if (limited) {
+            numerator = pointRate;
+            denominator = 1;
         }
+        // A record longer than the screen still needs ring headroom below the rate cap:
+        // the DMA must not overwrite its start while the trigger stop is being serviced.
+        if ((limited || visible < depth) && ringPoints - plan.count < headroom)
+            plan.count = ringPoints > headroom + granule ? (ringPoints - headroom) & ~(granule - 1) : granule;
         const uint64_t common = std::gcd(numerator,denominator);
         numerator/=common; denominator/=common;
         if (numerator>UINT32_MAX || denominator>UINT32_MAX) return false;

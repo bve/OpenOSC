@@ -47,7 +47,7 @@ void TriggerEditor::value(unsigned row, char *output, size_t capacity) const {
     if (row == Level) {
         const auto &cal = calibration_[unsigned(settings_.channel)];
         if (cal.calibrated)
-            plot::Format::quantity((settings_.level-cal.zeroCode)*cal.voltsPerCode*cal.probeNumerator/cal.probeDenominator,"V",output,capacity);
+            plot::Format::quantity(scope::TriggerLevel::shownVolts(settings_.level, cal),"V",output,capacity);
         else std::snprintf(output,capacity,"%d cnt",settings_.level);
         if (const int end = levelEnd()) { // At either end of the plot's range: no further step that way.
             const size_t used = std::strlen(output);

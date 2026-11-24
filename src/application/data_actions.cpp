@@ -9,6 +9,16 @@
 #include <cstring>
 
 namespace openosc {
+namespace {
+// A level set on purpose is the new anchor (TriggerFollow::forget). Issue #127: the code nearest its
+// channel's zero shows 0 V (TriggerLevel::shownVolts), so set there it is anchored at 0 V: a later move
+// of the zero or a V/div keeps it on the zero's nearest code. Its own frame (the ZT706S's stack).
+[[gnu::noinline]] void anchorSetLevel(const DataAccess &data, scope::TriggerFollow &follow, const scope::TriggerFollow::Place &place) {
+    const auto channel = place.channel < 2 ? data.scopeChannelFor(data.scopeRequest(), place.channel) : scope::ChannelMetadata{};
+    if (channel.calibrated && place.level == std::lround(channel.zeroCode)) follow.anchor(place, channel.zeroCode - place.level, false);
+    else follow.forget();
+}
+} // namespace
 bool ApplicationController::meterTemperatureSettings(dmm::TemperatureSettings settings, uint32_t now) {
     if (!settings.valid()) return false;
     if (settings == prefs_.meter.temperature) return true;
@@ -132,7 +142,7 @@ bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, S
         }
     }
     if (!applyScope(request,now,mode)) return false;
-    if (intent==LevelIntent::Set) triggerFollow_.forget();
+    if (intent==LevelIntent::Set) anchorSetLevel(data_,triggerFollow_,triggerPlace(data_.scopeRequest()));
     if (following) {
         triggerFollow_.commit(proposal);
         if (proposal.limited && !alreadyLimited) pulseTriggerLimit(now);
