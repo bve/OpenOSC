@@ -24,7 +24,7 @@ public:
     bool triggered() const override;
     const scope::FrameView *frame(bool refresh) override;
     void releaseFrame() override;
-    bool repeatFrame() override { const bool refused = freshFrame_; freshFrame_ = false; return refused; }
+    bool repeatFrame() override { if (!refused_) return false; refused_ = false; repeat_ = true; return true; }
     void endSession() override;
     bool frameKey(char *output, size_t capacity) const override;
     bool decodeReport(scpi::DecodeReport &) const override;
@@ -98,7 +98,7 @@ private:
     void demand() const; // This session reads records: the accepted one on show is kept for it.
     uint64_t previousFrameTime_ = 0;
     uint32_t previousFrameSequence_ = 0;
-    bool freshFrame_ = false;
+    bool freshFrame_ = false, refused_ = false, repeat_ = false; // repeat_: the refused record may be served until a refresh.
     mutable dmm::Result reading_;
     char serial_[25]{};
     FIL file_{};

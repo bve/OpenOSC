@@ -28,7 +28,7 @@ void TmcPipe::dispatch(uint32_t now, uint32_t generation, TmcRecovery::Port &por
     if (!begin(now, generation, port, epoch)) return;
     if (!recovery_.holdsBulkOut()) engine_.poll(now);
     finish(now, generation, epoch);
-    engine_.refill();
+    if (current(generation) && !recovery_.holdsBulkIn()) engine_.refill();
 }
 void TmcPipe::finish(uint32_t now, uint32_t generation, uint32_t epoch) {
     if (!current(generation)) return; // Reset during the dispatch.

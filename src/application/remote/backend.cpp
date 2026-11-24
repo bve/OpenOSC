@@ -99,7 +99,7 @@ bool InstrumentBackend::held() const { return application_.data_.scopeHeld(); }
 bool InstrumentBackend::waiting() const { return application_.data_.scopeWaiting(); }
 bool InstrumentBackend::triggered() const { return application_.data_.scopeTriggered(); }
 const scope::FrameView *InstrumentBackend::frame(bool refresh) {
-    if (refresh) releaseFrame();
+    if (refresh) { releaseFrame(); refused_ = repeat_ = false; }
     if (application_.bodeOwns()) { releaseFrame(); return nullptr; } // Not a sweep's record: its lease would hold capture.
     application_.data_.noteFrameDemand(Board::milliseconds());
     demand();
@@ -109,10 +109,10 @@ const scope::FrameView *InstrumentBackend::frame(bool refresh) {
     // it is owed it no more (else FrameHosts would hold the next capture for it, HoldMs in one slot). A
     // record not served by record() (not decoded yet) is never marked taken.
     application_.data_.frameHosts().taken(host_, m.sequence);
-    if (freshFrame_ && !application_.data_.scopeHeld() && m.sequence == previousFrameSequence_ && m.timestampUs == previousFrameTime_) {
-        lease_.release(); return nullptr; // Leave the store writable until a newer DMA frame is published.
+    if (freshFrame_ && !repeat_ && !application_.data_.scopeHeld() && m.sequence == previousFrameSequence_ && m.timestampUs == previousFrameTime_) {
+        refused_ = true; lease_.release(); return nullptr; // Leave the store writable until a newer DMA frame is published.
     }
-    freshFrame_ = false;
+    freshFrame_ = refused_ = repeat_ = false;
     leaseKey_ = decoding::RecordKey::of(m, application_.decoder_.generation()); // Frozen with the lease.
     return &lease_.view();
 }

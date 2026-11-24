@@ -26,6 +26,7 @@ public:
     void discardOutput();
     uint8_t statusByte() const;
     uint32_t outputGeneration() const { return generation_; } // Moves when pending output is dropped (reset, discard).
+    bool expire(uint32_t now); // Output left unread 10 s is dropped (-410); true: output pending.
     void refill() { fillStage(); } // Foreground, after output: the next stage for the background pass.
     bool more() const { return fileBinary_ && fileRead_ < fileBytes_; } // File bytes not yet staged: no EOM yet.
 private:

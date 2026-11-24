@@ -112,6 +112,11 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!available()) responseSize_ = responseAt_ = 0;
     outputAt_ = now_; return used;
 }
+bool Engine::expire(uint32_t now) {
+    if (!available() && fileDone()) return false;
+    if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
+    return true;
+}
 void Engine::poll(uint32_t now) {
     now_ = now;
     if (profileKnown_ && profile_ != backend_.multimeter()) { reset(); return; }
@@ -125,10 +130,7 @@ void Engine::poll(uint32_t now) {
         parser_.reset(); inputPending_ = false; errors_.push(-102);
     }
     fillStage(); // The next file bytes, here in the foreground.
-    if (available() || !fileDone()) {
-        if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
-        return;
-    }
+    if (expire(now)) return;
     if (waitingDecode_) { // The CSV's size, a bounded slice a pass; then the definite block's header.
         const int known = backend_.decodeMeasure(decodeTicket_, decodeTotal_);
         if (!known && int32_t(now - deadline_) < 0) return;
