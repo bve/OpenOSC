@@ -55,11 +55,10 @@ public:
     void scopeContext(unsigned channel, plot::Focus focus, bool panReverse = false) { scope_.context(channel, focus, panReverse); }
     void scopeMeter(const ui::ScopeScreen::Meter &meter) { scope_.meter(meter); }
     void scopeMeterReadouts(const plot::MeterReadouts &readouts) { scope_.meterReadouts(readouts); }
-    // The generator note on the plot; captureHalved: DataAccess::generatorLoadsBus(); trend: the trend copy
-    // on show (DataAccess::trendShown), valid or not (its elapsed time goes in the note).
-    void scopeGenerator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend, uint64_t nowUs) {
-        scope_.generator(output, captureHalved, trend, nowUs);
-    }
+    // The generator note on the plot; captureHalved: DataAccess::generatorLoadsBus().
+    void scopeGenerator(const generator::Snapshot &output, bool captureHalved) { scope_.generator(output, captureHalved); }
+    // The trend on show and its elapsed time in the status pill (ScopeScreen::trend).
+    void scopeTrend(const scope::TrendView &trend, uint64_t nowUs) { scope_.trend(trend, nowUs); }
     void focusParameter(unsigned index) { host_.parameters().select(index); }
     // Block orders (CONTRACT.md §4): only y moves, nothing is rebuilt (record, HOLD, zoom, leases,
     // statistics stay); the same order is a no-op; an invalid order is ignored. Applied at once when

@@ -29,8 +29,10 @@ public:
     void meter(const Meter &meter);
     // The DMM trace's readouts and scale to the footer, each display pass (not under a panel).
     void meterReadouts(const plot::MeterReadouts &readouts);
-    // nowUs: the frames' clock (DataAccess::nowUs), for a running trend's elapsed time.
-    void generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend, uint64_t nowUs);
+    void generator(const generator::Snapshot &output, bool captureHalved);
+    // The trend copy on show (DataAccess::trendShown), valid or not; nowUs: the frames' clock
+    // (DataAccess::nowUs), for a running trend's elapsed time in the status pill.
+    void trend(const scope::TrendView &copy, uint64_t nowUs);
     // Settings > Display > Swap CH1/CH2: the plot, footer and cards relabelled at once (HOLD included).
     void channelView(const plot::ChannelView &view) { host_.channelView(view); cards(); }
     void counters(const scope::CounterSnapshot &snapshot);
