@@ -9,9 +9,10 @@ namespace openosc::dmm {
 bool RangeSettle::skip(const Result &result) {
     unsigned index = ~0U;
     if (!Ranges::current(result, &index)) index = ~0U;
-    const bool switched = result.range == RangeMode::Auto && result.primary.status != DataStatus::Overload &&
+    const bool switched = automatic_ && result.primary.status != DataStatus::Overload &&
                           index != ~0U && index_ != ~0U && index != index_ && !skipped_;
     index_ = index;
+    automatic_ = result.range == RangeMode::Auto;
     skipped_ = switched;
     return switched;
 }

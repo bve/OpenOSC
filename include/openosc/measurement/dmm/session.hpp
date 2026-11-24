@@ -92,15 +92,17 @@ private:
 // the new range's scale (23.03 V stepping 2.2 -> 4.5 V), seen at the 2.5 V and the 25 mA switches on the
 // bench. That reading, the first in another range of the same function (Ranges::current) as the chip
 // sends it (a thermocouple's millivolts, not the temperature), is not shown, as an overload's settling.
-// An overload is always shown, a manual range is the user's and is shown at once, and never two in a
-// row: a signal that keeps the chip switching shows its readings rather than freezing on an old one.
+// The switching reading sometimes comes flagged MANUAL, so AUTO is judged on the reading before it: a
+// range changed in MANUAL is the user's and is shown at once (leaving AUTO by the RANGE key drops one
+// reading too). An overload is always shown, and never two in a row: a signal that keeps the chip
+// switching shows its readings rather than freezing on an old one.
 class RangeSettle {
 public:
     bool skip(const Result &result); // True: this reading is not shown.
-    void clear() { index_ = ~0U; skipped_ = false; }
+    void clear() { index_ = ~0U; automatic_ = skipped_ = false; }
 private:
     unsigned index_ = ~0U;
-    bool skipped_ = false;
+    bool automatic_ = false, skipped_ = false; // automatic_: the reading before was in AUTO.
 };
 class Session {
 public:
