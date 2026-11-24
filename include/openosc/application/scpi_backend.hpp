@@ -80,6 +80,8 @@ public:
     bool factoryCalibration(FactoryCalibration &) const override;
     bool factoryRecordFormat(FactoryRecordReading &) const override;
     bool recovery() override;
+    int uploadData(const char *name, uint32_t offset, const uint8_t *data, size_t size) override;
+    int uploadEnd(uint32_t &bytes, uint32_t &crc) override;
     uint32_t coreMhz() const override;
     int coreMhz(uint32_t mhz) override;
     bool counter(unsigned channel,scope::CounterReading &reading) const override;

@@ -2,6 +2,7 @@
 #if OPENOSC_BOARD == 703
 #include "openosc/calibration/interleave_match_wizard.hpp"
 #endif
+#include "openosc/application/firmware_upload.hpp"
 #include "openosc/application/generator_startup.hpp"
 #include "openosc/application/meter_restore.hpp"
 #include "openosc/application/state.hpp"
@@ -63,7 +64,7 @@ public:
                           ThemeStore &themes, ScreenshotWriter &shots, DataAccess &data,
                           BatteryMonitor &battery, McuTemperature &mcuTemperature)
         : battery_(battery), mcuTemperature_(mcuTemperature), display_(display), nor_(nor), fs_(fs),
-          preferences_(preferences), themes_(themes), shots_(shots), data_(data), images_(fs), imageReader_(fs) {}
+          preferences_(preferences), themes_(themes), shots_(shots), data_(data), images_(fs), imageReader_(fs), upload_(fs) {}
     // The 360 MHz guard and what the boot made of it (main.cpp, before run()).
     void bootGuard(BootGuard &guard, const BootGuard::Start &start) { guard_ = &guard; bootStart_ = start; }
     [[noreturn]] void run();
@@ -529,6 +530,7 @@ private:
     ApplicationView view_;
     screenshot::ImageCatalog images_;
     screenshot::ImageReader imageReader_;
+    FirmwareUpload upload_; // MMEM:UPL: a firmware image arriving over SCPI.
     bool imageShowing_=false, imageFullSize_=false;
     // DISP:DATA? streams the screen from the preview buffer under a lease ticket (ScreenLease).
     ScreenLease screenLease_;

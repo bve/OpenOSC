@@ -141,6 +141,12 @@ public:
     struct FactoryRecordReading { const char *policy = "AUTO", *format = "INVALID"; };
     virtual bool factoryRecordFormat(FactoryRecordReading &) const { return false; }
     virtual bool recovery() { return false; }
+    // MMEMory:UPLoad: a firmware image written into /openosc/UPDATE in chunks (the session that began it
+    // owns it; endSession() cancels it). uploadData: offset 0 starts <name>, any other continues it where
+    // it ended; uploadEnd publishes it and gives its size and CRC-32 (zlib's). 0 or the SCPI error.
+    static constexpr size_t UploadNameBytes = 48; // With the terminator.
+    virtual int uploadData(const char *name, uint32_t offset, const uint8_t *data, size_t size) { return -241; }
+    virtual int uploadEnd(uint32_t &bytes, uint32_t &crc) { return -241; }
     // Run mode as the core clock in MHz (0: no profile runs, the HSI fallback). The setter changes
     // it in place, as the Settings menu does, and returns 0 or the SCPI error to report.
     virtual uint32_t coreMhz() const { return 0; }

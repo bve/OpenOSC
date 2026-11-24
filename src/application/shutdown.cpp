@@ -27,10 +27,11 @@ public:
     static constexpr const char *DecodeCsvShutdown = "DECODE CSV CANCELLED: SHUTDOWN";
     static constexpr const char *BodeCsvShutdown = "FRA CSV CANCELLED: SHUTDOWN";
     explicit ShutdownSteps(ApplicationController &a) : a_(a) {}
-    // Every background file user ends before the saves and the unmount: an unfinished decoded or FRA CSV
-    // is closed and its .TMP removed now (its export ended), so nothing writes the volume after it.
+    // Every background file user ends before the saves and the unmount: an unfinished decoded or FRA CSV or an
+    // open firmware upload is closed and its .TMP removed now (its export ended), so nothing writes the volume
+    // after it.
     void prepare() override {
-        a_.imageReader_.cancel(); a_.images_.cancelClear();
+        a_.imageReader_.cancel(); a_.images_.cancelClear(); a_.upload_.cancel();
         a_.closeCaptures();
         a_.closeSessions(false);
         a_.closeAwgFiles(false);

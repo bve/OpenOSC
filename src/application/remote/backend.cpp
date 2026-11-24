@@ -129,6 +129,7 @@ void InstrumentBackend::releaseFrame() {
 }
 void InstrumentBackend::endSession() {
     releaseFrame();
+    application_.upload_.detach(this); // No file access: this runs inside USB background passes.
     application_.data_.frameHosts().end(host_);
 }
 const dmm::Result &InstrumentBackend::meter() const {
@@ -217,6 +218,13 @@ bool InstrumentBackend::recovery() {
     a.recoveryPending_=true; a.recoveryAt_=Board::milliseconds()+250;
     return true;
 }
+static_assert(FirmwareUpload::NameBytes == scpi::Backend::UploadNameBytes, "MMEM:UPL name buffer");
+int InstrumentBackend::uploadData(const char *name, uint32_t offset, const uint8_t *data, size_t size) {
+    auto &a = application_;
+    if (a.recoveryPending_ || a.shutdown_ != ShutdownAction::None || a.shutdownSequence_.active()) return -221; // The volume is going.
+    return a.upload_.write(this, name, offset, data, size);
+}
+int InstrumentBackend::uploadEnd(uint32_t &bytes, uint32_t &crc) { return application_.upload_.end(this, bytes, crc); }
 uint32_t InstrumentBackend::coreMhz() const {
     const uint32_t mode = ClockControl::activeMode();
     return mode < RunModeCount ? RunModes[mode].coreHz / 1000000 : 0;

@@ -17,8 +17,8 @@ namespace openosc::scpi {
 namespace {
 using Limits = generator::ArbitraryLimits;
 }
-int16_t Engine::blockBegin(const char *header, uint32_t bytes) {
-    if (!Header::matches(header, "SOURce:ARBitrary:DATA")) return -168;
+int16_t Engine::arbitraryBegin(const Command &c, uint32_t bytes) {
+    if (*c.argument) return -104; // The block is its only argument.
     if (const int16_t e = generator::ArbitraryBlock::check(bytes)) return e;
     return backend_.arbitraryBegin(this, bytes);
 }

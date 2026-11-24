@@ -39,14 +39,14 @@ int path(const char *&p, bool name, char *out, size_t size) {
     return n > 0 && size_t(n) < size ? 0 : -257;
 }
 alignas(8) __attribute__((section(".scpi_measure"))) uint8_t stages[2][512]; // Zeroed at reset.
-const Engine *stageOwners[2] = {};
+const void *stageOwners[2] = {};
 } // namespace
-uint8_t *Engine::claimStage(const Engine *owner) {
+uint8_t *Engine::claimStage(const void *owner) {
     static_assert(sizeof stages[0] == StageBytes);
     for (unsigned i = 0; i < 2; ++i) if (stageOwners[i] == owner || !stageOwners[i]) { stageOwners[i] = owner; return stages[i]; }
     return nullptr;
 }
-void Engine::releaseStage(const Engine *owner) { for (auto &o : stageOwners) if (o == owner) o = nullptr; }
+void Engine::releaseStage(const void *owner) { for (auto &o : stageOwners) if (o == owner) o = nullptr; }
 bool Engine::systemCommand(const Command &c) {
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
     const bool power = match("SYSTem:POWer:TIMeout"), timeout = match("SYSTem:DISPlay:TIMeout"), dim = match("SYSTem:DISPlay:DIM");
@@ -88,7 +88,7 @@ bool Engine::systemCommand(const Command &c) {
         endFile();
         closeFile();
         if (const int e = backend_.fileOpen(file, bytes)) { error(int16_t(e), true); return true; }
-        if (!(stage_ = claimStage(this))) { backend_.fileClose(); error(-200, true); return true; } // Both stages stream.
+        if (!(stage_ = claimStage(this))) { backend_.fileClose(); error(-200, true); return true; } // Both stages in use (output streams, an upload block).
         char count[16]; std::snprintf(count, sizeof count, "%lu", (unsigned long)bytes);
         reply("#%u%s", unsigned(std::strlen(count)), count);
         fileBinary_ = true; fileRead_ = 0; fileBytes_ = bytes;
