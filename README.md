@@ -38,12 +38,12 @@ Captured on a ZT703S running OpenOSC.
 
 <table>
   <tr>
-    <td><img src=".github/images/scope.png" width="320" alt="Oscilloscope: 20 kHz and 40 kHz square waves with frequency, duty and period readouts, soft-keys at the bottom"></td>
-    <td><img src=".github/images/multimeter.png" width="320" alt="Multimeter: AC voltage RMS with MIN/MAX/AVG statistics and bar graph"></td>
+    <td><img src=".github/images/scope.png" width="320" alt="Oscilloscope: CH1 and CH2 square waves at about 20 kHz and 40 kHz, with frequency and peak-to-peak readouts and the record memory label"></td>
+    <td><img src=".github/images/multimeter-charge.png" width="320" alt="Multimeter: DC milliamps, signed charge in mAh beside the range, and MIN/MAX/AVG statistics"></td>
   </tr>
   <tr>
     <td align="center">Oscilloscope, two channels</td>
-    <td align="center">Multimeter with statistics</td>
+    <td align="center">Multimeter with charge counter</td>
   </tr>
   <tr>
     <td><img src=".github/images/scope-readouts.png" width="320" alt="Oscilloscope: two readouts per channel, time cursors and the STOP status word"></td>
@@ -118,11 +118,11 @@ Captured on a ZT703S running OpenOSC.
     <td align="center">Amber color scheme</td>
   </tr>
   <tr>
-    <td><img src=".github/images/menu.png" width="320" alt="Channel menu with the F1-F4 cards at the bottom, above the physical keys"></td>
+    <td><img src=".github/images/settings-uptime.png" width="320" alt="Settings menu showing elapsed time since startup in the header"></td>
     <td><img src=".github/images/generator-layout.png" width="320" alt="Generator layout editor: choosing the position of the frequency, preview and buttons blocks"></td>
   </tr>
   <tr>
-    <td align="center">Menus above the F1–F4 keys</td>
+    <td align="center">Settings with uptime</td>
     <td align="center">Generator layout</td>
   </tr>
   <tr>
