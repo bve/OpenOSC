@@ -16,7 +16,7 @@ public:
     void activate(const ApplicationState &state) override;
     void update(const scope::FrameView &frame, bool held, unsigned channel, DataStatus status);
     void status(DataStatus status, bool held);
-    void settings(const scope::FrameMetadata &next, unsigned channel);
+    void settings(const scope::FrameMetadata &next, unsigned channel, bool nextTrend);
     // panReverse: Settings > Display > Pan direction, for Zoom & Pan's Left/Right hint.
     void context(unsigned channel, plot::Focus focus, bool panReverse = false);
     // The DMM trace on the Scale and Position cards while F1/F2 select it: its units/div in `unit`
@@ -60,7 +60,8 @@ private:
     void select(unsigned channel); // The cards' channel, its trace drawn in front (#81).
     unsigned channel_ = 0;
     Meter meter_;
-    bool held_ = false, valid_ = false, trending_ = false; // trending_: a trend copy is on (generator()).
+    // trending_: a trend copy is on (generator()); nextTrend_: the next capture is a trend (settings()).
+    bool held_ = false, valid_ = false, trending_ = false, nextTrend_ = false;
     plot::Focus focus_ = plot::Focus::Scale;
     bool panReverse_ = false;
     void zoomNote(); // Zoom & Pan's factor and arrows in the plot's note (the GEN note returns on the next pass).

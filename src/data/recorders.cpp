@@ -99,7 +99,10 @@ bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena
 scope::FrameMetadata ScopeRecorder::csvMetadata(const scope::FrameMetadata &frame) const {
     // A trend's header describes the copy's points, which the leased frame may be a point or a merge behind.
     auto metadata = frame;
-    if (trend_) { metadata.samples = trend_->size; metadata.ring = trend_->window; metadata.samplesPerSecond = trend_->rate; }
+    if (trend_) {
+        metadata.sequence = trend_->sequence; metadata.timestampUs = trend_->timestampUs;
+        metadata.samples = trend_->size; metadata.ring = trend_->window; metadata.samplesPerSecond = trend_->rate;
+    }
     return metadata;
 }
 size_t ScopeRecorder::csvHeader(const scope::FrameMetadata &metadata) {

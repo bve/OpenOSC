@@ -31,8 +31,9 @@ void ScopeScreen::activate(const ApplicationState &state) {
     }
     cards();
 }
-void ScopeScreen::settings(const scope::FrameMetadata &next, unsigned channel) {
+void ScopeScreen::settings(const scope::FrameMetadata &next, unsigned channel, bool nextTrend) {
     next_ = next;
+    nextTrend_ = nextTrend;
     select(channel);
     cards();
 }
@@ -124,7 +125,8 @@ void ScopeScreen::cards() {
     // range changes. Show the next setting in the title until a record at that scale arrives.
     if (framed) {
         const bool volts = !meter && plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
-        const bool seconds = !trending_ && plot::DisplayScale::timePending(shown, widget.options(), next_);
+        // A trend's time/div is its record's own, shown as it grows: none is pending for it or before it.
+        const bool seconds = !trending_ && !nextTrend_ && plot::DisplayScale::timePending(shown, widget.options(), next_);
         char pendingVolts[16] = "", pendingTime[16] = "";
         if (volts) {
             const auto scaleNext = plot::DisplayScale::channel(next_.channels[channel_], plot::ChannelOptions{});

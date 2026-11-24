@@ -49,7 +49,9 @@ public:
     void decoderResults(const ui::DecodeTable::Content &table, const char *info, const decoding::ResultSet *traced);
     const ui::DecodeTable &decodeTable() const { return host_.decodeTable(); }
     const ui::DecodeStrip &decodeStrip() const { return host_.decodeStrip(); }
-    void scopeSettings(const scope::FrameMetadata &metadata, unsigned channel) { scope_.settings(metadata, channel); }
+    void scopeSettings(const scope::FrameMetadata &metadata, unsigned channel, bool nextTrend) {
+        scope_.settings(metadata, channel, nextTrend);
+    }
     void scopeContext(unsigned channel, plot::Focus focus, bool panReverse = false) { scope_.context(channel, focus, panReverse); }
     void scopeMeter(const ui::ScopeScreen::Meter &meter) { scope_.meter(meter); }
     void scopeMeterReadouts(const plot::MeterReadouts &readouts) { scope_.meterReadouts(readouts); }

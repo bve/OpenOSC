@@ -1,15 +1,20 @@
 #include "openosc/ui/scope/painter.hpp"
 #include "openosc/acquisition/trend.hpp"
 #include "openosc/ui/scope/meter_readouts.hpp"
+#include "openosc/ui/scope/view_zoom.hpp"
 #include <algorithm>
 #include <cmath>
 
 namespace openosc::plot {
 // A trend (TrendBuffer) is drawn from the points it keeps, which the frame's means cannot show: each
 // column is the min and max of its points as a band and their mean as a line. The copy places its own
-// points over the plot, so it is drawn whenever it is valid, whichever frame the model holds meanwhile.
+// points over the whole plot, so it is drawn whenever it is valid, whichever frame the model holds
+// meanwhile, while the view is the record's own: zoomed, panned or held at the next capture's time/div
+// (issue #7) the frame's means are drawn instead, as the time/div label and the cursors follow that view.
 bool Painter::trendShown() const {
-    return trend_ && trend_->points && trend_->sequence && model_.metadata().rolling && model_.viewport().width >= 2;
+    const auto &o = model_.options();
+    return trend_ && trend_->points && trend_->sequence && model_.metadata().rolling && model_.viewport().width >= 2 &&
+           !o.heldTimebaseNs && ViewZoom::home(o);
 }
 RecordGaps Painter::trendGaps() const {
     RecordGaps gaps;
@@ -48,8 +53,8 @@ void Painter::trendTrace(unsigned channel, uint32_t color, uint8_t opacity, unsi
 }
 // The DMM on its own scale and zero, as meterTrace's line. A column holds the readings of its points: the
 // count-weighted mean of their means between the lowest and highest. One with no reading is skipped
-// (the line joins over it: a point is much shorter than the chip's 320 ms early in a record); one with
-// only NaN readings or gap marks breaks it.
+// (the line joins over it: a point is much shorter than the chip's 320 ms early in a record); a NaN
+// reading or a gap mark among its points (OL, a stop of the readings) breaks the line before it.
 void Painter::trendMeter() {
     const auto &o = model_.options();
     const auto &view = model_.viewport();
@@ -79,10 +84,8 @@ void Painter::trendMeter() {
             high = count ? std::max<double>(high, trend_->points->dmmHigh[i]) : trend_->points->dmmHigh[i];
             count += n;
         }
-        if (!count) {
-            if (missing) line.gap();
-            continue;
-        }
+        if (missing) line.gap();
+        if (!count) continue;
         band.vertex(x, place(high));
         band.vertex(x, place(low) + 1);
         band.gap();
