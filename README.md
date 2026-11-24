@@ -333,7 +333,7 @@ exactly as it was.
 The backup is a precaution for rare events outside OpenOSC, such as a hardware fault. If you want
 one:
 
-1. In Recovery, select **BACKUP FACTORY BOOT**, then **CONFIRM** and press **MENU**.
+1. In Recovery, select **BACKUP FACTORY BOOT** and confirm it with **F3**.
 2. Recovery copies the whole factory block (`0x08000000`–`0x0801FFFF`, 128 KiB) to the USB drive
    and verifies the copy:
    - `/openosc/BACKUP/FACTORY_BOOT_08000000.bin`: the backup itself;
@@ -352,11 +352,13 @@ Writing a backup back requires an SWD programmer.
 3. Copy the firmware file for your model into `/openosc/UPDATE/`: `OpenOSC-Firmware-ZT703S.OSC` or
    `OpenOSC-Firmware-ZT706S.OSC` (from the release or your own build).
 4. Finish copying. Optionally, eject the drive on the computer.
-5. On the device, select **UPDATE FIRMWARE**, choose the file, select **CONFIRM** and press **MENU**.
-6. When the update completes, select **START APPLICATION**.
+5. On the device, select **UPDATE FIRMWARE**, choose the file and confirm it with **F3**.
+6. When the update completes, Recovery offers to start the application with **CONFIRM** selected:
+   press **MENU** or **F3**.
 
 Recovery controls: **MENU** = OK, **F4** = back/cancel, arrow keys = navigation.
-Every confirmation starts on **CANCEL**: press left/right to select **CONFIRM**, then **MENU**.
+In a confirmation, **F3** confirms and **F2** cancels at once. It starts on **CANCEL** (except the
+offer to start after an update): left/right select **CONFIRM**, **MENU** presses the selected one.
 If the computer still has the USB drive mounted, Recovery first asks **DISCONNECT USB DISK?**.
 Confirm it and Recovery detaches the drive itself; the cable can stay connected.
 

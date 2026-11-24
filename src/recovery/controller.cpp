@@ -49,6 +49,7 @@ bool RecoveryController::releaseHost() {
 }
 void RecoveryController::begin(Action action) {
     action_ = action;
+    updated_ = false;
     if (action == Action::Calibration) {
         state_ = State::Calibration;
         views_.calibration(channel_, hex_);
