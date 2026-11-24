@@ -1,3 +1,4 @@
+#include "openosc/storage/open_readers.hpp"
 #include "openosc/screenshot/catalog.hpp"
 #include <cstdio>
 #include <cstring>
@@ -57,11 +58,13 @@ bool ImageCatalog::eraseSelected() {
     char target[PathBytes];
     if (!fs_.mounted()) return fail("Storage not available");
     if (clearing_ || !path(target,sizeof target)) return false;
+    if (storage::screenshotReaders) return fail("Image in use over USB"); // MMEM:DATA? reads one.
     if (f_unlink(target)!=FR_OK) return fail("Cannot delete image");
     return refresh();
 }
 bool ImageCatalog::beginClear() {
     if (clearing_) return fail("Image cleanup already in progress");
+    if (storage::screenshotReaders) return fail("Image in use over USB");
     erased_=0;
     // Clear screenshots can start directly from Settings. Count the BMPs on disk before deleting any.
     if (!refresh()) return false;
@@ -77,6 +80,7 @@ void ImageCatalog::cancelClear() {
 }
 bool ImageCatalog::clearStep() {
     if (!clearing_) return true;
+    if (storage::screenshotReaders) { cancelClear(); return fail("Image cleanup stopped; in use over USB"); }
     FILINFO info{};
     FRESULT result;
     while ((result=f_readdir(&directory_,&info))==FR_OK && info.fname[0]) {

@@ -29,7 +29,7 @@ private:
 ControllerPort controllerPort;
 }
 void InstrumentUsb::releaseOutNak() { usb::tmcRecovery.release(controllerPort); }
-void InstrumentUsb::serviceTmc(uint32_t now, bool dispatch) { tmcPipe_.service(now, generation_, dispatch, controllerPort); }
+void InstrumentUsb::serviceTmc(uint32_t now) { tmcPipe_.dispatch(now, generation_, controllerPort); }
 void InstrumentUsb::synchronize() {
     unsigned mask;
     {
@@ -49,7 +49,7 @@ void InstrumentUsb::transfer(uint32_t now) {
         if (serialEngine_.available()) {
             const auto count = serialEngine_.read(serialPipe.transmit,usb::TransferBytes);
             if (count && usb::transmit(1,count,generation_)) serialZlp_ = !(count & 63);
-        } else if (serialZlp_ && usb::transmit(1,0,generation_)) serialZlp_ = false;
+        } else if (serialZlp_ && !serialEngine_.more() && usb::transmit(1,0,generation_)) serialZlp_ = false; // Not mid-file.
     }
 }
 void InstrumentUsb::background(uint32_t now) {
@@ -59,7 +59,7 @@ void InstrumentUsb::background(uint32_t now) {
     if (!connected()) return;
     // Queue input and send already prepared output. Instrument commands are
     // dispatched by the main poll only, never recursively inside a FAT write.
-    serviceTmc(now, false);
+    tmcPipe_.service(now, generation_, controllerPort);
     transfer(now);
 }
 } // namespace openosc

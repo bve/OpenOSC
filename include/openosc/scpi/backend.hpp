@@ -8,6 +8,7 @@
 #include "openosc/instrument/mode.hpp"
 #include "openosc/data/memory.hpp"
 #include "openosc/data/performance.hpp"
+#include "openosc/platform/idle_policy.hpp"
 
 namespace openosc::scpi {
 // The DMM hold modes as the PC sees them (docs/DMM_AUTO_HOLD.md): the saved settings and the cycle.
@@ -129,6 +130,15 @@ public:
     virtual uint32_t coreMhz() const { return 0; }
     virtual int coreMhz(uint32_t) { return -241; }
     virtual bool counter(unsigned,scope::CounterReading &) const { return false; }
+    // SYST:POW:TIM, SYST:DISP:TIM/DIM: the Settings menu's idle choices, saved as it saves them (0 or the error).
+    virtual bool idleSettings(IdleSettings &) const { return false; }
+    virtual int setIdle(const IdleSettings &) { return -241; }
+    // MMEMory (paths checked by the engine): 0 or the SCPI error; fileRead 0: gone.
+    virtual int fileList(const char *, uint32_t, char *out, size_t size, uint32_t &count, uint32_t &total) { if (size) *out = 0; count = total = 0; return -241; }
+    virtual int fileOpen(const char *, uint32_t &) { return -241; }
+    virtual size_t fileRead(uint32_t, uint8_t *, size_t) { return 0; }
+    virtual void fileClose() {}
+    virtual int fileDelete(const char *) { return -241; }
     virtual scope::CaptureProgress captureProgress() const { return {}; }
     // DECode: (decoder builds). report: false when the build has no decoder. One CSV export at a time
     // (DECode:DATA?): begin gives its ticket (0: `error` -200 busy, -230 no finished result), measure()

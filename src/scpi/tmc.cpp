@@ -69,23 +69,40 @@ void Tmc::retract() {
     active_ = undo_.active; ended_ = undo_.ended; zlp_ = undo_.zlp;
 }
 size_t Tmc::packet(uint8_t *output, size_t capacity) {
-    if (!output || capacity < 64 || zlp_ || failed_) return 0;
+    if (!output || capacity < 64 || zlp_ || failed_ || (!active_ && !requested_)) return 0;
     undo_ = {requested_, inData_, active_, ended_, zlp_};
     capacity &= ~size_t(63);
+    const size_t ready = engine_.available();
+    const size_t unstaged = engine_.unstaged();
     if (!active_) {
-        if (!requested_ || !engine_.available()) return 0;
-        transfer_ = std::min<size_t>(requested_, engine_.available());
+        if (!ready) return 0;
+        transfer_ = std::min<size_t>(requested_, ready + unstaged);
         std::memset(reply_, 0, sizeof reply_); reply_[0] = 2; reply_[1] = requestTag_; reply_[2] = ~requestTag_;
         for (unsigned i = 0; i < 4; ++i) reply_[4+i] = uint8_t(transfer_ >> (8*i));
-        reply_[8] = transfer_ == engine_.available();
+        reply_[8] = transfer_ == ready + unstaged; // EOM: this transfer ends the SCPI reply.
         outputPadding_ = (4 - (transfer_ & 3)) & 3; total_ = 12 + transfer_ + outputPadding_;
-        replyAt_ = 0; requested_ = 0; active_ = true; ended_ = false; inData_ = 0;
+        replyAt_ = 0; requested_ = 0; generation_ = engine_.outputGeneration(); active_ = true; ended_ = false; inData_ = 0;
+    }
+    // A short USB packet terminates the host's transfer. Send full packets until the
+    // foreground fills more of a staged reply. Pending aborts still complete with zeros.
+    if (generation_ == engine_.outputGeneration() && unstaged && transfer_ > ready) {
+        capacity = std::min(capacity, (ready + (sizeof reply_ - replyAt_)) & ~size_t(63));
+        if (!capacity) return 0;
     }
     size_t used = 0;
     while (replyAt_ < 12 && used < capacity) output[used++] = reply_[replyAt_++];
-    if (transfer_ && used < capacity) {
-        const size_t count = engine_.read(output + used, std::min<size_t>(transfer_, capacity - used));
+    bool early = false; // A short packet ends the host's transfer: after an early stop, read only to the packet's end.
+    while (transfer_ && used < capacity) {
+        const size_t want = std::min<size_t>(transfer_, early ? 64 - (used & 63) : capacity - used);
+        const size_t count = engine_.outputGeneration() == generation_ ? engine_.read(output + used, want) : 0;
         transfer_ -= count; used += count; inData_ += count;
+        if (!count) { // The engine dropped this reply (reset, -410): zeros end it, never the next reply's bytes.
+            const size_t zeros = std::min<size_t>(transfer_, capacity - used);
+            std::memset(output + used, 0, zeros); transfer_ -= zeros; used += zeros; inData_ += zeros;
+            break;
+        }
+        if (!(used & 63)) break;
+        early = early || count < want;
     }
     while (!transfer_ && outputPadding_ && used < capacity) { output[used++] = 0; --outputPadding_; }
     if (!transfer_ && !outputPadding_) {

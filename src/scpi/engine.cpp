@@ -22,30 +22,63 @@ void Engine::endDecode() {
     decodeTicket_ = decodeTotal_ = decodeSent_ = 0;
     decodeBinary_ = waitingDecode_ = false;
 }
+void Engine::endFile() {
+    fileClosePending_ |= fileBinary_;
+    if (stage_) releaseStage(this);
+    fileBinary_ = false; fileRead_ = fileBytes_ = 0; stage_ = nullptr; stageAt_ = stageEnd_ = 0;
+}
+void Engine::closeFile() {
+    if (!fileClosePending_) return;
+    fileClosePending_ = false;
+    backend_.fileClose();
+}
+void Engine::fillStage() {
+    closeFile();
+    if (!fileBinary_ || fileRead_ == fileBytes_) return;
+    const size_t ready = stageEnd_ - stageAt_;
+    if (ready > StageBytes / 2) return;
+    // Keep any tail from a full USB packet so the same transfer can continue after a refill.
+    if (ready && stageAt_) std::memmove(stage_, stage_ + stageAt_, ready);
+    stageAt_ = 0;
+    stageEnd_ = uint16_t(ready);
+    const size_t n = backend_.fileRead(fileRead_, stage_ + ready, std::min<size_t>(fileBytes_ - fileRead_, StageBytes - ready));
+    if (!n) { padding_ += fileBytes_ - fileRead_; fileRead_ = fileBytes_; errors_.push(-250); return; } // Shrunk or unreadable.
+    fileRead_ += uint32_t(n);
+    stageEnd_ = uint16_t(ready + n);
+}
 void Engine::endScreen() {
     if (screenTicket_) backend_.screenEnd(screenTicket_);
     screenTicket_ = 0;
 }
 void Engine::discardOutput() {
-    backend_.releaseFrame();
-    endDecode(); endScreen();
-    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = padding_ = screenAt_ = 0;
+    ++generation_;
+    endMeasure(); backend_.releaseFrame();
+    endDecode(); endScreen(); endFile(); endWave();
+    responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
     completion_ = Completion::None;
 }
 void Engine::reset() {
-    parser_.reset(); errors_.clear(); backend_.endSession(); endDecode(); endScreen();
-    responseSize_ = responseAt_ = binaryCount_ = binaryAt_ = padding_ = screenAt_ = 0;
+    ++generation_;
+    endMeasure(); parser_.reset(); errors_.clear(); backend_.endSession(); endDecode(); endScreen(); endFile(); endWave();
+    responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = inputPending_ = false;
     waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
     completion_ = Completion::None;
-    waveStart_ = 1; waveStop_ = 0; wavePoints_ = 0; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
+    waveStart_ = 1; waveStop_ = 0; wavePoints_ = 0; wavePeak_ = false; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
     profileKnown_ = false;
     generatorFaultsKnown_ = false; // A new session reports only the generator's stops from now on.
 }
+size_t Engine::unstaged() const {
+    const size_t file = fileBinary_ ? fileBytes_ - fileRead_ : 0;
+    const size_t peaks = waveMore() ? binaryBytes_ - binarySent_ - (waveEnd_ - waveAt_) : 0;
+    const size_t bytes = file + peaks;
+    return bytes + size_t(bytes && suffix_);
+}
 size_t Engine::available() const {
-    return responseSize_ - responseAt_ + (binary_ ? binaryCount_ - binaryAt_ : 0) + (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
-           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + padding_ + unsigned(suffix_);
+    return responseSize_ - responseAt_ + (binary_ ? (peakStream_ ? waveEnd_ - waveAt_ : binaryBytes_ - binarySent_) : 0) +
+           (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
+           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + (fileBinary_ ? stageEnd_ - stageAt_ : 0) + padding_ + unsigned(suffix_ && !more()); // The LF only with the file's last bytes.
 }
 size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!output || !capacity) return 0;
@@ -53,15 +86,21 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
     while (used < capacity && responseAt_ < responseSize_) output[used++] = response_[responseAt_++];
     // A definite block keeps its announced length: if its source goes while it is sent, zeros complete
     // it (padding_), the LF ends it and -230 is queued; the lease goes back once, the session stays.
-    if (binary_ && used < capacity && binaryAt_ < binaryCount_) {
-        const auto *source = backend_.frame(false);
-        while (used < capacity && binaryAt_ < binaryCount_) {
-            int16_t code = 0;
-            if (!source || !source->signedCode(scope::Channel(waveChannel_), binaryStart_ + binaryAt_ * binaryStride_, code)) {
-                padding_ = binaryCount_ - binaryAt_; binaryAt_ = binaryCount_;
-                backend_.releaseFrame(); errors_.push(-230); break;
+    // Raw points come from the pinned record here; peak pairs only from the stage fillWave() made.
+    if (binary_ && used < capacity && responseAt_ == responseSize_ && binarySent_ < binaryBytes_) {
+        if (peakStream_) {
+            const size_t n = std::min<size_t>(waveEnd_ - waveAt_, capacity - used);
+            if (n) { std::memcpy(output + used, waveStage_ + waveAt_, n); used += n; waveAt_ = uint16_t(waveAt_ + n); binarySent_ += uint32_t(n); }
+        } else {
+            const auto *source = backend_.frame(false);
+            if (!pinned(source)) lostBlock();
+            while (used < capacity && binarySent_ < binaryBytes_) {
+                const auto &segment = segments_[segmentAt_];
+                if (pointAt_ == segment.count) { ++segmentAt_; pointAt_ = 0; continue; }
+                int16_t code = 0;
+                if (!source->signedCode(scope::Channel(segment.channel), segment.first + pointAt_ * segment.stride, code)) { lostBlock(); break; }
+                output[used++] = uint8_t(code + 128); ++binarySent_; ++pointAt_;
             }
-            output[used++] = uint8_t(code + 128); ++binaryAt_;
         }
     }
     if (decodeBinary_ && used < capacity && responseAt_ == responseSize_) {
@@ -81,30 +120,47 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
         else { used += n; screenAt_ += uint32_t(n); }
         if (screenAt_ == ScreenBytes) endScreen(); // Every byte sent (or owed as padding): the buffer is free.
     }
+    if (fileBinary_ && used < capacity && responseAt_ == responseSize_ && stageAt_ < stageEnd_) { // Staged bytes only.
+        const size_t n = std::min<size_t>(stageEnd_ - stageAt_, capacity - used);
+        std::memcpy(output + used, stage_ + stageAt_, n); used += n; stageAt_ = uint16_t(stageAt_ + n);
+    }
     while (used < capacity && padding_) { output[used++] = 0; --padding_; }
-    if (used < capacity && suffix_ && !padding_ && (!binary_ || binaryAt_ == binaryCount_) && (!decodeBinary_ || decodeSent_ == decodeTotal_) &&
-        (!screenBinary_ || screenAt_ == ScreenBytes)) {
+    if (used < capacity && suffix_ && !padding_ && (!binary_ || binarySent_ == binaryBytes_) && (!decodeBinary_ || decodeSent_ == decodeTotal_) &&
+        (!screenBinary_ || screenAt_ == ScreenBytes) && fileDone()) {
         output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false; screenBinary_ = false;
+        endFile(); endWave();
     }
     if (!available()) responseSize_ = responseAt_ = 0;
     outputAt_ = now_; return used;
 }
+bool Engine::expire(uint32_t now) {
+    if (!available() && fileDone() && !waveMore()) return false;
+    if (int32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
+    return true;
+}
+void Engine::idle(uint32_t now) {
+    now_ = now; // Reads stamp outputAt_ with now_ (poll() may not run here).
+    const auto recent = [&](uint32_t at) { const int32_t age = int32_t(now - at); return age > -10000 && age < 10000; }; // Never set: old.
+    if (expire(now) || recent(inputAt_) || recent(frameAt_) || recent(outputAt_)) return;
+    if (measuring_ || waitingDecode_ || waitingWaveform_) { discardOutput(); errors_.push(-410); }
+    else backend_.releaseFrame();
+    preambleChannels_ = 0;
+}
 void Engine::poll(uint32_t now) {
     now_ = now;
-    if (profileKnown_ && profile_ != backend_.multimeter()) { reset(); return; }
+    if (profileKnown_ && profile_ != backend_.multimeter()) { reset(); closeFile(); return; }
     profile_ = backend_.multimeter(); profileKnown_ = true;
     // A stop the generator made by itself (DAC underrun, a setting above the clock's limit): -240 once
     // when the count moved (at most one a poll, never repeated for a stop already reported).
     const uint32_t faults = backend_.generator().faults;
     if (generatorFaultsKnown_ && faults != generatorFaults_) errors_.push(-240);
     generatorFaults_ = faults; generatorFaultsKnown_ = true;
-    if (inputPending_ && uint32_t(now - inputAt_) >= 3000) {
+    if (inputPending_ && int32_t(now - inputAt_) >= 3000) {
         parser_.reset(); inputPending_ = false; errors_.push(-102);
     }
-    if (available()) {
-        if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
-        return;
-    }
+    fillStage(); // The next file bytes, here in the foreground.
+    fillWave();  // And the next peak pairs.
+    if (expire(now)) return;
     if (waitingDecode_) { // The CSV's size, a bounded slice a pass; then the definite block's header.
         const int known = backend_.decodeMeasure(decodeTicket_, decodeTotal_);
         if (!known && int32_t(now - deadline_) < 0) return;
@@ -116,6 +172,7 @@ void Engine::poll(uint32_t now) {
         if (!decodeTotal_) { backend_.decodeEnd(decodeTicket_); decodeTicket_ = 0; }
         return;
     }
+    if (measuring_) { stepMeasure(); return; }
     if (waitingWaveform_) {
         Command command; std::snprintf(command.header,sizeof command.header,"WAV:%s",pendingWave_);
         command.query = true; waveformCommand(command); return;
@@ -155,8 +212,11 @@ void Engine::dispatch(const Command &c) {
     uint32_t head; std::memcpy(&head, c.header, sizeof head);
     usbtrace::mark(usbtrace::Tag::Command, head);
     if (c.error) { error(c.error, c.query); return; }
-    if (c.query && *c.argument) { error(-108,true); return; }
-    if (common(c) || generatorCommand(c) || decodeCommand(c)) return;
+    const bool queryArgument = Header::matches(c.header, "WAVeform:MEASure") || Header::matches(c.header, "WAVeform:ENVelope") ||
+                               Header::matches(c.header, "MMEMory:CATalog") ||
+                               Header::matches(c.header, "MMEMory:DATA");
+    if (c.query && *c.argument && !queryArgument) { error(-108,true); return; }
+    if (common(c) || systemCommand(c) || generatorCommand(c) || decodeCommand(c)) return;
     if (backend_.multimeter() ? meterCommand(c) : scopeCommand(c)) return;
     error(-113, c.query);
 }
@@ -195,7 +255,7 @@ void Engine::waitGenerator() {
     waitingGenerator_ = backend_.generator().status == DataStatus::Busy; generatorDeadline_ = now_ + GeneratorMs;
 }
 uint8_t Engine::statusByte() const {
-    const uint8_t base = (available() ? 16 : 0) | (!errors_.empty() ? 4 : 0) | ((errors_.event() & ese_) ? 32 : 0);
+    const uint8_t base = (available() || more() ? 16 : 0) | (!errors_.empty() ? 4 : 0) | ((errors_.event() & ese_) ? 32 : 0);
     return base | ((base & sre_) ? 64 : 0);
 }
 } // namespace openosc::scpi

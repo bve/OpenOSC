@@ -204,6 +204,7 @@ Captured on a ZT703S running OpenOSC.
 **USB and remote control**
 
 - USBTMC and CDC (virtual COM port) with SCPI commands, working alongside the local UI
+- [SCPI extensions for desktop clients](docs/SCPI_DESKTOP.md) for frame, peak, measurement and file transfers
 - Compatible command profiles for Rigol DS oscilloscopes and the OWON XDM1041 multimeter, so
   existing PC software such as ngscopeclient can talk to the device
 - USB Remote mode: the PC controls the device while the screen keeps showing live data
@@ -411,3 +412,8 @@ If OpenOSC is useful to you, you can support its development:
 
 Releases come out often, and you do not need to install every one: see
 [Why are there so many releases?](https://github.com/bve/OpenOSC/wiki/FAQ) in the FAQ.
+
+## Retro gaming
+
+If you'd like to turn your scopemeter into a retro gaming handheld, check out my
+just-for-fun dual-boot builds at [OpenOSC-RetroGo](https://github.com/bve/OpenOSC-RetroGo).

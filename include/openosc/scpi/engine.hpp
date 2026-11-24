@@ -5,6 +5,7 @@
 #include "openosc/scpi/header.hpp"
 #include "openosc/scpi/errors.hpp"
 
+namespace openosc::scope { class Measurements; }
 namespace openosc::scpi {
 class Engine {
 public:
@@ -24,6 +25,13 @@ public:
     void abortInput();
     void discardOutput();
     uint8_t statusByte() const;
+    uint32_t outputGeneration() const { return generation_; } // Moves when pending output is dropped (reset, discard).
+    bool expire(uint32_t now); // Output left unread 10 s is dropped (-410); true: output pending.
+    void idle(uint32_t now); // Instead of poll() (no host, failed recovery): expire(); 10 s idle frees the lease and jobs.
+    void closeFile(); // Foreground cleanup after a transfer, abort, or USB stop.
+    void refill() { fillStage(); } // Foreground file refill after output, so the background pass can send it.
+    size_t unstaged() const; // Reply bytes owed by a foreground producer, including its final LF.
+    bool more() const { return unstaged() != 0; }
 private:
     bool common(const Command &command);
     bool scopeCommand(const Command &command);
@@ -33,6 +41,17 @@ private:
     bool meterHoldCommand(const Command &command); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
     bool generatorCommand(const Command &command);
     bool decodeCommand(const Command &command); // DECode: (decode.cpp).
+    bool systemCommand(const Command &command); // Idle settings and MMEMory: (system.cpp), either profile.
+    void endFile();
+    // MMEM:DATA?: FatFs read in the foreground only (USB's background pass runs inside FAT writes).
+    void fillStage();
+    static constexpr size_t StageBytes = 512; // A FAT sector a refill.
+    static uint8_t *claimStage(const Engine *owner); // One of two ITCM stages (system.cpp); null: both in use.
+    static void releaseStage(const Engine *owner);
+    bool fileDone() const { return !fileBinary_ || (fileRead_ == fileBytes_ && stageAt_ == stageEnd_); }
+    bool fileBinary_ = false, fileClosePending_ = false;
+    uint32_t fileRead_ = 0, fileBytes_ = 0;
+    uint8_t *stage_ = nullptr; uint16_t stageAt_ = 0, stageEnd_ = 0;
     void endDecode();                           // The CSV export lets go (reset, abort, done).
     void dispatch(const Command &command);
     void reply(const char *format, ...);
@@ -50,9 +69,43 @@ private:
     Backend &backend_;
     Parser parser_;
     ErrorQueue errors_;
+    uint32_t generation_ = 0;
     char response_[256]{};
     size_t responseSize_ = 0, responseAt_ = 0;
-    uint32_t binaryStart_ = 0, binaryCount_ = 0, binaryAt_ = 0, binaryStride_ = 1; // WAV:DATA? sends every binaryStride_-th point.
+    // WAV:DATA?/FRAMe?/ENVelope?: a channel's every stride-th point from first, or (peak) a min/max per bucket.
+    struct Segment { uint32_t first = 0, stride = 1, count = 0, end = 0; unsigned channel = 0; };
+    Segment segments_[2];
+    unsigned segmentCount_ = 0, segmentAt_ = 0;
+    uint32_t pointAt_ = 0, binaryBytes_ = 0, binarySent_ = 0;
+    bool peakStream_ = false;
+    // Peak blocks: fillWave() reduces bounded slices of the pinned record in the foreground into a
+    // claimed stage (whole min/max pairs); read() only copies staged bytes, available() counts them.
+    static constexpr uint32_t WaveSliceSamples = 32768; // Maximum points scanned in a foreground pass.
+    uint8_t *waveStage_ = nullptr; uint16_t waveAt_ = 0, waveEnd_ = 0;
+    void fillWave();
+    void endWave();
+    bool waveMore() const { return binary_ && peakStream_ && binarySent_ + uint32_t(waveEnd_ - waveAt_) < binaryBytes_; }
+    // The record a block, its wait or a WAV:MEAS? job is pinned to: another one (or none) pads the
+    // block or ends the job with -230.
+    uint32_t pinnedSequence_ = 0; uint64_t pinnedTimestamp_ = 0;
+    void pin(const scope::FrameMetadata &m) { pinnedSequence_ = m.sequence; pinnedTimestamp_ = m.timestampUs; }
+    bool pinned(const scope::FrameView *f) const { return f && f->valid() && f->metadata().sequence == pinnedSequence_ && f->metadata().timestampUs == pinnedTimestamp_; }
+    void lostBlock(); // The pinned record went mid-block: zeros complete it, -230, the lease goes.
+    bool prepareBlock(const scope::FrameMetadata &m); // Before the header: pin the record, claim a peak stage.
+    void openBlock();                                 // After it: the block follows, its first pairs staged.
+    // envelope: WAV:ENV?'s buckets over the whole record (type 1), not START/STOP/POIN.
+    bool preamble(const scope::FrameMetadata &m, unsigned channel, bool exact, char *out, size_t size, uint32_t envelope = 0) const;
+    bool measured(const scope::Measurements &values, bool clipped, unsigned channel, char *out, size_t size); // WAV:MEAS?'s reply.
+    // WAV:MEAS?: one shared job (SCReen or RECord, any session) on the leased record, in bounded
+    // slices a poll; endMeasure lets it go.
+    static constexpr uint32_t MeasureMs = 10000; // A job's bound (then -230); another session waits to its bound + 1 s.
+    bool measureRecord_ = false, measuring_ = false;
+    uint32_t ownerUntil_ = 0; // A wait for another session's job ends here (0: none this query).
+    void stepMeasure();
+    void endMeasure();
+    static constexpr uint32_t EnvelopeBuckets = 1500; // WAV:ENV? without a count.
+    uint32_t waveEnvelope_ = EnvelopeBuckets; // WAV:ENV? buckets of the query being served.
+    bool wavePeak_ = false; // WAV:POIN:MODE PEAK (only with WAV:POIN n).
     uint32_t padding_ = 0; // Zeros still owed to an announced block whose source went (then -230).
     uint32_t waveStart_ = 1, waveStop_ = 0, wavePoints_ = 0; // wavePoints_: WAV:POIN (0: every point).
     unsigned waveChannel_ = 0, preambleChannels_ = 0;
@@ -61,8 +114,8 @@ private:
     Completion completion_ = Completion::None;
     bool waitingOperation_ = false, waitingReading_ = false, secondary_ = false;
     bool waitingWaveform_ = false, waitingGenerator_ = false;
-    const char *pendingWave_ = "DATA"; // The WAV query waiting for its frame: PRE, DATA, SEQ, TIM, KEY, EVEN, STAR or STOP.
-    void waitFrame(const char *query); // Up to 1 s (deadline_), then -230; the dispatcher is never blocked.
+    const char *pendingWave_ = "DATA"; // The WAV query waiting for its frame: PRE, DATA, FRAM, ENV, MEAS, SEQ, TIM, KEY, EVEN, STAR or STOP.
+    void waitFrame(const char *query, bool fresh = false); // On expiry send NAN and queue -230.
     uint32_t generatorDeadline_ = 0;
     uint32_t readingSequence_ = 0, deadline_ = 0, now_ = 0, inputAt_ = 0, frameAt_ = 0, outputAt_ = 0;
     bool inputPending_ = false;

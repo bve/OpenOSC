@@ -34,6 +34,7 @@ public:
 private:
     bool header();
     Engine &engine_;
+    uint32_t generation_ = 0; // The engine's output this transfer reads (outputGeneration).
     uint8_t header_[12]{}, reply_[12]{};
     unsigned headerBytes_ = 0, replyAt_ = 12, padding_ = 0, outputPadding_ = 0;
     uint32_t remaining_ = 0, requested_ = 0, transfer_ = 0, total_ = 0, outData_ = 0, inData_ = 0;

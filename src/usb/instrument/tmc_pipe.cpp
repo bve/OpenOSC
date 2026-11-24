@@ -10,16 +10,31 @@ bool TmcPipe::current(uint32_t generation) const {
     CriticalSection lock;
     return usb::current(0, generation);
 }
-void TmcPipe::service(uint32_t now, uint32_t generation, bool dispatch, TmcRecovery::Port &port) {
+bool TmcPipe::begin(uint32_t now, uint32_t generation, TmcRecovery::Port &port, uint32_t &epoch) {
     // A pass for an older session (a reset or new configuration since synchronize()) does
     // nothing: it would feed, dispatch or answer with the old Tmc on the new session's pipe.
-    if (!current(generation)) return;
+    if (!current(generation)) return false;
     recovery_.poll(now, port, *this, generation);
-    const uint32_t epoch = recovery_.epoch();
-    if (!recovery_.holdsBulkOut()) {
-        tmc_.poll(now);
-        if (dispatch) engine_.poll(now);
+    epoch = recovery_.epoch();
+    if (!recovery_.holdsBulkOut()) tmc_.poll(now);
+    return true;
+}
+void TmcPipe::service(uint32_t now, uint32_t generation, TmcRecovery::Port &port) {
+    uint32_t epoch;
+    if (begin(now, generation, port, epoch)) finish(now, generation, epoch);
+}
+void TmcPipe::dispatch(uint32_t now, uint32_t generation, TmcRecovery::Port &port) {
+    uint32_t epoch;
+    if (!begin(now, generation, port, epoch)) return;
+    if (!recovery_.holdsBulkOut()) engine_.poll(now);
+    else { // A failed recovery waits for a CLEAR: its output, lease and jobs still time out.
+        engine_.idle(now);
+        engine_.closeFile();
     }
+    finish(now, generation, epoch);
+    if (current(generation) && !recovery_.holdsBulkIn()) engine_.refill();
+}
+void TmcPipe::finish(uint32_t now, uint32_t generation, uint32_t epoch) {
     if (!current(generation)) return; // Reset during the dispatch.
     input(now, generation);
     if (tmc_.failed() && !recovery_.holdsBulkOut()) haltTmcOut(generation);
