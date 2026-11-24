@@ -23,7 +23,7 @@ void Engine::endDecode() {
     decodeBinary_ = waitingDecode_ = false;
 }
 void Engine::endFile() {
-    if (fileBinary_) backend_.fileClose();
+    if (fileBinary_) backend_.fileClose(); // Also from the background pass: f_close of an unmodified file does no disk I/O.
     if (stage_) releaseStage(this);
     fileBinary_ = false; fileRead_ = fileBytes_ = 0; stage_ = nullptr; stageAt_ = stageEnd_ = 0;
 }
@@ -58,7 +58,7 @@ void Engine::reset() {
 }
 size_t Engine::available() const {
     return responseSize_ - responseAt_ + (binary_ ? binaryBytes_ - binarySent_ : 0) + (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
-           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + (fileBinary_ ? stageEnd_ - stageAt_ : 0) + padding_ + unsigned(suffix_);
+           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + (fileBinary_ ? stageEnd_ - stageAt_ : 0) + padding_ + unsigned(suffix_ && !more()); // The LF only with the file's last bytes.
 }
 size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!output || !capacity) return 0;

@@ -88,6 +88,7 @@ private:
     void endMeasure();
     static constexpr uint32_t EnvelopeBuckets = 1500; // WAV:ENV? without a count.
     uint32_t waveEnvelope_ = EnvelopeBuckets; // WAV:ENV? buckets of the query being served.
+    bool waveRepeat_ = false; // FRAM?/ENV? in RUN: no newer record came, the current one is served.
     bool wavePeak_ = false; // WAV:POIN:MODE PEAK (only with WAV:POIN n).
     uint32_t padding_ = 0; // Zeros still owed to an announced block whose source went (then -230).
     uint32_t waveStart_ = 1, waveStop_ = 0, wavePoints_ = 0; // wavePoints_: WAV:POIN (0: every point).
