@@ -50,6 +50,9 @@ public:
     // set as its channel menu's Function row sets it; 0 or the SCPI error. Without one: none.
     virtual unsigned meterTraceFunction() const { return ~0U; }
     virtual int16_t meterTraceFunction(unsigned) { return -221; }
+    // The Scope's DMM trace runs (its chip powered beside the capture, its packets into meter()): the
+    // DMM's commands are served in the Scope only then.
+    virtual bool meterTrace() const { return false; }
     virtual bool run(bool single) = 0;
     virtual bool autoScale() { return false; }
     // A forced trigger (TFORce): a record without a trigger event (DataAccess::forceScope). False:
@@ -66,8 +69,10 @@ public:
     // The session ended (Engine::reset: a new session, a disconnect, a clear): its frame lease and
     // any claim on records it has not read yet go.
     virtual void endSession() { releaseFrame(); }
+    // The DMM screen's reading; in the Scope, the one its DMM trace draws.
     virtual const dmm::Result &meter() const = 0;
     virtual DataStatus meterStatus() const = 0;
+    // The DMM screen's function; in the Scope, its DMM trace's, as DMM:FUNCtion sets it.
     virtual bool selectFunction(dmm::Function) = 0;
     virtual dmm::TemperatureSettings meterTemperature() const { return {}; }
     virtual bool meterTemperature(dmm::TemperatureSettings) { return false; }
@@ -129,6 +134,11 @@ public:
     virtual uint32_t screenCapture() { return 0; }
     virtual size_t screenRead(uint32_t, uint32_t, uint8_t *, size_t) { return 0; }
     virtual void screenEnd(uint32_t) {} // The stream finished or was dropped: that lease is free.
+    // DISPlay:TEXT: a message for the person at the device, over every screen until a key (taken by
+    // it), DISPlay:TEXT:CLEar or the next one; "" takes it away. False: no display. message(): the
+    // text on show, "" for none.
+    virtual bool message(const char *) { return false; }
+    virtual const char *message() const { return ""; }
     // The factory calibration record as this boot decoded it (SYST:CAL:FACT?, docs/SCPI.md), from the
     // record alone: no plan, user gain, display gain, channel state or calibration in progress.
     // identity: the CRC calibration files are bound to; gainWord: as decoded (0: not written, also every

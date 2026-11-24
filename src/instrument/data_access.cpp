@@ -221,13 +221,11 @@ bool DataAccess::selectDmmFunction(dmm::Function function) { // Also while off: 
     if (!meterLinked() || (typeK && !meter_.temperatureSettings().configured()) ||
         !dmm_.selectFunction(physical, meter_.latest(), Board::milliseconds() + waitMs, dmmActivatedAtUs_)) return false;
     meter_.typeK(typeK, timeUs_);
-    // The Scope's DMM trace starts again in the new function's quantity at once (its scale, units and
-    // cursors with it), not at its first reading; a HOLD keeps the readings its frame shows.
-    const auto quantity = dmm::Functions::reading(function);
-    if (measurement_ == MeasurementMode::Oscilloscope && !scopeHeld_ && quantity != Quantity::Unknown &&
-        quantity != meterReadings_.quantity()) {
-        meterReadings_.reset(quantity);
-        meterGap_ = false;
+    // The Scope's DMM trace in the function selected (restartMeterLine): at once, not at its first
+    // reading; under HOLD, which keeps the readings its frame shows, at the first reading after it.
+    if (measurement_ == MeasurementMode::Oscilloscope) {
+        meterTraceFunction_ = function;
+        if (!scopeHeld_) restartMeterLine();
     }
     // Accepted (a refusal above changes nothing): the statistics period starts with this function.
     meter_.restart(function, timeUs_ + (uint64_t(dmm::FunctionSelector::DeadlineMs) + waitMs) * 1000);
@@ -242,8 +240,8 @@ bool DataAccess::pressDmmRange() {
 bool DataAccess::releaseDmmRange(bool sendRelease) { return dmm_.releaseRange(sendRelease, Board::milliseconds()); }
 bool DataAccess::holdDmmRange() { return dmm_.holdRange(Board::milliseconds()); }
 void DataAccess::closeDmmRange() { if (dmm_.rangeOpen()) dmm_.close(Board::milliseconds()); }
-bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() ||
+bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) { // HOLD and REL keep their own DMM-only checks.
+    if (!meterLinked() || watchdog_.off() ||
         !dmm_.requestKey(action, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     using Action = dmm::KeyCommand::Action;
     if (action == Action::NextRange || action == Action::Auto || action == Action::Manual) meter_.rangeCommand();
@@ -272,7 +270,7 @@ bool DataAccess::relativeMeter(bool enabled) {
     return meter_.relative(enabled);
 }
 bool DataAccess::setDmmRange(unsigned index) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() || meter_.typeK() ||
+    if (!meterLinked() || watchdog_.off() || meter_.typeK() ||
         !dmm_.setRange(index, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     meter_.rangeCommand(); // A new scale: a hold mode's window starts again.
     return true;

@@ -45,6 +45,7 @@ int16_t InstrumentBackend::meterTraceFunction(unsigned function) {
     a.dataRefresh_ = true;
     return 0;
 }
+bool InstrumentBackend::meterTrace() const { return application_.data_.meterTraceRunning(); }
 bool InstrumentBackend::channelShown(unsigned channel) const {
     return plot::ChannelDisplay::shown(application_.data_.scopeRequest(), application_.view_.waveform().options(), channel);
 }
@@ -156,15 +157,23 @@ void InstrumentBackend::endSession() {
     releaseFrame();
     application_.data_.frameHosts().end(host_);
 }
+// The Scope: its DMM trace's live reading (Session::live), as its line draws it; the DMM screen's HOLD
+// and REL, kept through a visit to the Scope, are not the trace's.
 const dmm::Result &InstrumentBackend::meter() const {
-    const auto &session = application_.data_.meter(); reading_ = session.displayed();
+    const auto &session = application_.data_.meter();
+    if (!multimeter()) return session.live();
+    reading_ = session.displayed();
     if (reading_.primary.valid() && session.relative().active()) reading_.primary = session.relative().apply(reading_);
     reading_.packetHold = session.holding(); // A HOLD's or a hold mode's reading: READ waits for none.
     reading_.peerRelative = reading_.peerRelative || session.relative().active();
     return reading_;
 }
 DataStatus InstrumentBackend::meterStatus() const { return application_.data_.meter().status(application_.data_.nowUs(),2000000); }
-bool InstrumentBackend::selectFunction(dmm::Function f) { return application_.meterCommand(application_.data_.selectDmmFunction(f)); }
+// The Scope: the trace's channel menu path (meterTraceFunction), which keeps its saved function in step.
+bool InstrumentBackend::selectFunction(dmm::Function f) {
+    if (!multimeter()) return !meterTraceFunction(unsigned(f));
+    return application_.meterCommand(application_.data_.selectDmmFunction(f));
+}
 dmm::TemperatureSettings InstrumentBackend::meterTemperature() const { return application_.prefs_.meter.temperature; }
 bool InstrumentBackend::meterTemperature(dmm::TemperatureSettings settings) {
     return application_.meterTemperatureSettings(settings, Board::milliseconds());
@@ -365,6 +374,14 @@ size_t InstrumentBackend::screenRead(uint32_t ticket, uint32_t offset, uint8_t *
     if (!application_.screenLease_.read(ticket, Board::milliseconds())) return 0; // Gone: the engine pads (-230).
     return BmpImage(screenshot::previewMemory()).read(offset, out, size);
 }
+bool InstrumentBackend::message(const char *text) {
+    if (!application_.uiReady_) return false;
+    application_.view_.message(text);
+    // A dimmed or dark screen wakes as a key wakes it (servicePower: the idle timer restarts).
+    if (*text) application_.idle_.activity(Board::milliseconds());
+    return true;
+}
+const char *InstrumentBackend::message() const { return application_.uiReady_ ? application_.view_.message() : ""; }
 bool InstrumentBackend::factoryCalibration(FactoryCalibration &f) const {
     const auto &record = application_.data_.scopeCalibration().factory();
     f = FactoryCalibration{};

@@ -84,6 +84,20 @@ bool Engine::common(const Command &c) {
             else if (ms < Backend::KeyMinMs || ms > Backend::KeyMaxMs || ms != unsigned(ms)) error(-222);
             else if (!backend_.pressKey(keys[index].key, unsigned(ms))) error(-221);
         }
+    } else if (match("DISPlay:TEXT") || match("DISPlay:TEXT:DATA")) {
+        // A message for the person at the device (Backend::message), as a quoted string; "" takes it away.
+        const size_t size = std::strlen(c.argument);
+        if (c.query) reply("\"%s\"", backend_.message());
+        else if (!size) error(-109);
+        else if (size < 2 || (*c.argument != '"' && *c.argument != '\'') || c.argument[size - 1] != *c.argument) error(-104);
+        else {
+            char text[sizeof c.argument];
+            std::memcpy(text, c.argument + 1, size - 2); text[size - 2] = 0;
+            if (!backend_.message(text)) error(-200);
+        }
+    } else if (match("DISPlay:TEXT:CLEar")) {
+        if (c.query || *c.argument) error(-108, c.query);
+        else if (!backend_.message("")) error(-200);
     } else if (match("SYSTem:STALl")) {
         char text[sizeof response_ - 1]; // Whole entries that fit the reply (StallLog::text).
         if (!c.query || *c.argument) error(-108,c.query);
