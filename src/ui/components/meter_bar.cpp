@@ -19,6 +19,21 @@ void MeterBar::draw(lv_event_t *event) {
         lv_area_t segment = {lv_coord_t(area.x1 + i * Pitch), area.y1, lv_coord_t(area.x1 + i * Pitch + SegmentWidth - 1), area.y2};
         lv_draw_rect(layer, i < self.lit_ ? &on : &off, &segment);
     }
+    // GitHub #139: each number's notch, a cut through a lit segment, the numbers' colour elsewhere; the
+    // two ends always in the numbers' colour (the bar's end caps).
+    lv_draw_rect_dsc_t cut, mark;
+    lv_draw_rect_dsc_init(&cut); lv_draw_rect_dsc_init(&mark);
+    cut.bg_color = lv_color_hex(self.face_); mark.bg_color = lv_color_hex(self.muted_);
+    const int labels = self.scale_.labels();
+    for (int i = 0; i < labels; ++i) {
+        const int x = tickX(i, labels) - BarX;
+        const int first = x - (i + 1 == labels), last = x + (i == 0); // Widen the end marks inward.
+        for (int column = first; column <= last; ++column) {
+            const bool lit = first == last && column % Pitch < SegmentWidth && column / Pitch < self.lit_;
+            const lv_area_t notch = {lv_coord_t(area.x1 + column), area.y1, lv_coord_t(area.x1 + column), area.y2};
+            lv_draw_rect(layer, lit ? &cut : &mark, &notch);
+        }
+    }
 }
 void MeterBar::create(lv_obj_t *parent) {
     initialized_ = false; lit_ = 0;
@@ -27,7 +42,7 @@ void MeterBar::create(lv_obj_t *parent) {
     bar_ = lv_obj_create(parent);
     lv_obj_remove_style_all(bar_);
     lv_obj_set_pos(bar_, BarX, 65);
-    lv_obj_set_size(bar_, Segments * Pitch - 1, Height);
+    lv_obj_set_size(bar_, Width, Height);
     lv_obj_set_scrollable(bar_, false);
     lv_obj_add_event_cb(bar_, draw, LV_EVENT_DRAW_MAIN, this);
     for (auto *&label : ticks_) {
@@ -40,11 +55,12 @@ void MeterBar::create(lv_obj_t *parent) {
     decimals_ = 255; unit_[0] = 0;
     scale(dmm::BoardScale, 255, "");
     lv_obj_set_style_text_align(state_, LV_TEXT_ALIGN_CENTER, 0);
-    palette({0, 0, muted_, 0, off_, 0, overload_});
+    palette({face_, 0, muted_, 0, off_, 0, overload_});
 }
 void MeterBar::palette(const MeterPalette &palette) {
-    const bool repaint = palette.line != off_ || palette.alert != overload_;
-    off_ = palette.line; overload_ = palette.alert; muted_ = palette.muted;
+    const bool repaint = palette.line != off_ || palette.alert != overload_ || palette.muted != muted_ ||
+                         palette.background != face_; // The notches' colours too.
+    off_ = palette.line; overload_ = palette.alert; muted_ = palette.muted; face_ = palette.background;
     Elements::textColor(sign_, muted_);
     for (auto *tick : ticks_) Elements::textColor(tick, muted_);
     Elements::textColor(state_, MeterText::alert(status_) ? overload_ : muted_);
@@ -61,15 +77,17 @@ void MeterBar::visible(bool value) {
     visible_ = value;
     showTicks();
 }
-// The end labels align with the ends of the bar. Move an intermediate label left only if a wide
-// label to its right needs the space, such as the full-scale label with the engineering unit.
+// Each number on its notch (GitHub #139): the first starts and the last ends there, the others are
+// centred on it. Move an intermediate label left only if a wide label to its right needs the space,
+// such as the full-scale label with the engineering unit.
 void MeterBar::scale(dmm::CountScale counts, unsigned decimals, const char *unit) {
     const bool known = decimals <= 6;
+    if (counts != scale_) lv_obj_invalidate(bar_); // Its notches move with it.
     scale_ = counts; decimals_ = uint8_t(known ? decimals : 255);
     std::snprintf(unit_, sizeof unit_, "%s", known ? unit : "");
     const int labels = counts.labels(), last = labels - 1;
     const int stateLeft = StateX, stateRight = StateX + StateWidth; // The caption's box, as before.
-    int right = tickX(last, labels);
+    int right = tickX(last, labels) + 1; // Past the last number's right edge, its notch.
     for (int i = last; i >= 0; --i) {
         char text[24];
         MeterText::scaleNumber(counts.tickValue(i * counts.major), known ? decimals : 3, text, sizeof text);
@@ -81,7 +99,7 @@ void MeterBar::scale(dmm::CountScale counts, unsigned decimals, const char *unit
         lv_text_get_size(&size, text, Elements::font(12), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
         const int width = std::max(1, int(size.x));
         const int tick = tickX(i, labels);
-        const int ideal = i == last ? tick - width : i ? tick - width / 2 : tick;
+        const int ideal = i == last ? tick + 1 - width : i ? tick - (width - 1) / 2 : tick;
         const int left = std::min(ideal, right - width);
         auto *label = ticks_[i];
         Elements::setText(label, text);
@@ -99,8 +117,7 @@ void MeterBar::showTicks() {
 }
 void MeterBar::update(const dmm::Result &result, DataStatus health, uint32_t accent,
                       const dmm::RelativeReading *relative, dmm::TemperatureAxis *axis) {
-    auto value = dmm::BarReading::from(result,health,relative,axis);
-    value.limitToRange(result);
+    const auto value = dmm::BarReading::from(result,health,relative,axis);
     const bool over = value.status == DataStatus::Overload;
     const auto color = over ? overload_ : value.status == DataStatus::Ok ? accent : 0x64748b;
     const int magnitude = std::abs(value.counts);

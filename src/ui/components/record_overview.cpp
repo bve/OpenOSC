@@ -68,6 +68,7 @@ OverviewGeometry OverviewGeometry::calculate(const scope::FrameMetadata &m, cons
     if (!m.valid() || inside < MinimumSpan) return g;
     g.points = m.samples * ((m.channels[0].enabled ? 1U : 0U) + (m.channels[1].enabled ? 1U : 0U));
     g.budget = uint32_t(m.budgetK) * 1024;
+    g.budgetShort = m.budgetShort;
     // Each point owns one unit of the record, so its last point still has a width.
     const int64_t length = int64_t(m.samples) << 16, last = int64_t(m.samples - 1) << 16;
     if (mode != plot::Mode::Spectrum && view.spanQ16) {
@@ -153,15 +154,17 @@ void RecordOverview::update(const plot::Model &model) {
     if (drawn_ && geometry == shown_ && split == split_ && analyzed == analyzedColor_) return;
     show(geometry, split, analyzed);
 }
-// The budget stays the caption whatever the rate (a stable setting, GitHub #131); "<" says the frame
-// holds fewer of its points, so it never claims samples the record does not have.
+// The budget stays the caption whatever the rate (a stable setting, GitHub #131); "<" says the capture plan
+// reserves part of it (#138: FrameMetadata::budgetShort); the record's exact length is Captured's.
 void RecordOverview::captionText(const OverviewGeometry &g, char *output, size_t capacity) {
     if (!output || !capacity) return;
     if (!g.points) { std::snprintf(output, capacity, "--"); return; } // No frame on show.
     if (!g.budget || g.points > g.budget) { plot::Format::compactPoints(g.points, output, capacity); return; }
     char total[8];
     plot::Format::compactPoints(g.budget, total, sizeof total);
-    std::snprintf(output, capacity, "%s%s", g.points < g.budget ? "<" : "", total);
+    // GitHub #138: "<" is the capture plan's: it reserves part of the budget (every record of it, held too),
+    // never one record's own length, which a freeze in flight varies by a few points (Captured is exact).
+    std::snprintf(output, capacity, "%s%s", g.budgetShort ? "<" : "", total);
 }
 void RecordOverview::show(const OverviewGeometry &g, bool split, uint32_t analyzedColor) {
     drawn_ = true;

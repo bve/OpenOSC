@@ -7,7 +7,8 @@
 namespace openosc::ui {
 // A moving-coil panel meter: a wide arc whose radius follows the face's width (the pivot is below
 // the face), the numbers above it, the reading's scale (thousands of counts of the range,
-// dmm::scaleFor: 0-25 on the ZT703S, 0-66 on the ZT706S, 0-10 for capacitance and 0-3.3 V for the
+// dmm::BarReading::rangeScale: 0-25 on the ZT703S, 0-66 on the ZT706S, a range's own end where it
+// comes first, as 0-1000 V or 0-10 A (GitHub #141), 0-10 for capacitance and 0-3.3 V for the
 // diode on both), a needle with NeedleMotion inertia. Temperature uses signed degree bands instead
 // of magnitude. For other readings, like the bar, the needle shows the magnitude and a separate
 // minus at the lower left, before the scale in reading order, marks a negative reading; OL pegs it

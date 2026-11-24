@@ -47,11 +47,19 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   </tr>
   <tr>
     <td><img src=".github/images/bode.png" width="320" alt="Bode analyzer: recorded twin-T sweep with f1 and f2 cutoffs and the f0 notch marker"></td>
-    <td><img src=".github/images/multimeter-range.png" width="320" alt="Multimeter: DC voltage on the 2.5 V range with bar graph ticks every 0.5 V"></td>
+    <td><img src=".github/images/multimeter-range.png" width="320" alt="Multimeter: DC voltage on the 2.5 V range with bar graph notches aligned to the 0.5 V scale"></td>
   </tr>
   <tr>
     <td align="center">Bode plot (recorded sweep replay)</td>
     <td align="center">Multimeter bar graph on the 2.5 V range</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/scope-record-memory.png" width="320" alt="Oscilloscope: 512K record memory at 140 MS/s, with a less-than marker for capture headroom"></td>
+    <td><img src=".github/images/multimeter-capacitance.png" width="320" alt="Multimeter analog capacitance view: 9.999 nF range with a nominal 10 nF dial"></td>
+  </tr>
+  <tr>
+    <td align="center">512K record memory at 140 MS/s</td>
+    <td align="center">Multimeter analog capacitance scale</td>
   </tr>
   <tr>
     <td><img src=".github/images/scope-readouts.png" width="320" alt="Oscilloscope: two readouts per channel, time cursors and the STOP status word"></td>
@@ -102,11 +110,11 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
     <td align="center">UART baud rate detection</td>
   </tr>
   <tr>
-    <td><img src=".github/images/multimeter-analog.png" width="320" alt="Multimeter analog view: dial with REL reference and statistics"></td>
+    <td><img src=".github/images/multimeter-analog.png" width="320" alt="Multimeter analog view: 1 kV DC range with dial markings from 0 to 1000 V"></td>
     <td><img src=".github/images/generator.png" width="320" alt="Signal generator: sine at 1 kHz with frequency, waveform preview and soft-keys at the bottom"></td>
   </tr>
   <tr>
-    <td align="center">Multimeter, analog view</td>
+    <td align="center">Multimeter analog view, 1 kV DC range</td>
     <td align="center">Signal generator</td>
   </tr>
   <tr>
@@ -153,9 +161,10 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   Hold **F3** to set the trigger level to the signal midpoint and pretrigger to 50%. Pan with **F2**
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
 - Record memory from 64K to 512K points across enabled channels. The record overview shows the
-  budget used for the displayed capture. A label such as `<512K` indicates a shorter capture.
-  The label keeps the same font size when the prefix appears. **Analyze → Acquisition → Captured**
-  shows the exact number of points per channel.
+  budget used for the displayed capture. A label such as `<512K` means the capture plan reserves part
+  of that budget, for example as DMA headroom at the fastest sample rates. The prefix depends on the
+  plan only, so it stays steady while the settings stay the same. **Analyze → Acquisition → Captured**
+  shows the exact number of points per channel in the displayed record.
 - In the default **Quick** profile, tap **AUTO** to start Auto Setup or cancel it in progress.
   Hold **AUTO** for 2 s in Y-T to open **Zoom & Pan**. Up/Down zoom the view, Left/Right pan, and
   **F4** returns to the previous card. The **Classic** profile uses a tap to reset pan and a hold to
@@ -208,7 +217,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   a repeated selection of the same function keeps it.
 - Large 72/80 px reading when the bar graph and statistics are off
 - Bar graph labels follow the active range in measurement units. The 2.5 V range runs from 0 to 2.5 V
-  in 0.5 V steps. The analog dial labels its scale in the reading's unit
+  in 0.5 V steps. A notch on the bar marks each labelled value. The analog dial labels its scale in
+  the reading's unit. On both the bar and the dial, ranges that end below the meter's counts, such as
+  1000 V DC, 750 V AC and 10 A, reach full scale at the end of the range
 
 **Signal generator**
 

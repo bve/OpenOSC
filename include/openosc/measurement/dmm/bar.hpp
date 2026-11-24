@@ -8,9 +8,9 @@
 #include <limits>
 
 namespace openosc::dmm {
-// The magnitude the bar and the dial show, in counts of the reading's own scale (scaleFor: the
-// board's, capacitance its 9999-count one, the diode its millivolts), clamped to its full scale;
-// overload pegs it with its sign.
+// The magnitude the bar and the dial show, in counts of the reading's own scale (rangeScale: the
+// board's or its range's, capacitance its 9999-count one, the diode its millivolts), clamped to its
+// full scale; overload pegs it with its sign.
 struct BarReading {
     CountScale scale = BoardScale;
     int counts = 0;
@@ -31,25 +31,29 @@ struct BarReading {
     // The unit of those numbers: the diode's are volts, also before a packet carries its unit.
     const char *unit(const Result &result) const { return scale == DiodeScale ? "V" : result.unit; }
 
-    // Some ranges end before the meter's digit capacity, for example 1000 V DC or 10 A.
-    // Give the digital bar five divisions over that range. Its fill and labels use the same span.
-    void limitToRange(const Result &result) {
-        if (scale != BoardScale) return;
-        const auto *range = Ranges::current(result);
+    // The scale of a reading in its range (GitHub #141): scaleFor's counts, or, where the reading's range
+    // ends before them (Ranges' manual full scale: 1000 V DC, 750 V AC and 10 A on both boards, the
+    // ZT703S's 250 MOhm), that range's own end in five labelled divisions, a minor tick every fifth of
+    // one where whole. The dial's numbers and needle and the bar's numbers and fill all use it, so the
+    // full deflection is the selected range's maximum. Capacitance keeps its nominal 10000 counts: its
+    // ranges end at 9999 (9.999 nF), the largest reading, 0.9999 of the nominal full scale (10 nF).
+    static CountScale rangeScale(const Result &result) {
+        const auto scale = scaleFor(result);
+        const auto *range = scale == BoardScale ? Ranges::current(result) : nullptr;
         NumericValue unitValue;
-        if (!range || !UnitParser::parse("1", range->unit, unitValue)) return;
+        if (!range || !UnitParser::parse("1", range->unit, unitValue) || unitValue.si <= 0) return scale;
         double rawMaximum = range->maximumSi / unitValue.si;
         for (unsigned i = 0; i < range->decimals; ++i) rawMaximum *= 10;
+        constexpr int Divisions = 5, Minor = 5;
         const int limit = int(std::lround(rawMaximum));
-        constexpr int Divisions = 5;
-        if (limit >= scale.fullScale || limit < Divisions || limit % Divisions) return;
-        scale = {limit, 1, 0, limit / Divisions};
-        counts = std::clamp(counts, -limit, limit);
+        if (limit >= scale.fullScale || limit < Divisions || limit % Divisions) return scale;
+        return limit % (Divisions * Minor) ? CountScale{limit, 1, 0, limit / Divisions}
+                                           : CountScale{limit, Minor, 0, limit / (Divisions * Minor)};
     }
     static BarReading from(const Result &result, DataStatus health,
                            const RelativeReading *relative = nullptr, TemperatureAxis *axis = nullptr) {
         BarReading bar;
-        bar.scale = scaleFor(result);
+        bar.scale = rangeScale(result);
         bar.temperature = result.primary.quantity == Quantity::Temperature;
         bar.status = health == DataStatus::Ok ? result.primary.status : health;
         const bool delta = relative && relative->matches(result);

@@ -75,8 +75,11 @@ struct FrameMetadata {
     TriggerEdge triggerEdge; // What triggerIndex was found for (known only while triggered).
     // The record budget (points of every channel, in K) this capture was planned for; 0 for Roll, an
     // internal capture or a loaded record. The plan may keep part of it spare (SamplePlan's DMA
-    // headroom), so samples can be fewer. Display only (the status bar): not in any file format or SCPI reply.
+    // headroom, a ring shorter than the depth): budgetShort, the status bar's "<" (GitHub #138), set by
+    // the plan, so every record of it says the same, held or not, however many points a freeze in
+    // flight leaves each (samples is exact). Display only: not in any file format or SCPI reply.
     uint16_t budgetK = 0;
+    bool budgetShort = false;
     // InterleavedCh1 only: the HIGH ADC's correction this record is read with (InterleaveCorrection).
     float interleaveOffset = 0;
     // Immutable boot profile entry. Transferred file payloads already hold the corrected codes.

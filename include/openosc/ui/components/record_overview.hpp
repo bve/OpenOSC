@@ -14,20 +14,23 @@ struct OverviewGeometry {
     static constexpr int None = -1, MinimumSpan = 2;
     uint32_t points = 0; // Points of every channel the frame holds: its record memory in use.
     uint32_t budget = 0; // The record budget the frame was captured for (FrameMetadata::budgetK); 0: none.
+    bool budgetShort = false; // Its plan shorter than the budget (FrameMetadata::budgetShort).
     int window = None, windowWidth = 0, analyzed = None, analyzedWidth = 0, trigger = None;
     bool before = false, after = false; // The view lies wholly before the record's start or past its end.
     static OverviewGeometry calculate(const scope::FrameMetadata &metadata, const plot::Viewport &viewport, plot::Mode mode,
                                       uint32_t analyzedPoints, int inside);
     static OverviewGeometry calculate(const plot::Model &model, int inside);
     bool operator==(const OverviewGeometry &o) const {
-        return points == o.points && budget == o.budget && window == o.window && windowWidth == o.windowWidth && analyzed == o.analyzed &&
+        return points == o.points && budget == o.budget && budgetShort == o.budgetShort && window == o.window && windowWidth == o.windowWidth && analyzed == o.analyzed &&
                analyzedWidth == o.analyzedWidth && trigger == o.trigger && before == o.before && after == o.after;
     }
     bool operator!=(const OverviewGeometry &o) const { return !(*this == o); }
 };
 // The record map at the right of the status bar: the caption names the record budget the frame was
-// captured for ("512K"), "<512K" when the frame holds fewer points (the DMA headroom the fastest
-// rates keep spare: GitHub #131), or, without a budget (Roll, a loaded record), the frame's own
+// captured for ("512K"), "<512K" when the capture plan reserves part of it (the DMA headroom the fastest
+// rates keep: GitHub #131, #138: FrameMetadata::budgetShort), the same for every record of that plan, held
+// or not, whatever length each record ends with (a freeze in flight varies it by a few points): "<" does not
+// flicker in RUN. Without a budget (Roll, a loaded record), the frame's own
 // total. The exact count is Acquisition's Captured row (and WAV:PRE?). The strip shows which part is
 // on screen and where the trigger lies. It follows HOLD pan and zoom; it is not a capture progress bar.
 // captionText(): that text for a geometry ("--" with no frame).
