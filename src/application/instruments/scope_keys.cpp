@@ -173,7 +173,9 @@ void ApplicationController::followNextCapture() {
     if (!held && !current.heldTimebaseNs && !current.channels[0].heldMillivoltsAtTip && !current.channels[1].heldMillivoltsAtTip)
         return;
     auto options = current;
-    options.heldTimebaseNs = held && m.timebaseNs && request.timebaseNs != m.timebaseNs ? request.timebaseNs : 0;
+    // A trend's record has a time/div of its own, which the request's 20 s never equals: nothing is followed.
+    const uint64_t nextTimebase = request.trend ? m.timebaseNs : request.timebaseNs;
+    options.heldTimebaseNs = held && m.timebaseNs && nextTimebase != m.timebaseNs ? nextTimebase : 0;
     bool scales = false;
     for (unsigned c = 0; c < 2; ++c) {
         const auto &own = m.channels[c];

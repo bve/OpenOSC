@@ -35,14 +35,15 @@ bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format, scope::Acqui
     // measure the actual record in slices before opening a temporary file.
     size_t header = 0;
     if (format == Format::Csv) {
-        const auto &metadata = lease.view().metadata();
+        const auto metadata = csvMetadata(lease.view().metadata());
         const size_t row = trend_ ? Csv::trendRowLimit(metadata, trendMeter_) : Csv::scopeRowLimit(metadata, meter_ != nullptr);
         header = csvHeader(metadata);
         if (!row || !header) {
             status_ = DataStatus::InvalidArgument;
             return false;
         }
-        required_ = header + std::strlen(columns()) + uint64_t(metadata.samples) * row;
+        rows_ = metadata.samples;
+        required_ = header + std::strlen(columns()) + uint64_t(rows_) * row;
     } else
         required_ = stream_.size();
     const bool opened = file_.begin(storage::Layout::Captures, "CAP", format == Format::Raw ? "RAW" : "CSV", required_);
@@ -64,7 +65,7 @@ bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena
     const bool csv = format_ == Format::CsvGz;
     size_t header = 0, names = 0;
     if (csv) {
-        const auto &metadata = lease.view().metadata();
+        const auto metadata = csvMetadata(lease.view().metadata());
         header = csvHeader(metadata); // A trend's "# dmm:" and "# trend:" lines.
         names = std::strlen(columns());
         const size_t row = trend_ ? Csv::trendRowLimit(metadata, trendMeter_) : Csv::scopeRowLimit(metadata, meter_ != nullptr);
@@ -72,6 +73,7 @@ bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena
             status_ = DataStatus::InvalidArgument;
             return false;
         }
+        rows_ = metadata.samples;
     }
     if (!arena || !gzip_.begin(*arena)) { status_ = DataStatus::Busy; return false; } // A screenshot, a trial frame.
     if (csv) {
@@ -93,6 +95,12 @@ bool ScopeRecorder::beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena
     busy_ = true;
     status_ = DataStatus::Busy;
     return true;
+}
+scope::FrameMetadata ScopeRecorder::csvMetadata(const scope::FrameMetadata &frame) const {
+    // A trend's header describes the copy's points, which the leased frame may be a point or a merge behind.
+    auto metadata = frame;
+    if (trend_) { metadata.samples = trend_->size; metadata.ring = trend_->window; metadata.samplesPerSecond = trend_->rate; }
+    return metadata;
 }
 size_t ScopeRecorder::csvHeader(const scope::FrameMetadata &metadata) {
     size_t bytes = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
@@ -131,15 +139,13 @@ size_t ScopeRecorder::csvRow(size_t row, char *output, size_t capacity) {
 }
 void ScopeRecorder::measureCsv() {
     constexpr unsigned RowsPerService = 96;
-    const auto &frame = lease_.view();
-    const auto &metadata = frame.metadata();
-    for (unsigned i = 0; i < RowsPerService && offset_ < metadata.samples; ++i, ++offset_) {
+    for (unsigned i = 0; i < RowsPerService && offset_ < rows_; ++i, ++offset_) {
         const size_t bytes = csvRow(offset_, reinterpret_cast<char *>(buffer_), sizeof buffer_);
         if (!bytes) { status_ = DataStatus::InvalidArgument; cancel(); return; }
         required_ += bytes;
     }
-    if (offset_ < metadata.samples) return;
-    const size_t header = csvHeader(metadata);
+    if (offset_ < rows_) return;
+    const size_t header = csvHeader(csvMetadata(lease_.view().metadata()));
     if (!header) { status_ = DataStatus::InvalidArgument; cancel(); return; }
     if (!file_.begin(storage::Layout::Captures, "CAP", "CSV", required_)) {
         status_ = file_.status();
@@ -154,7 +160,7 @@ void ScopeRecorder::measureCsv() {
 }
 size_t ScopeRecorder::csvRows(uint8_t *out, size_t capacity) {
     size_t bytes = 0;
-    while (offset_ < lease_.view().metadata().samples && capacity - bytes >= 180) {
+    while (offset_ < rows_ && capacity - bytes >= 180) {
         const size_t length = csvRow(offset_, reinterpret_cast<char *>(out + bytes), capacity - bytes);
         if (!length) return 0;
         bytes += length;
@@ -183,7 +189,7 @@ bool ScopeRecorder::flushGzip() {
 // One input slice and at most one output chunk per pass.
 void ScopeRecorder::serviceGzip() {
     const bool raw = format_ == Format::RawGz;
-    const size_t end = raw ? stream_.size() : lease_.view().metadata().samples;
+    const size_t end = raw ? stream_.size() : rows_;
     if (pending_ == consumed_ && offset_ < end) {
         pending_ = raw ? rawBytes(gzip_.input(), GzipStream::InputBytes) : csvRows(gzip_.input(), GzipStream::InputBytes);
         consumed_ = 0;
@@ -221,7 +227,7 @@ void ScopeRecorder::service() {
         finishing_ = offset_ == stream_.size();
     } else {
         bytes = csvRows(buffer_, sizeof buffer_); // None: a row that cannot be written.
-        finishing_ = offset_ == lease_.view().metadata().samples;
+        finishing_ = offset_ == rows_;
     }
     if (!bytes) {
         status_ = DataStatus::InvalidArgument;

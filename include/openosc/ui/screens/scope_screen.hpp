@@ -1,6 +1,7 @@
 #pragma once
 #include <cstring>
 #include "openosc/acquisition/readouts.hpp"
+#include "openosc/acquisition/trend.hpp"
 #include "openosc/ui/components/readout_text.hpp"
 #include "openosc/acquisition/counter_window.hpp"
 #include "openosc/generator/waveform.hpp"
@@ -28,7 +29,7 @@ public:
     void meter(const Meter &meter);
     // The DMM trace's readouts and scale to the footer, each display pass (not under a panel).
     void meterReadouts(const plot::MeterReadouts &readouts);
-    void generator(const generator::Snapshot &output, bool captureHalved, bool trend);
+    void generator(const generator::Snapshot &output, bool captureHalved, const scope::TrendView &trend);
     // Settings > Display > Swap CH1/CH2: the plot, footer and cards relabelled at once (HOLD included).
     void channelView(const plot::ChannelView &view) { host_.channelView(view); cards(); }
     void counters(const scope::CounterSnapshot &snapshot);
@@ -59,7 +60,7 @@ private:
     void select(unsigned channel); // The cards' channel, its trace drawn in front (#81).
     unsigned channel_ = 0;
     Meter meter_;
-    bool held_ = false, valid_ = false;
+    bool held_ = false, valid_ = false, trending_ = false; // trending_: a trend copy is on (generator()).
     plot::Focus focus_ = plot::Focus::Scale;
     bool panReverse_ = false;
     void zoomNote(); // Zoom & Pan's factor and arrows in the plot's note (the GEN note returns on the next pass).

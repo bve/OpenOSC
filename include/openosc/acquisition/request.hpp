@@ -15,7 +15,7 @@ struct ScopeRequest {
     bool rollAuto=true;
     bool longerRecord = true;
     // Trend (TrendBuffer): the step after Timebases::Maximum. It rolls at Timebases::SampledMaximum, as a
-    // flag because the time/div of its record is its own (it halves as the record grows).
+    // flag because the time/div of its record is its own (it grows with the record).
     bool trend=false;
     // Roll: Auto from 200 ms/div with rollAuto, and always past Timebases::SampledMaximum (averaged Roll)
     // and in a trend. Up to it, a qualified trigger needs a bounded record with the history around its candidate.

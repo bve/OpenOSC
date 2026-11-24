@@ -27,8 +27,9 @@ public:
     // and with `meter` the dmm field's widest reading.
     // The bound the waveform CSV's free-space check reserves a row (GitHub #164).
     static size_t scopeRowLimit(const scope::FrameMetadata &metadata, bool meter = false);
-    // Row `index` of a trend, `meter`: with the dmm columns; a value without a number (a channel that is
-    // off, a point without a reading) is left empty.
+    // Row `index` of a trend copy, its time from the copy's own rate; `metadata`: the channels' scales.
+    // `meter`: with the dmm columns; a value without a number (a channel that is off, a point without a
+    // reading) is left empty.
     static size_t trend(const scope::FrameMetadata &metadata, const scope::TrendView &view, size_t index, bool meter,
                         char *output, size_t capacity);
     // The longest row trend() gives for `metadata`'s samples at its rate, CRLF included, 0 for metadata it

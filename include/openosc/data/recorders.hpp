@@ -33,9 +33,9 @@ public:
         Quantity quantity = Quantity::Unknown;
     };
     explicit ScopeRecorder(Filesystem &fs) : file_(fs) {}
-    // trend: the copy of the trend the frame is the means of (a CSV or a CSV.gz): rows of min, mean and max
-    // instead of codes; its meter, if any, carries the dmm columns' header and no points (the copy holds
-    // the DMM's, so a CSV.gz has them too).
+    // trend: the copy of the trend on show (a CSV or a CSV.gz): its own points as rows of min, mean and max
+    // instead of the frame's codes; its meter, if any, carries the dmm columns' header and no points (the
+    // copy holds the DMM's, so a CSV.gz has them too).
     bool begin(scope::FrameLease &&lease, Format format, scope::AcquisitionArena *arena = nullptr, const Meter *meter = nullptr,
                const scope::TrendView *trend = nullptr);
     void service();
@@ -57,7 +57,10 @@ private:
     void serviceGzip();
     bool flushGzip(); // buffer_'s compressed bytes to the file.
     void failGzip(DataStatus status);
-    // The CSV's metadata lines into buffer_, the "# dmm:" line with a dmm column: their bytes, 0 when they do not fit.
+    // The CSV's metadata: the frame's, a trend copy's points, window and rate in a trend.
+    scope::FrameMetadata csvMetadata(const scope::FrameMetadata &frame) const;
+    // The CSV's metadata lines into buffer_, the "# dmm:" line with a dmm column and a trend's "# trend:" line: their
+    // bytes, 0 when they do not fit.
     size_t csvHeader(const scope::FrameMetadata &metadata);
     // The column header: a trend's (Csv::ScopeTrendHeader, ScopeTrendMeterHeader with the dmm columns), else
     // Csv::ScopeMeterHeader with a dmm column, else ScopeHeader.
@@ -75,6 +78,7 @@ private:
     const MeterPoint *meter_ = nullptr;    // Meter::points, nullptr: no dmm column.
     const scope::TrendView *trend_ = nullptr;
     bool trendMeter_ = false; // A trend's rows carry the dmm columns.
+    uint32_t rows_ = 0;       // A CSV's rows: the frame's points, a trend copy's own.
     uint32_t meterCount_ = 0, meterNext_ = 0; // The points; the next to come into force.
     float meterValue_ = 0;                  // The one in force (NaN: none).
     const char *meterFunction_ = "";        // Meter::function and quantity: the "# dmm:" line.

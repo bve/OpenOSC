@@ -70,7 +70,7 @@ bool Engine::scopeCommand(const Command &c) {
                          request.trigger.mode == scope::TriggerMode::Auto ? "AUTO" : "RUN"); // Rigol's TD|WAIT|RUN|AUTO|STOP.
     } else if (match("TIMebase:SCALe") || match("TIMebase:MAIN:SCALe")) {
         if (c.query) {
-            // A trend's time/div is the record's own, which halves as it grows: the published frame's.
+            // A trend's time/div is the record's own, which grows with it: the published frame's.
             const auto *m = request.trend ? backend_.configuration() : nullptr;
             if (request.trend && !m) error(-230, true); else number(m ? m->timebaseNs / 1e9 : request.timebaseNs / 1e9);
         }
@@ -104,7 +104,7 @@ bool Engine::scopeCommand(const Command &c) {
     } else if (match("ACQuire:ROLL")) {
         if (c.query) reply("%u",request.rollAuto);
         else { bool value; if (boolean(c,value)) { request.rollAuto=value; apply(request); } }
-    } else if (match("ACQuire:TRENd")) { // Trend: the step after 1 h/div (a record from its start, its scale halving as it grows).
+    } else if (match("ACQuire:TRENd")) { // Trend: the step after 1 h/div (a record from its start, its time/div growing with it).
         if (c.query) reply("%u",request.trend);
         else { bool value; if (boolean(c,value)) { request.trend=value; apply(request); } }
     } else if (match("ACQuire:PROGress")) {

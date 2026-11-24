@@ -3,7 +3,7 @@
 
 namespace openosc {
 void DataAccess::serviceRolling(uint32_t now) {
-    // A trend is written in poll alone, never while a frame is drawn: the ring holds 400 s, so nothing is lost.
+    // A trend is written in poll alone, never while a frame is drawn: the ring holds 200 to 400 s (by channels and record memory), so nothing is lost.
     if (!rollingActive_ || !active_ || stopping_ || scopeHeld_ ||
         measurement_!=MeasurementMode::Oscilloscope || captureFailed_ || store_.busy() || (request_.trend && backgroundPass_)) return;
     auto metadata=capture_.metadata();
@@ -35,7 +35,7 @@ void DataAccess::serviceRolling(uint32_t now) {
     if (store_.beginLinear({metadata,banks,trend ? scope::TrendBuffer::Capacity : rolling_.capacity()},now)) {
         rollingAt_=now; rollingPublished_=stored;
         if (trend) {
-            trend_.publish(metadata.sequence);
+            trend_.publish(metadata);
             // The record's own time/div and rate are the plan's now (:TIM:SCAL?, :ACQ:SRAT?).
             configuration_.timebaseNs=metadata.timebaseNs; configuration_.samplesPerSecond=metadata.samplesPerSecond;
         }

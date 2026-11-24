@@ -166,7 +166,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // once, a gap); restarted when another function is selected in the Scope (under HOLD, at the first
     // reading after it) or a reading's quantity changes.
     const dmm::ReadingTrace &meterReadings() const { return meterReadings_; }
-    // The trend's copy on show (ScopeRequest::trend): valid for the frame of its sequence.
+    // The trend's copy on show (ScopeRequest::trend): valid while its sequence is not 0.
     const scope::TrendView &trendShown() const { return trend_.shown(); }
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.

@@ -105,8 +105,7 @@ size_t Csv::trend(const scope::FrameMetadata &metadata, const scope::TrendView &
     float values[9];
     if (!out || !capacity || !view.values(metadata, uint32_t(index), values)) return 0;
     char time[48];
-    if (!Decimal::fraction(uint64_t(index) * metadata.samplesPerSecond.denominator, metadata.samplesPerSecond.numerator,
-                           time, sizeof time))
+    if (!Decimal::fraction(uint64_t(index) * view.rate.denominator, view.rate.numerator, time, sizeof time))
         return 0;
     int length = std::snprintf(out, capacity, "%lu,%s", static_cast<unsigned long>(index), time);
     // A float's seven digits: more would print its binary rounding.
