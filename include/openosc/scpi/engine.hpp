@@ -27,6 +27,7 @@ public:
     uint8_t statusByte() const;
     uint32_t outputGeneration() const { return generation_; } // Moves when pending output is dropped (reset, discard).
     bool expire(uint32_t now); // Output left unread 10 s is dropped (-410); true: output pending.
+    void idle(uint32_t now); // No host: expire(), and after 10 s free the lease and any job.
     void refill() { fillStage(); } // Foreground, after output: the next stage for the background pass.
     bool more() const { return fileBinary_ && fileRead_ < fileBytes_; } // File bytes not yet staged: no EOM yet.
 private:
@@ -90,7 +91,6 @@ private:
     void endMeasure();
     static constexpr uint32_t EnvelopeBuckets = 1500; // WAV:ENV? without a count.
     uint32_t waveEnvelope_ = EnvelopeBuckets; // WAV:ENV? buckets of the query being served.
-    bool waveRepeat_ = false; // FRAM?/ENV? in RUN: no newer record came, the current one is served.
     bool wavePeak_ = false; // WAV:POIN:MODE PEAK (only with WAV:POIN n).
     uint32_t padding_ = 0; // Zeros still owed to an announced block whose source went (then -230).
     uint32_t waveStart_ = 1, waveStop_ = 0, wavePoints_ = 0; // wavePoints_: WAV:POIN (0: every point).

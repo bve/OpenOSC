@@ -119,7 +119,7 @@ void InstrumentUsb::poll(uint32_t now) {
         }
     }
     synchronize();
-    if (!connected()) { tmcEngine_.expire(now); serialEngine_.expire(now); return; } // A host gone mid-reply: free its file or lease.
+    if (!connected()) { tmcEngine_.idle(now); serialEngine_.idle(now); return; } // A host gone mid-reply: free its file or lease.
     serialEngine_.poll(now);
     serviceTmc(now); // USBTMC: split transactions first, then the bulk pipe.
     transfer(now);

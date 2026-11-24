@@ -27,6 +27,7 @@ void TmcPipe::dispatch(uint32_t now, uint32_t generation, TmcRecovery::Port &por
     uint32_t epoch;
     if (!begin(now, generation, port, epoch)) return;
     if (!recovery_.holdsBulkOut()) engine_.poll(now);
+    else engine_.expire(now); // A failed recovery waits for a CLEAR: its output still times out.
     finish(now, generation, epoch);
     if (current(generation) && !recovery_.holdsBulkIn()) engine_.refill();
 }

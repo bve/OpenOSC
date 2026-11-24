@@ -270,13 +270,9 @@ bool Engine::waveformCommand(const Command &c) {
             if (number < 100 || number > scope::RecordDepth::Maximum || number != uint32_t(number)) { error(-222, true); return true; }
             waveEnvelope_ = uint32_t(number);
         }
-        // A new record each query in RUN (the backend waits for one newer than the last); HOLD repeats its own.
-        if (!waitingWaveform_) { preambleChannels_ = 0; waveRepeat_ = false; } // The lease moves: PRE?'s no longer applies.
+        // A new record each query in RUN (none newer in 1 s: -230, as a repeated PRE?); HOLD repeats its own.
+        if (!waitingWaveform_) preambleChannels_ = 0; // The lease moves: PRE?'s no longer applies.
         const auto *f = frame(!waitingWaveform_);
-        if (!f && waitingWaveform_ && !waveRepeat_ && int32_t(now_ - deadline_) >= 0) { // None newer in 1 s: 1 s more for the current.
-            waveRepeat_ = true;
-            if (backend_.repeatFrame()) { deadline_ = now_ + 1000; f = frame(); }
-        }
         if (!f) { waitFrame(envelope ? "ENV" : "FRAM"); return true; }
         waitingWaveform_ = false;
         const auto &m = f->metadata();

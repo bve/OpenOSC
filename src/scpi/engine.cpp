@@ -117,6 +117,11 @@ bool Engine::expire(uint32_t now) {
     if (uint32_t(now - outputAt_) >= 10000) { discardOutput(); errors_.push(-410); } // The output only: the session stays.
     return true;
 }
+void Engine::idle(uint32_t now) {
+    if (expire(now) || uint32_t(now - frameAt_) < 10000) return;
+    if (measuring_ || waitingDecode_ || waitingWaveform_) discardOutput();
+    else { backend_.releaseFrame(); preambleChannels_ = 0; }
+}
 void Engine::poll(uint32_t now) {
     now_ = now;
     if (profileKnown_ && profile_ != backend_.multimeter()) { reset(); return; }
