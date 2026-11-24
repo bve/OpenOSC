@@ -289,6 +289,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 
 - USBTMC and CDC (virtual COM port) with SCPI commands, working alongside the local UI
 - [SCPI extensions for desktop clients](docs/SCPI_DESKTOP.md) for frame, peak, measurement and file transfers
+- Firmware update from a computer over SCPI: `MMEMory:UPLoad:DATA`, `MMEMory:UPLoad:END?` and
+  `SYSTem:RECovery:INSTall` (see Step 2)
 - Compatible command profiles for Rigol DS oscilloscopes and the OWON XDM1041 multimeter, so
   existing PC software such as ngscopeclient can talk to the device
 - [Fyfar](https://github.com/Fyfar) built a web app for the oscilloscope, multimeter, signal generator
@@ -450,6 +452,14 @@ offer to start after an update): left/right select **CONFIRM**, **MENU** presses
 If the computer still has the USB drive mounted, Recovery first asks **DISCONNECT USB DISK?**.
 Confirm it and Recovery detaches the drive itself; the cable can stay connected. The drive
 reconnects when you return to the Recovery menu.
+
+From a running OpenOSC firmware you can skip the drive and the keys: `python3 scripts/scpi_flash.py <CDC port> <file.OSC>` (needs pyserial)
+sends the file with `MMEMory:UPLoad:DATA "<name>",<offset>,#<n><length><bytes>` (512 bytes at a time) into
+`/openosc/UPDATE/`, checks its size and CRC-32 with `MMEMory:UPLoad:END?`, then `SYSTem:RECovery:INSTall "<name>"`
+restarts into Recovery, which installs that file and starts the firmware without a key pressed. If the
+install fails, Recovery stays on the error message. Installing without keys needs a Recovery from this
+version or newer (repeat step 1 once); an older Recovery stops in its menu, with the file already in
+`/openosc/UPDATE/`.
 
 Recovery checks the board model, CRC and vector table of the image before erasing anything.
 An image for another model is rejected. Later updates of the main firmware use step 2 only.
