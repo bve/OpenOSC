@@ -72,23 +72,11 @@ bool AnalogDial::scale(unsigned decimals, const char *unit, dmm::CountScale coun
     decimals_ = decimals;
     counts_ = counts;
     std::memcpy(legend_, legend, sizeof legend_);
-    // Convert labelled ticks from counts to display units with integer arithmetic.
-    unsigned long divisor = 1;
-    for (unsigned d = 0; known && d < decimals; ++d) divisor *= 10;
+    // The labelled ticks in display units (MeterText::scaleNumber, shared with the bar); unknown
+    // decimals: thousands of counts.
     const int major = counts_.major;
-    for (int i = 0; i < counts_.labels(); ++i) {
-        const int value = known ? counts_.tickValue(i * major) : i * major;
-        const char *sign = value < 0 ? "-" : "";
-        const auto magnitude = static_cast<unsigned long>(std::abs(value));
-        unsigned long whole = magnitude / divisor, fraction = magnitude % divisor;
-        int digits = known ? int(decimals) : 0;
-        while (digits && fraction % 10 == 0) { fraction /= 10; --digits; } // 0.50 -> 0.5, 1.000 -> 1
-        const char *suffix = "";
-        if (!digits && whole >= 10000 && whole % 1000 == 0) { whole /= 1000; suffix = "k"; }
-        const int written = digits ? std::snprintf(labels_[i], sizeof labels_[i], "%s%lu.%0*lu%s", sign, whole, digits, fraction, suffix)
-                                   : std::snprintf(labels_[i], sizeof labels_[i], "%s%lu%s", sign, whole, suffix);
-        if (written < 0 || size_t(written) >= sizeof labels_[i]) labels_[i][0] = 0; // Never a cut number.
-    }
+    for (int i = 0; i < counts_.labels(); ++i)
+        MeterText::scaleNumber(known ? counts_.tickValue(i * major) : i * major, known ? decimals : 0, labels_[i], sizeof labels_[i]);
     measure();
     if (shown()) lv_obj_invalidate(object_);
     return true;

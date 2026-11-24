@@ -1,5 +1,7 @@
 #pragma once
 #include "openosc/measurement/dmm/result.hpp"
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace openosc::ui {
@@ -51,6 +53,27 @@ struct MeterText {
         if (!std::strcmp(unit, "degC") || !std::strcmp(unit, "x")) return "°C";
         if (!std::strcmp(unit, "degF")) return "°F";
         return std::strlen(unit) <= 4 ? unit : "?";
+    }
+    // A scale number (the dial's and the bar's, GitHub #134): `value` counts at `decimals` (at most 6)
+    // in the reading's unit, by integer arithmetic: trailing zeros dropped (0.50 -> 0.5, 1.000 -> 1),
+    // a whole multiple of 1000 from 10000 up as "k" (10000 -> 10k). False and "": it does not fit.
+    static bool scaleNumber(int value, unsigned decimals, char *output, size_t capacity) {
+        if (!output || !capacity) return false;
+        output[0] = 0;
+        if (decimals > 6) return false;
+        unsigned long divisor = 1;
+        for (unsigned d = 0; d < decimals; ++d) divisor *= 10;
+        const char *sign = value < 0 ? "-" : "";
+        const auto magnitude = static_cast<unsigned long>(std::abs(value));
+        unsigned long whole = magnitude / divisor, fraction = magnitude % divisor;
+        int digits = int(decimals);
+        while (digits && fraction % 10 == 0) { fraction /= 10; --digits; }
+        const char *suffix = "";
+        if (!digits && whole >= 10000 && whole % 1000 == 0) { whole /= 1000; suffix = "k"; }
+        const int written = digits ? std::snprintf(output, capacity, "%s%lu.%0*lu%s", sign, whole, digits, fraction, suffix)
+                                   : std::snprintf(output, capacity, "%s%lu%s", sign, whole, suffix);
+        if (written < 0 || size_t(written) >= capacity) { output[0] = 0; return false; } // Never a cut number.
+        return true;
     }
     static const char *function(const dmm::Result &result) {
         if (result.primary.quantity == Quantity::Temperature) return "Temperature";

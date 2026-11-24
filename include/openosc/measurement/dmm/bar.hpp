@@ -30,6 +30,22 @@ struct BarReading {
     }
     // The unit of those numbers: the diode's are volts, also before a packet carries its unit.
     const char *unit(const Result &result) const { return scale == DiodeScale ? "V" : result.unit; }
+
+    // Some ranges end before the meter's digit capacity, for example 1000 V DC or 10 A.
+    // Give the digital bar five divisions over that range. Its fill and labels use the same span.
+    void limitToRange(const Result &result) {
+        if (scale != BoardScale) return;
+        const auto *range = Ranges::current(result);
+        NumericValue unitValue;
+        if (!range || !UnitParser::parse("1", range->unit, unitValue)) return;
+        double rawMaximum = range->maximumSi / unitValue.si;
+        for (unsigned i = 0; i < range->decimals; ++i) rawMaximum *= 10;
+        const int limit = int(std::lround(rawMaximum));
+        constexpr int Divisions = 5;
+        if (limit >= scale.fullScale || limit < Divisions || limit % Divisions) return;
+        scale = {limit, 1, 0, limit / Divisions};
+        counts = std::clamp(counts, -limit, limit);
+    }
     static BarReading from(const Result &result, DataStatus health,
                            const RelativeReading *relative = nullptr, TemperatureAxis *axis = nullptr) {
         BarReading bar;

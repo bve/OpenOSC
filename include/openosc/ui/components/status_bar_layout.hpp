@@ -12,7 +12,7 @@ struct StatusColumn {
 // side. The trigger takes
 // the first of two fixed places the pill leaves free, FPS shows where nothing else is drawn.
 // Widths are IBM Plex Sans 12 extents of the widest texts: "4.12V", "2 -88.8mV", "125 fps"
-// (LVGL may refresh every 8 ms), "48.8K"; tests/native/scope/status_bar.cpp renders them all.
+// (LVGL may refresh every 8 ms), "<512K"; tests/native/scope/status_bar.cpp renders them all.
 struct StatusBarLayout {
     using Column = StatusColumn;
     static constexpr int Width = 320, Height = 20, Margin = 2, Gap = 3, Tight = 2;
@@ -23,7 +23,10 @@ struct StatusBarLayout {
     static constexpr int StatusX = Margin;
     // Record overview: the displayed capture's budget and the map of its actual record.
     static constexpr Column Overview{BatteryText.x - Gap - 62, 62};
-    static constexpr Column OverviewCaption{Overview.x, 32}; // The widest total ("48.8K", "1023") whole.
+    // The caption in IBM Plex Sans 12 at every state (GitHub #135): the widest, "<512K", "<256K" and
+    // "<128K" (36 px), whole; "48.8K" 32, "512K" 29. The map takes the rest of the 62 px, so nothing
+    // beside the overview moves.
+    static constexpr Column OverviewCaption{Overview.x, 36};
     static constexpr Column OverviewMap{OverviewCaption.right() + Tight, Overview.right() - OverviewCaption.right() - Tight};
     static constexpr int IconGap = 3;
     static constexpr Column Generator{Overview.x - IconGap - 9, 9};
@@ -62,7 +65,7 @@ struct StatusBarLayout {
 namespace status_bar_checks {
 using L = StatusBarLayout;
 static_assert(L::BatteryIcon.right() + L::Margin == L::Width && L::BatteryText.right() == L::BatteryIcon.right(), "Battery at the right edge in every mode");
-static_assert(L::OverviewMap.width >= 28 && L::Overview.right() + L::Gap == L::BatteryText.x, "Overview clears every battery mode");
+static_assert(L::OverviewMap.width >= 24 && L::Overview.right() + L::Gap == L::BatteryText.x, "Overview clears every battery mode");
 static_assert(L::Generator.right() + L::IconGap == L::Overview.x, "GEN reaches the overview");
 static_assert(L::Usb.right() + L::IconGap == L::Generator.x, "USB reaches GEN");
 static_assert(L::Trigger.right() + L::Gap == L::Fps.x, "The trigger reaches the counter");

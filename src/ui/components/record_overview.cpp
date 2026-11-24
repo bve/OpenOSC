@@ -167,10 +167,7 @@ void RecordOverview::show(const OverviewGeometry &g, bool split, uint32_t analyz
     drawn_ = true;
     char text[12];
     captionText(g, text, sizeof text);
-    if (Elements::setText(caption_, text)) {
-        const unsigned size = Elements::textWidth(text) <= Layout::OverviewCaption.width ? 12 : 11;
-        lv_obj_set_style_text_font(caption_, Elements::font(size), 0);
-    }
+    Elements::setText(caption_, text); // One font, IBM Plex Sans 12, in every state (GitHub #135).
     const auto place = [](lv_obj_t *object, int left, int width, int y, int height) {
         lv_obj_set_hidden(object, left < 0);
         if (left < 0) return;

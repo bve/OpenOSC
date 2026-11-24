@@ -196,7 +196,7 @@ Captured on a ZT703S running OpenOSC.
   confirmed switch to another function or entering the multimeter screen resets it; a range change or
   a repeated selection of the same function keeps it.
 - Large 72/80 px reading when the bar graph and statistics are off
-- Bar graph and analog dial scaled to the meter's range: 25,000 counts on ZT703S, 66,000 on ZT706S
+- Bar graph labels follow the active range in measurement units. The 2.5 V range, for example, runs from 0 to 2.5 V in 0.5 V steps. The analog dial labels its scale in the reading's unit
 
 **Signal generator**
 
