@@ -62,22 +62,41 @@ bool Decoder::number(const uint8_t *p, unsigned first, unsigned count, char *tex
     size_t written = 0;
     if (p[first] & 0x10)
         text[written++] = '-';
+
+    bool hasDigit = false; // Tracks if we have written a significant digit or decimal point
+
     for (unsigned i = 0; i < count; ++i) {
         uint8_t segment = p[first - i];
-        if (i && (segment & 0x10)) {
+        bool hasPoint = i && (segment & 0x10);
+
+        if (hasPoint) {
+            if (!hasDigit) {
+                // Ensure numbers like 0.512 keep one leading zero before the decimal point
+                if (written + 1 >= capacity) return false;
+                text[written++] = '0';
+                hasDigit = true;
+            }
             if (written + 1 >= capacity)
                 return false;
             text[written++] = '.';
         }
+
         char c = character(segment & 0xef);
         if (c != ' ') {
+            // Skip leading zeros before any other digit or decimal point
+            if (c == '0' && !hasDigit && i + 1 < count) {
+                continue;
+            }
             if (written + 1 >= capacity)
                 return false;
             text[written++] = c;
+            hasDigit = true;
         }
     }
     text[written] = 0;
     return true;
+}
+
 }
 bool Decoder::decode(const uint8_t *packet, size_t bytes, Result &output) {
     if (!Packet::valid(packet, bytes))
