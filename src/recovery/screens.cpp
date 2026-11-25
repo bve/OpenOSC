@@ -40,7 +40,7 @@ void RecoveryScreens::files(const ImageCatalog& catalog, unsigned selected) {
 }
 void RecoveryScreens::confirm(const char* title, const char* detail, bool yes,
                               const ImageHeader* image, bool rawBinary) {
-    frame(title, "LEFT/RIGHT=CHOOSE  MENU=OK  F4=CANCEL");
+    frame(title, "F2=CANCEL  F3=CONFIRM  MENU=OK");
     screen_.text(8, 40, detail);
     if (image) {
         screen_.text(8, 64, "VERSION:"); screen_.text(62, 64, image->version);

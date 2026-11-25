@@ -54,6 +54,7 @@ private:
     Action action_ = Action::Update;
     unsigned selected_ = 0, file_ = 0, channel_ = 0;
     bool yes_ = false, hex_ = true, overwrite_ = false;
+    bool updated_ = false; // The start offer follows the update just installed.
     char imagePath_[FF_MAX_LFN + 10]{};
 };
 }
