@@ -365,7 +365,7 @@ Writing a backup back requires an SWD programmer.
 Recovery controls: **MENU** = OK, **F4** = back/cancel, arrow keys = navigation.
 **POWER-ON HOLD** shows how many milliseconds the factory bootloader makes you hold the power button
 after switching on, and sets any value from 1 to 65535 (**L/R** = digit, **UP/DOWN** = change it).
-It works only with a factory bootloader it recognises; with any other it writes nothing.
+It works only with a factory bootloader it knows by the CRC-32 of the whole bootloader; with any other it writes nothing.
 Every confirmation starts on **CANCEL**: press left/right to select **CONFIRM**, then **MENU**.
 If the computer still has the USB drive mounted, Recovery first asks **DISCONNECT USB DISK?**.
 Confirm it and Recovery detaches the drive itself; the cable can stay connected.

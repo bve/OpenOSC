@@ -1,4 +1,5 @@
 #include "openosc/recovery/power_hold.hpp"
+#include "openosc/update/crc32.hpp"
 #include "openosc/update/internal_flash.hpp"
 #include "openosc/update/layout.hpp"
 #include <cstring>
@@ -10,7 +11,29 @@ namespace {
 constexpr uint32_t ValueOffset = 0xb0, StoreOffset = 0xb4, LiteralOffset = 0x3a8;
 constexpr uint8_t Store[] = {0xbc, 0x49, 0x08, 0x60};
 constexpr uint32_t CountdownAddress = 0x20000030;
+// CRC-32 of the whole factory bootloader, layout::FactoryBase up to the calibration at
+// layout::CalibrationBase, with the four bytes of the value instruction zeroed so that a bootloader this
+// item has patched still matches: one entry per bootloader it may patch, so a patch never lands in code
+// it does not know. The only entry comes from the factory block of one ZT703S (block CRC-32 1A683883),
+// whose bootloader ends at 0x08013FE4 with erased Flash up to the calibration. Whether that range holds
+// per-unit data, giving the same bootloader version another CRC on another unit, is not known until
+// more units' bootloaders are compared.
+constexpr uint32_t KnownBootloaders[] = {0xb5e27700};
 alignas(16) uint8_t sector[layout::SectorBytes];
+
+bool known() {
+    static constexpr uint8_t zero[4] = {};
+    const auto* base = reinterpret_cast<const uint8_t*>(layout::FactoryBase);
+    constexpr uint32_t value = layout::FactoryBootSector - layout::FactoryBase + ValueOffset;
+    constexpr uint32_t end = layout::CalibrationBase - layout::FactoryBase;
+    Crc32 crc;
+    crc.update(base, value);
+    crc.update(zero, sizeof zero);
+    crc.update(base + value + sizeof zero, end - value - sizeof zero);
+    for (const uint32_t entry : KnownBootloaders)
+        if (crc.value() == entry) return true;
+    return false;
+}
 
 uint32_t halfword(const uint8_t* data, uint32_t offset) { return data[offset] | (data[offset + 1] << 8); }
 uint32_t word(const uint8_t* data, uint32_t offset) { return halfword(data, offset) | (halfword(data, offset + 2) << 16); }
@@ -58,12 +81,12 @@ private:
 }
 bool PowerHold::fail(const char* message) { error_ = message; return false; }
 bool PowerHold::read(uint32_t& ms) {
-    return decode(reinterpret_cast<const uint8_t*>(layout::FactoryBootSector), ms);
+    return known() && decode(reinterpret_cast<const uint8_t*>(layout::FactoryBootSector), ms);
 }
 bool PowerHold::prepare(uint32_t ms) {
     uint32_t current;
     std::memcpy(sector, reinterpret_cast<const void*>(layout::FactoryBootSector), sizeof sector);
-    if (!decode(sector, current)) return fail("FACTORY BOOTLOADER NOT SUPPORTED");
+    if (!known() || !decode(sector, current)) return fail("FACTORY BOOTLOADER NOT SUPPORTED");
     if (ms < MinMs || ms > MaxMs) return fail("VALUE OUT OF RANGE");
     encode(sector + ValueOffset, ms);
     return true;

@@ -11,7 +11,8 @@ public:
     static constexpr uint32_t MinMs = 1, MaxMs = 65535;
     // The value the factory bootloader in Flash holds now; false when this is not a bootloader we know.
     static bool read(uint32_t& ms);
-    // Copies the sector, recognises the bootloader in the copy and patches the value into it.
+    // Copies the sector, checks the whole bootloader in Flash by its CRC-32 and the instruction in the copy,
+    // and patches the value into the copy.
     bool prepare(uint32_t ms);
     // Erases the sector, writes the prepared copy and verifies it; may be repeated after a failure.
     bool write();
