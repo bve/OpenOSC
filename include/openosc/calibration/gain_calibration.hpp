@@ -14,7 +14,7 @@ class ScopeCalibration;
 // commits it (scope_gain.json, then in force) and restores the original capture.
 class GainCalibration final : public ZeroProcedure {
 public:
-    enum class Step : uint8_t { Ground, AwaitReference, Reference, Review };
+    enum class Step : uint8_t { Ground, AwaitReference, Reference, Review, RetryGround };
     enum class Failure : uint8_t { None, Reference, Ground, Span, Saturated, Unstable, WrongSign, Implausible };
     static constexpr unsigned Point = 3; // Y = 80: the most room on either side.
     static constexpr uint32_t Samples = 65536, MeasureMs = 10000, UserMs = 300000;
@@ -43,9 +43,9 @@ public:
     unsigned percent() const override;
     void detail(char *output, size_t capacity) const override;
     uint32_t samples() const override { return sampler_.samples(); }
-    bool waiting() const override { return active() && (step_ == Step::AwaitReference || step_ == Step::Review); }
+    bool waiting() const override { return active() && (step_ == Step::RetryGround || step_ == Step::AwaitReference || step_ == Step::Review); }
     const char *reason() const override;
-    // The user: the reference is on the tip (AwaitReference), the result is taken (Review).
+    // The user has moved the tip to GND or applied the reference.
     bool proceed(uint32_t now);
     bool accept();
     Step step() const { return step_; }
@@ -60,6 +60,7 @@ public:
 private:
     void measure(Step step, uint32_t now);
     bool fail(Failure failure);
+    bool rejectReading(Failure failure, uint32_t now);
     ScopeCalibration &calibration_;
     GainStore &file_;
     ZeroSampler sampler_;

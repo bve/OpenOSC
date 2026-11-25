@@ -123,7 +123,7 @@ private:
     void interleaveAction(ui::SettingsAction action,uint32_t now);
     ui::SettingsProperties settingsRows() const; // With the calibration pages' draft and status.
     ui::CalibrationDraft calibrationDraft_;
-    char gainQuestion_[2][40]{}; // The gain confirmation's texts (Confirmation keeps pointers).
+    char gainQuestion_[32]{}; // The gain confirmation's title (Confirmation keeps a pointer).
     void serviceZeroUi(uint32_t now);
     // Scope calibration > Interleave offset (ZT703S): its start after the confirmation, its result.
     void interleaveOffsetAction(uint32_t now); // MENU on its row: confirm, or cancel a running one.

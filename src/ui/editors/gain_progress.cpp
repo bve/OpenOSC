@@ -29,19 +29,25 @@ GainProgress::GainProgress(const calibration::GainCalibration &gain) : gain_(gai
     else std::snprintf(notice_, sizeof notice_, "%s", gain.requirement());
 }
 unsigned GainProgress::count() const {
-    return gain_.step() == Step::AwaitReference || gain_.step() == Step::Review ? 5 : 4;
+    return gain_.step() == Step::Ground || gain_.step() == Step::Reference ? 4 : 5;
 }
 GainProgress::Action GainProgress::action(unsigned row) const {
-    const bool choice = gain_.step() == Step::AwaitReference || gain_.step() == Step::Review;
-    if (choice && row == 3) return gain_.step() == Step::Review ? Action::Save : Action::Proceed;
+    if (count() == 5 && row == 3) return gain_.step() == Step::Review ? Action::Save : Action::Proceed;
     return row == count() - 1 ? Action::Cancel : Action::None;
 }
 unsigned GainProgress::defaultRow() const { return 3; }
 void GainProgress::name(unsigned row, char *output, size_t capacity) const {
     static constexpr const char *Measuring[] = {"Cell", "Step", "Reference", "Cancel"};
+    static constexpr const char *Retry[] = {"Cell", "Input", "Reference", "Retry ground", "Cancel"};
     static constexpr const char *Waiting[] = {"Cell", "Ground", "Reference", "Reference applied", "Cancel"};
     static constexpr const char *Review[] = {"Measured span", "Reference", "Correction", "Save", "Cancel"};
-    const auto *names = gain_.step() == Step::Review ? Review : gain_.step() == Step::AwaitReference ? Waiting : Measuring;
+    const auto *names = Measuring;
+    switch (gain_.step()) {
+    case Step::RetryGround: names = Retry; break;
+    case Step::AwaitReference: names = Waiting; break;
+    case Step::Review: names = Review; break;
+    case Step::Ground: case Step::Reference: break;
+    }
     std::snprintf(output, capacity, "%s", row < count() ? names[row] : "");
 }
 void GainProgress::value(unsigned row, char *output, size_t capacity) const {
@@ -64,7 +70,11 @@ void GainProgress::value(unsigned row, char *output, size_t capacity) const {
         std::snprintf(output, capacity, "CH%u %s", gain_.channel() + 1, text);
     } else if (row == 1) {
         if (step == Step::AwaitReference) codes(gain_.groundCode(), output, capacity);
-        else std::snprintf(output, capacity, "%s %u%%", step == Step::Ground ? "Ground" : "Reference", gain_.percent());
+        else if (step == Step::RetryGround) {
+            const auto failure = gain_.failure();
+            std::snprintf(output, capacity, "%s", failure == calibration::GainCalibration::Failure::Saturated ? "At ADC limit" :
+                          failure == calibration::GainCalibration::Failure::Unstable ? "Unstable" : "Outside zero range");
+        } else std::snprintf(output, capacity, "%s %u%%", step == Step::Ground ? "Ground" : "Reference", gain_.percent());
     } else if (row == 2) plot::Format::exactMillivolts(millivolts(gain_.referenceVolts()), output, capacity);
 }
 } // namespace openosc::ui

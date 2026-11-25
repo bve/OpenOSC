@@ -4,9 +4,8 @@
 
 namespace openosc::ui {
 // The gain measurement while it runs (ZeroOperation Applying/Collecting): what is measured, the
-// step, and the user's actions of that step. Measuring: Cancel. Waiting for the reference:
-// "Reference applied" / Cancel. Review: the measured span, the entered reference, the proposed
-// correction (and the one in force), Save / Cancel. Nothing is saved before Save.
+// step, and the user's actions of that step: Retry ground, Reference applied, Save or Cancel.
+// Review shows the measured span, the reference and the correction before Save.
 class GainProgress final : public PropertyList {
 public:
     enum class Action : uint8_t { None, Proceed, Save, Cancel };

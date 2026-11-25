@@ -22,7 +22,8 @@ void GainCalibration::configure(unsigned channel, unsigned range, double referen
 }
 const char *GainCalibration::requirement() const {
     switch (step_) {
-    case Step::Ground: return "Ground the probe tip";
+    case Step::Ground: return "Keep the probe tip on GND";
+    case Step::RetryGround: return "Disconnect signal and touch tip to GND";
     case Step::AwaitReference: return "Apply the reference to the tip";
     case Step::Reference: return "Keep the reference on the tip";
     case Step::Review: return "Save or cancel the result";
@@ -32,6 +33,13 @@ const char *GainCalibration::requirement() const {
 bool GainCalibration::available() const { return file_.available() && file_.loaded() && calibration_.valid(); }
 bool GainCalibration::fail(Failure failure) {
     failure_ = failure; state_ = State::InvalidInput;
+    return false;
+}
+bool GainCalibration::rejectReading(Failure failure, uint32_t now) {
+    if (step_ != Step::Ground) return fail(failure);
+    failure_ = failure;
+    step_ = Step::RetryGround;
+    deadline_ = now + UserMs;
     return false;
 }
 void GainCalibration::measure(Step step, uint32_t now) {
@@ -66,12 +74,13 @@ bool GainCalibration::observe(const scope::FrameView &frame, uint32_t now) {
     if (taken == ZeroSampler::Take::Uncalibrated) { state_ = State::Uncalibrated; return false; }
     if (taken == ZeroSampler::Take::None || !sampler_.complete()) return false;
     const auto s = sampler_.statistics(channel_);
-    if (s.minimum <= -125 || s.maximum >= 125) return fail(Failure::Saturated);
+    if (s.minimum <= -125 || s.maximum >= 125) return rejectReading(Failure::Saturated, now);
     if (s.variance > 9 || s.outliers > sampler_.samples() / ZeroSampler::OutlierDivisor || sampler_.drift(channel_) > DriftCodes)
-        return fail(Failure::Unstable);
+        return rejectReading(Failure::Unstable, now);
     if (step_ == Step::Ground) {
-        // A grounded tip reads the zero code within what the offsets may be off by; more: a signal.
-        if (std::abs(s.mean - sampler_.expected(channel_)) > PwmProfile::MaximumShiftCodes) return fail(Failure::Ground);
+        // The deviation includes the input voltage and any error in the offset calibration.
+        if (std::abs(s.mean - sampler_.expected(channel_)) > PwmProfile::MaximumShiftCodes)
+            return rejectReading(Failure::Ground, now);
         ground_ = s.mean; step_ = Step::AwaitReference; deadline_ = now + UserMs;
         return false;
     }
@@ -85,9 +94,18 @@ bool GainCalibration::observe(const scope::FrameView &frame, uint32_t now) {
     return false;
 }
 bool GainCalibration::proceed(uint32_t now) {
-    if (!active() || step_ != Step::AwaitReference) return false;
-    measure(Step::Reference, now); // The reference arrives now: frames from SettleMs after it.
-    return true;
+    if (!active()) return false;
+    switch (step_) {
+    case Step::RetryGround:
+        failure_ = Failure::None;
+        measure(Step::Ground, now);
+        return true;
+    case Step::AwaitReference:
+        measure(Step::Reference, now);
+        return true;
+    default:
+        return false;
+    }
 }
 bool GainCalibration::accept() {
     if (!active() || step_ != Step::Review) return false;
@@ -104,6 +122,7 @@ bool GainCalibration::commit() {
 unsigned GainCalibration::percent() const {
     const unsigned measured = unsigned(uint64_t(sampler_.samples()) * 50 / Samples);
     switch (step_) {
+    case Step::RetryGround: return 0;
     case Step::Ground: return measured;
     case Step::AwaitReference: return 50;
     case Step::Reference: return 50 + measured;
@@ -112,13 +131,13 @@ unsigned GainCalibration::percent() const {
     return 0;
 }
 void GainCalibration::detail(char *output, size_t capacity) const {
-    static constexpr const char *Steps[] = {"CH%u ground", "CH%u wait reference", "CH%u reference", "CH%u review"};
+    static constexpr const char *Steps[] = {"CH%u ground", "CH%u wait reference", "CH%u reference", "CH%u review", "CH%u retry ground"};
     std::snprintf(output, capacity, Steps[unsigned(step_)], channel_ + 1);
 }
 const char *GainCalibration::reason() const {
     switch (failure_) {
     case Failure::Reference: return "failed: reference span not 40..110 codes";
-    case Failure::Ground: return "failed: tip not grounded";
+    case Failure::Ground: return "failed: tip level outside zero range";
     case Failure::Span: return "failed: span under 40 codes";
     case Failure::Saturated: return "failed: input at the ADC limit";
     case Failure::Unstable: return "failed: input not stable";

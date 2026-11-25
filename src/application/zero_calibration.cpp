@@ -1,7 +1,6 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/ui/editors/zero_progress.hpp"
 #include "openosc/ui/editors/gain_progress.hpp"
-#include "openosc/ui/scope/format.hpp"
 #include "openosc/platform/clocks.hpp"
 #include "openosc/platform/input.hpp"
 #include <cmath>
@@ -66,11 +65,8 @@ void ApplicationController::confirmGain(uint32_t now) {
     if (!data_.gainSpan(d.channel,d.range,d.referenceMillivolts/1000.0,span) || !calibration::GainCalibration::spanAllowed(span)) {
         view_.notify(Tooltip::Unavailable, "Expected span must be 40..110 codes",now); return;
     }
-    char volts[20];
-    plot::Format::exactMillivolts(d.referenceMillivolts,volts,sizeof volts);
-    std::snprintf(gainQuestion_[0],sizeof gainQuestion_[0],"GROUND THE CH%u PROBE TIP?",d.channel+1);
-    std::snprintf(gainQuestion_[1],sizeof gainQuestion_[1],"Then apply %s when asked",volts);
-    confirmOperation(ui::Confirmation(gainQuestion_[0],"Stop GEN / measure",gainQuestion_[1]),&ApplicationController::beginGain);
+    std::snprintf(gainQuestion_,sizeof gainQuestion_,"CONNECT CH%u TIP TO GND",d.channel+1);
+    confirmOperation(ui::Confirmation(gainQuestion_,"Stop GEN / measure","Disconnect the tip from the signal"),&ApplicationController::beginGain);
 }
 void ApplicationController::beginGain(uint32_t now) {
     confirmationHandler_=nullptr;
