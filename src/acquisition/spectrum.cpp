@@ -1,6 +1,7 @@
 #include "openosc/acquisition/spectrum.hpp"
 #include <algorithm>
 #include <cmath>
+#include <new>
 #include "arm_math.h"
 
 namespace openosc::scope {
@@ -35,10 +36,10 @@ void Spectrum::window(SpectrumStorage &s,unsigned count,SpectrumWindow type) {
 }
 // CMSIS-DSP real FFT (v1.14.4, the algorithm family the factory firmware links): the packed
 // output keeps DC in [0], Nyquist in [1], then re/im pairs of bins 1..count/2-1.
-bool Spectrum::transform(SpectrumStorage &s,unsigned count) {
+bool Spectrum::transform(SpectrumStorage::Work &w,unsigned count) {
     arm_rfft_fast_instance_f32 instance;
     if (arm_rfft_fast_init_f32(&instance,uint16_t(count))!=ARM_MATH_SUCCESS) return false;
-    arm_rfft_fast_f32(&instance,s.real,s.imaginary,0);
+    arm_rfft_fast_f32(&instance,w.real,w.imaginary,0);
     return true;
 }
 bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const SpectrumOptions &options) {
@@ -64,11 +65,12 @@ bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const Spectru
         for (unsigned n=0;n<CicOrder;++n) { const uint64_t input=value; value-=delays[n]; delays[n]=input; }
         return int64_t(value);
     };
+    auto &w=*new (s.work) SpectrumStorage::Work;
     // The record in order through its sequential reader: the same corrected codes as signedCode.
     auto reader=frame.cursor(Channel(options.channel));
     if (step==1) {
         unsigned i=0;
-        if (reader.run(count,[&](int16_t sample) { s.real[i++]=sample; sum+=sample; })!=count) return false;
+        if (reader.run(count,[&](int16_t sample) { w.real[i++]=sample; sum+=sample; })!=count) return false;
     } else {
         int16_t first;
         if (!frame.signedCode(Channel(options.channel),0,first)) return false;
@@ -80,19 +82,19 @@ bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const Spectru
         const double gain=fourthPower(step);
         for (unsigned i=0;i<count;++i) {
             if (reader.run(step,push)!=step) return false;
-            s.real[i]=float(double(pull())/gain);
-            sum+=s.real[i];
+            w.real[i]=float(double(pull())/gain);
+            sum+=w.real[i];
         }
     }
     const auto &channel=frame.metadata().channels[options.channel];
     const float offset=options.removeDc ? sum/count : channel.calibrated ? channel.zeroCode : 0;
-    for (unsigned i=0;i<count;++i) s.real[i]=(s.real[i]-offset)*s.weights[i];
-    if (!transform(s,count)) return false;
+    for (unsigned i=0;i<count;++i) w.real[i]=(w.real[i]-offset)*s.weights[i];
+    if (!transform(w,count)) return false;
     auto &r=s.result;
     // Near the reduced Nyquist the filter cannot separate aliases, so that band is not shown.
     r.count=count; r.decimation=step; r.bins=(step>1 ? count*3/8 : count/2)+1; r.binHz=frame.metadata().samplesPerSecond.value()/(count*step);
     // Magnitudes of bins 1..: count/2-1 complex pairs at most, inside the packed output.
-    const float *packed=s.imaginary;
+    const float *packed=w.imaginary;
     s.amplitude[0]=std::abs(packed[0]);
     const unsigned pairs=std::min(r.bins,count/2)-1;
     arm_cmplx_mag_f32(packed+2,s.amplitude+1,pairs);

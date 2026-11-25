@@ -24,7 +24,13 @@ struct SpectrumStorage {
     // Exactly 2048 points: the one CMSIS-DSP real FFT length whose tables are linked.
     static constexpr unsigned Capacity=2048, MinimumCount=Capacity;
     // real: the windowed input (the FFT works in place on it); imaginary: the packed FFT output.
-    float real[Capacity],imaginary[Capacity],weights[Capacity],amplitude[Capacity/2+1];
+    struct Work { float real[Capacity],imaginary[Capacity]; };
+    // Work's raw bytes. They hold nothing between calculations, so the scope's software Glow
+    // draws in them too: a spectrum is never computed during a draw (calculate() runs from
+    // Model::project, outside the LVGL draw callbacks). Each use begins its own object here
+    // with placement new and never reads what the other left.
+    alignas(Work) unsigned char work[sizeof(Work)];
+    float weights[Capacity],amplitude[Capacity/2+1];
     SpectrumResult result;
     unsigned windowCount=0;
     SpectrumWindow cachedWindow=SpectrumWindow::Rectangular;
@@ -35,6 +41,6 @@ public:
     static bool calculate(SpectrumStorage &,const FrameView &,const SpectrumOptions &);
 private:
     static void window(SpectrumStorage &,unsigned,SpectrumWindow);
-    static bool transform(SpectrumStorage &,unsigned);
+    static bool transform(SpectrumStorage::Work &,unsigned);
 };
 } // namespace openosc::scope
