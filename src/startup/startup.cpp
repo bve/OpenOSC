@@ -21,7 +21,14 @@ void OTG_HS_IRQHandler();
 int main();
 void __libc_init_array();
 void _init() {}
-__attribute__((aligned(1024))) uint32_t runtime_vectors[256];
+#ifdef OPENOSC_APPLICATION
+// Its own section at the start of DTCM (application.ld): inside .bss its 1 KiB alignment left holes of up
+// to 1 KiB wherever the linker placed it. Not zeroed with .bss: Reset_Handler writes every entry.
+#define OPENOSC_RUNTIME_VECTORS __attribute__((section(".runtime_vectors"), aligned(1024)))
+#else
+#define OPENOSC_RUNTIME_VECTORS __attribute__((aligned(1024)))
+#endif
+OPENOSC_RUNTIME_VECTORS uint32_t runtime_vectors[256];
 extern const uint32_t vectors[171]; // The runtime handlers (vectors.S), relocated with the code.
 // Every handler of image_vectors (vectors.S): only taken before Reset_Handler switches VTOR to
 // runtime_vectors, and only when the loader pointed VTOR at this image (our Handoff does; the factory
@@ -66,8 +73,8 @@ void Reset_Handler() {
     for (auto* p = &_sscpi_measure; p < &_escpi_measure; ++p) *p = 0;
     __DSB();
 #endif
-    for (unsigned i = 0; i < 171; ++i)
-        runtime_vectors[i] = reinterpret_cast<const uint32_t*>(vectors)[i];
+    for (unsigned i = 0; i < 256; ++i)
+        runtime_vectors[i] = i < 171 ? reinterpret_cast<const uint32_t*>(vectors)[i] : 0;
     SCB->VTOR = reinterpret_cast<uint32_t>(runtime_vectors);
     __DSB(); __ISB();
     __libc_init_array();

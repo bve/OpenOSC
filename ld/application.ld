@@ -26,9 +26,12 @@ SECTIONS {
     _sitext = _stext;
     .ARM.extab : { *(.ARM.extab*) } > FLASH
     .ARM.exidx : { __exidx_start = .; *(.ARM.exidx*) __exidx_end = .; } > FLASH
+    /* The runtime vector table (VTOR) first, at DTCM's 1 KiB-aligned start: inside .bss its alignment
+       left holes. NOLOAD, not zeroed: Reset_Handler writes all of it. */
+    .runtime_vectors (NOLOAD) : { KEEP(*(.runtime_vectors)) } > RAM
     .data : { . = ALIGN(4); _sdata = .; *(.data*) . = ALIGN(4); _edata = .; } > RAM AT> FLASH
     _sidata = LOADADDR(.data);
-    .bss (NOLOAD) : { . = ALIGN(1024); _sbss = .; *(.bss*) *(COMMON) . = ALIGN(8); _ebss = .; } > RAM
+    .bss (NOLOAD) : { . = ALIGN(8); _sbss = .; *(.bss*) *(COMMON) . = ALIGN(8); _ebss = .; } > RAM
     .framebuffer (NOLOAD) : { . = ALIGN(64); KEEP(*(.framebuffer)) . = ALIGN(64); } > AXI
     .dma (NOLOAD) : { . = ALIGN(32); *(.dma .dma.*) . = ALIGN(32); } > AXI
     .dma_data : {
@@ -63,6 +66,7 @@ SECTIONS {
     .scpi_measure (NOLOAD) : { . = ALIGN(8); _sscpi_measure = .; KEEP(*(.scpi_measure)) . = ALIGN(8); _escpi_measure = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")
+    ASSERT(ADDR(.runtime_vectors) == ORIGIN(RAM) && SIZEOF(.runtime_vectors) == 1024, "Runtime vectors must open DTCM")
     ASSERT(ADDR(.framebuffer) == 0x24000000, "Panel framebuffer address changed")
     ASSERT(SIZEOF(.dma_data) >= 1024, "Initialized USB DMA buffers were not linked")
     ASSERT(ADDR(.dma_data) + SIZEOF(.dma_data) <= 0x24080000, "USB DMA buffers exceed their qualified AXI region")
