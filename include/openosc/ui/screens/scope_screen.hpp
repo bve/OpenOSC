@@ -18,6 +18,8 @@ public:
     // panReverse: Settings > Display > Pan direction, for Zoom & Pan's Left/Right hint.
     void context(unsigned channel, plot::Focus focus, bool panReverse = false);
     void generator(const generator::Snapshot &output, bool captureHalved);
+    // Settings > Display > Swap CH1/CH2: the plot, footer and cards relabelled at once (HOLD included).
+    void channelView(const plot::ChannelView &view) { host_.channelView(view); cards(); }
     void counters(const scope::CounterSnapshot &snapshot);
     // False when nothing was painted (no frame shown yet, or a panel over the scope).
     bool readouts(const scope::ReadoutResult &result, const ReadoutState &state);

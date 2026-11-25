@@ -15,8 +15,9 @@ void Painter::scales() {
         if (m.channels[c].enabled && o.channels[c].visible) {
             const auto scale = DisplayScale::channel(m.channels[c], o.channels[c]);
             if (Format::quantity(scale.perDivision, scale.unit, value, sizeof value)) {
-                std::snprintf(label, sizeof label, "%u %s %s", c + 1, DisplayScale::coupling(m.channels[c]), value);
-                text(label, 4 + c * 90, view.height - 14, palette_.channels[c], 90);
+                const unsigned slot = palette_.view.slot(c); // The on-screen CH1 left, CH2 beside it.
+                std::snprintf(label, sizeof label, "%u %s %s", slot + 1, DisplayScale::coupling(m.channels[c]), value);
+                text(label, 4 + int(slot) * 90, view.height - 14, palette_.channel(c), 90);
             }
         }
     if ((o.mode == Mode::Time || o.mode == Mode::SpectrumOverlay) &&

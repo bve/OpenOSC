@@ -45,7 +45,7 @@ void Painter::cursors() {
         readoutText(textBuffer, palette_.cursor);
     }
     if (c.voltage && (readout.codesValid || readout.decibelsValid)) {
-        const auto color = palette_.channels[spectrum ? model_.options().spectrum.channel : c.channel];
+        const auto color = palette_.channel(spectrum ? model_.options().spectrum.channel : c.channel);
         const int a = cursorPixel(c.yA, h), b = cursorPixel(c.yB, h);
         cursorLine(CursorLine::LevelA, "a", 0, a, w, a, w - 14, std::min(a + 1, h - 14), color);
         cursorLine(CursorLine::LevelB, "b", 0, b, w, b, w - 14, std::min(b + 1, h - 14), color);

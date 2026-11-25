@@ -173,6 +173,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   Hold **F2** for Home view or Reset zoom & pan. Hold **F4** to open the assigned editor.
   Returning from the Cursor settings shortcut selects the first enabled cursor for arrow-key control
 - Configurable on-screen measurements, two per channel in the footer, time and level cursors
+- **Settings → Display → Swap CH1/CH2** exchanges the on-screen channel labels, colors and
+  measurement columns. It defaults to Off. The Channel and Trigger menus show both numbers when swapped.
+  Capture, SCPI, calibration and decoder wiring use the physical input numbers.
 - Hardware frequency counter with an averaged on-screen overlay
 - XY, MATH and reference waveforms; sin(x)/x and spline interpolation, fading or infinite persistence, Glow
 - Per-channel waveform density (**Channel → Density**) in Y-T and Y-T+FFT. Choose **Colors** to show

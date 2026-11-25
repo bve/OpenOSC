@@ -11,7 +11,7 @@ enum class SettingsAction : uint8_t {
     GainChannel,GainRange,GainReference,GainReferenceStep,GainProbe,GainSpan,GainInForce,CalibrateGain,FactoryGain,
     InterleaveOffset,InterleaveInForce,InterleaveSaved,SaveInterleave,CancelInterleave,ResetInterleave,
     GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch, ClockIndicator,
-    GainFactory, MatchGain, AutoKey, ResetHold, ShortcutHold, BatteryGain, BatteryOffset,
+    GainFactory, MatchGain, AutoKey, ResetHold, ShortcutHold, BatteryGain, BatteryOffset, SwapChannels,
     // Settings > Display > Tooltips (GitHub #108): a row each, in Tooltip order, then the critical ones (always on).
     TooltipUsage, TooltipUnavailable, TooltipProgress, TooltipDone, TooltipAdvisory, TooltipCritical
 };

@@ -52,7 +52,7 @@ unsigned ChannelEditor::option(unsigned row) const {
 }
 void ChannelEditor::optionName(unsigned row, unsigned index, char *output, size_t capacity) const {
     switch (row) {
-    case Channel: std::snprintf(output, capacity, "CH%u", index + 1); break;
+    case Channel: std::snprintf(output, capacity, "%s", view_.inputLabel(index)); break;
     case Coupling: std::snprintf(output, capacity, "%s", index ? "AC" : "DC"); break;
     case Probe: std::snprintf(output, capacity, "%lu:1", (unsigned long)scope::ProbeAttenuation::Values[index % scope::ProbeAttenuation::Count]); break;
     case Scale:
@@ -89,7 +89,7 @@ void ChannelEditor::value(unsigned row, char *output, size_t capacity) const {
         char points[16];
         plot::Format::points(request_.depth(), points, sizeof points);
         if (f.enabled[channel_]) std::snprintf(output, capacity, "On, %s pts", points);
-        else std::snprintf(output, capacity, "Off, CH%u %s pts", (channel_ ^ 1) + 1, points);
+        else std::snprintf(output, capacity, "Off, CH%u %s pts", view_.number(channel_ ^ 1), points);
         break;
     }
     case Probe: std::snprintf(output, capacity, "%lu:%lu", (unsigned long)request_.probeNumerator[channel_],
@@ -125,7 +125,7 @@ void ChannelEditor::adjust(unsigned row, int direction) {
     case Enabled:
         // The record memory stays the same total: switching a channel redistributes it.
         if (frontend.enabled[channel_] && plot_.mode == plot::Mode::XY && frontend.enabled[other]) { notice_ = "X-Y needs CH1 and CH2 on"; break; }
-        if (!request_.setChannel(channel_, !frontend.enabled[channel_])) notice_ = channel_ ? "CH2 is the last channel on" : "CH1 is the last channel on";
+        if (!request_.setChannel(channel_, !frontend.enabled[channel_])) notice_ = view_.slot(channel_) ? "CH2 is the last channel on" : "CH1 is the last channel on";
         break;
     case Coupling: frontend.coupling[channel_] = scope::Coupling(unsigned(frontend.coupling[channel_]) ^ 1); break;
     case Zero: frontend.position[channel_] = std::clamp(frontend.position[channel_] + (direction > 0 ? 1 : -1), 0, 160); break;

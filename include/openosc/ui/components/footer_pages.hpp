@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/acquisition/readouts.hpp"
 #include "openosc/ui/components/scope_footer_layout.hpp"
+#include "openosc/ui/scope/channel_view.hpp"
 #include <cstdint>
 
 namespace openosc::ui {
@@ -25,6 +26,8 @@ public:
     // Only valid while count() is not zero.
     Kind kind() const { return kind(page_); }
     Kind kind(unsigned page) const;
+    // Swap CH1/CH2: with both channels on, the left panel's cells hold the input on screen as CH1.
+    void view(const plot::ChannelView &view) { view_ = view; }
     // A readout page's cell: the channel's slot, ChannelOff or Empty.
     Cell cell(unsigned index) const { return cell(page_, index); }
     Cell cell(unsigned page, unsigned index) const;
@@ -32,6 +35,7 @@ public:
 private:
     bool chosen_[2][scope::ReadoutSelection::PerChannel]{}; // The selection's non-Off readouts.
     bool enabled_[2]{}, spectrum_ = false, scales_ = false;
+    plot::ChannelView view_;
     bool wide() const { return enabled_[0] != enabled_[1]; }
     unsigned readoutPages_ = 0, count_ = 0, page_ = 0;
 };

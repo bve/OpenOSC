@@ -25,6 +25,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     }
     if (outcome != Outcome::Activate && outcome != Outcome::Open) { view_.properties(actions, navigator_); return; }
     for (unsigned c=0; c<2; ++c) plotControls_.enabled[c]=channelShown(c);
+    plotControls_.view = view_.channelView(); // Swap CH1/CH2: the rows name inputs as the plot does.
     const unsigned row = navigator_.row();
     analyzeRow_ = row; // A sub-menu's Back returns here.
     switch (row) {
@@ -46,7 +47,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         sectionDirect_ = true; // Back returns to Analyze.
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_), plotControls_.index(plot::Controls::FftSource)); return;
     case Actions::Measurements:
-        measurementEditor_.begin(prefs_.scope.measurements);
+        measurementEditor_.begin(prefs_.scope.measurements, view_.channelView());
         openPanel(Panel::Measurements, measurementEditor_); return;
     case Actions::Display:
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;

@@ -49,8 +49,10 @@ void Painter::traces() {
     }
     if (o.math != Math::Off) {
         trace(s.traces[2], palette_.math, 220, 1, o.style);
-        text(s.traces[2].enabled ? o.math == Math::Add ? "M: 1+2" : "M: 1-2" : "M: N/A", 8, 3, palette_.math,
-             80);
+        // The operation keeps its input order. Show each input's on-screen number.
+        const char label[] = {'M', ':', ' ', char('0' + palette_.view.number(0)),
+                              o.math == Math::Add ? '+' : '-', char('0' + palette_.view.number(1)), '\0'};
+        text(s.traces[2].enabled ? label : "M: N/A", 8, 3, palette_.math, 80);
     }
     if (model_.hasReference())
         text("REF", model_.viewport().width - 28, 3, palette_.reference, 28);

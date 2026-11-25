@@ -240,7 +240,7 @@ void ApplicationController::displayData(uint32_t now) {
             counterText_.update(data_.scopeCounters(), options.counter, text, sizeof text, clockMode_ | counterEpoch_ << 8);
             const unsigned source = options.counter.source ? options.counter.source - 1U : 0;
             const bool room = options.mode == plot::Mode::Time; // X-Y and FFT label that corner.
-            view_.waveform().counter(room ? text : "", view_.waveform().palette().channels[source]);
+            view_.waveform().counter(room ? text : "", view_.waveform().palette().channel(source));
         }
         if (!view_.traceDrawn()) { // A menu over the Scope, or Decoder only (plan §4.4).
             // No projection and no readouts without a trace; the decoder still takes the record.

@@ -62,6 +62,10 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["clock_indicator"].is<bool>()) return false;
         candidate.clockIndicator = indicators["clock_indicator"].as<bool>();
     }
+    if (indicators.containsKey("swap_channels")) { // Absent in older files: as wired.
+        if (!indicators["swap_channels"].is<bool>()) return false;
+        candidate.swapChannels = indicators["swap_channels"].as<bool>();
+    }
     if (indicators.containsKey("tooltips_off")) { // GitHub #108; absent in older files: every kind shown.
         if (!indicators["tooltips_off"].is<unsigned>() || !Tooltips::valid(indicators["tooltips_off"].as<unsigned>())) return false;
         candidate.tooltipsHidden = uint8_t(indicators["tooltips_off"].as<unsigned>());
@@ -223,6 +227,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["pan_moves_waveform"] = values.panReverse == 1;
     document["display"]["tooltips_off"] = unsigned(values.tooltipsHidden); // A bit per kind hidden (Tooltips).
     document["display"]["clock_indicator"] = values.clockIndicator == 1;
+    document["display"]["swap_channels"] = values.swapChannels == 1;
     document["hold_ms"] = values.holdMs();
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
     document["power"]["battery_gain_permille"] = int(values.batteryGainPermille);

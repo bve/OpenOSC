@@ -19,6 +19,9 @@ public:
     // Contrast keep their automatic meaning); repaints. Never touches the record or the options.
     void roles(uint32_t trigger, uint32_t tagText, uint32_t readout);
     const plot::Palette &palette() const { return palette_; } // The colours in force (tests).
+    // Swap CH1/CH2 (plot::ChannelView): repaints the record on show, a held one included; never
+    // touches the record, the options or the model.
+    void channelView(const plot::ChannelView &view);
     void setFrame(const scope::FrameView &frame);
     bool configure(const plot::Options &options);
     const plot::Options &options() const { return model_.options(); }

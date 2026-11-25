@@ -64,6 +64,11 @@ void ScopeFooter::counters(const scope::CounterSnapshot &counters) {
     counters_ = counters; countersValid_ = true;
     replan(); paint();
 }
+void ScopeFooter::view(const plot::ChannelView &view) {
+    if (view_ == view) return;
+    view_ = view; pages_.view(view);
+    paint();
+}
 void ScopeFooter::nextPage() {
     pages_.next();
     paint();
@@ -82,7 +87,7 @@ bool ScopeFooter::enabled(unsigned channel) const {
     return model_ ? model_->metadata().channels[channel].enabled : !countersValid_ || (counters_.enabled & (1U << channel));
 }
 uint32_t ScopeFooter::channelColor(unsigned channel) const {
-    return !enabled(channel) ? theme_->muted : channel ? theme_->channel2 : theme_->channel1;
+    return !enabled(channel) ? theme_->muted : view_.slot(channel) ? theme_->channel2 : theme_->channel1;
 }
 void ScopeFooter::look(unsigned channel, const uint32_t *color) {
     const uint32_t tint = color ? *color : theme_->grid;
@@ -130,7 +135,7 @@ void ScopeFooter::readoutPanel(unsigned p) {
     const uint32_t color = channelColor(c);
     look(p, &color);
     if (pages_.cell(p * PerChannel).slot == FooterPages::ChannelOff) {
-        if (model_) { char text[16]; std::snprintf(text, sizeof text, "CH%u Off", c + 1); panels_[p].add(0, text, theme_->muted); }
+        if (model_) { char text[16]; std::snprintf(text, sizeof text, "CH%u Off", view_.number(c)); panels_[p].add(0, text, theme_->muted); }
         return;
     }
     ReadoutRow::Item items[ReadoutRow::Items];
@@ -190,20 +195,21 @@ void ScopeFooter::scalesPage() {
     if (!model_) return;
     const auto &metadata = model_->metadata();
     const bool xy = model_->options().mode == plot::Mode::XY;
-    for (unsigned c = 0; c < 2; ++c) {
+    for (unsigned p = 0; p < 2; ++p) { // A panel per on-screen slot; X and Y stay the inputs' (X-Y).
+        const unsigned c = view_.input(p);
         const auto &channel = metadata.channels[c];
         const uint32_t color = channelColor(c);
-        look(c, &color);
+        look(p, &color);
         char text[48], probe[24];
-        if (!channel.enabled) std::snprintf(text, sizeof text, "CH%u Off", c + 1);
+        if (!channel.enabled) std::snprintf(text, sizeof text, "CH%u Off", view_.number(c));
         else {
             const auto scale = plot::DisplayScale::channel(channel, model_->options().channels[c]);
             plot::DisplayScale::probe(channel, probe, sizeof probe);
             char tag[40];
-            std::snprintf(tag, sizeof tag, "%sCH%u %s %s%s", xy ? (c ? "Y " : "X ") : "", c + 1, plot::DisplayScale::coupling(channel), probe, xy ? "" : samples(*model_, c));
+            std::snprintf(tag, sizeof tag, "%sCH%u %s %s%s", xy ? (c ? "Y " : "X ") : "", view_.number(c), plot::DisplayScale::coupling(channel), probe, xy ? "" : samples(*model_, c));
             ReadoutText::fit(tag, true, scale.perDivision, scale.unit, Layout::TextWidth, text, sizeof text);
         }
-        panels_[c].add(0, text, color);
+        panels_[p].add(0, text, color);
     }
 }
 // The plot's own header names the channel, window and length: the footer adds the peak (in the
@@ -211,7 +217,7 @@ void ScopeFooter::scalesPage() {
 void ScopeFooter::spectrumPage() {
     if (!model_) return;
     const auto &spectrum = model_->spectrum();
-    const uint32_t color = model_->options().spectrum.channel ? theme_->channel2 : theme_->channel1;
+    const uint32_t color = view_.slot(model_->options().spectrum.channel) ? theme_->channel2 : theme_->channel1;
     char text[48];
     look(0, &color);
     ReadoutText::fit("Pk", spectrum.hasPeak, spectrum.peakHz, "Hz", Layout::TextWidth, text, sizeof text);

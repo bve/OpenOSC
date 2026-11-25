@@ -48,7 +48,7 @@ void Painter::draw() {
     layer_->_clip_area = saved;
 }
 uint32_t Painter::traceColor(unsigned channel) const {
-    return ColorShade::toward(palette_.channels[channel & 1], palette_.background, model_.options().channels[channel & 1].brightness);
+    return ColorShade::toward(palette_.channel(channel), palette_.background, model_.options().channels[channel & 1].brightness);
 }
 void Painter::fill(const lv_area_t &box, uint32_t color) {
     lv_draw_rect_dsc_t rectangle;

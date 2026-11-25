@@ -46,6 +46,11 @@ void WaveformWidget::colors(const Theme &theme) {
     if (object_)
         lv_obj_invalidate(object_);
 }
+void WaveformWidget::channelView(const plot::ChannelView &view) {
+    if (palette_.view == view) return;
+    palette_.view = view;
+    if (object_) lv_obj_invalidate(object_);
+}
 void WaveformWidget::roles(uint32_t trigger, uint32_t tagText, uint32_t readout) {
     if (palette_.trigger == trigger && palette_.tagText == tagText && palette_.readout == readout) return;
     palette_.trigger = trigger; palette_.tagText = tagText; palette_.readout = readout;

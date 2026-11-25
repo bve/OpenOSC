@@ -2,12 +2,14 @@
 #include "openosc/acquisition/analysis.hpp"
 #include "openosc/acquisition/trigger_level.hpp"
 #include "openosc/ui/editors/property_list.hpp"
+#include "openosc/ui/scope/channel_view.hpp"
 
 namespace openosc::ui {
 class TriggerEditor final : public PropertyList {
 public:
     enum Row : unsigned { Source, Slope, Level, Mode, Pretrigger, Center, Reject, Midpoint, Fields };
     void begin(const scope::TriggerSettings &settings) { settings_ = settings; }
+    void channelView(plot::ChannelView view) { view_ = view; }
     void sources(bool ch1, bool ch2) {
         enabled_[0] = ch1; enabled_[1] = ch2;
         if (!enabled_[unsigned(settings_.channel)] && enabled_[unsigned(settings_.channel)^1])
@@ -44,6 +46,7 @@ public:
 private:
     bool enabled_[2] = {true, true};
     uint8_t levelStep_ = 1;
+    plot::ChannelView view_;
     scope::TriggerLevel::Bounds levelBounds_;
     scope::TriggerSettings settings_;
     scope::ChannelMetadata calibration_[2];

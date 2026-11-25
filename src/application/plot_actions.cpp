@@ -17,6 +17,7 @@ bool ApplicationController::changePlotMode(plot::Options &options, plot::Mode be
 }
 void ApplicationController::plotKeys(uint32_t keys, uint32_t now, bool fine) {
     for (unsigned c=0; c<2; ++c) plotControls_.enabled[c]=channelShown(c);
+    plotControls_.view = view_.channelView(); // Swap CH1/CH2: the rows name inputs as the plot does.
     ui::DisplayProperties list(plotControls_, fine);
     if (list.listing()) { // The section list: Open shows a section, Back goes up.
         using Outcome = ui::PropertyNavigator::Outcome;
@@ -66,7 +67,7 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         if (!data_.acquireScopeWait(frame)) return refuse("Reference needs a completed frame");
         widget.setFrame(frame.view());
         if (!widget.captureReference(channel)) return refuse(VisibleTrace);
-        view_.notify(Tooltip::Done, channel ? "CH2 reference captured" : "CH1 reference captured", now);
+        view_.notify(Tooltip::Done, view_.channelView().slot(channel) ? "CH2 reference captured" : "CH1 reference captured", now);
         return true;
     }
     const auto &frontend=data_.scopeRequest().frontend;

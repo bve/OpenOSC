@@ -144,13 +144,13 @@ void RecordOverview::palette(const Theme &theme) {
     for (auto *a : {parts_[Before], parts_[After]}) lv_obj_set_style_image_recolor(a, lv_color_hex(theme.accent), 0);
     analyzedColor_ = 0; drawn_ = false; // The analysed span and the trigger's colour: on the next update.
 }
-void RecordOverview::update(const plot::Model &model) {
+void RecordOverview::update(const plot::Model &model, const plot::ChannelView &view) {
     if (!root_) return;
     const auto geometry = OverviewGeometry::calculate(model, Inside);
     const auto &options = model.options();
     const bool split = model.hasFrame() && options.mode == plot::Mode::SpectrumOverlay;
     // The bracket takes the colour of the FFT trace it stands for.
-    const uint32_t analyzed = split ? math_ : channels_[options.spectrum.channel < 2 ? options.spectrum.channel : 0];
+    const uint32_t analyzed = split ? math_ : channels_[view.slot(options.spectrum.channel < 2 ? options.spectrum.channel : 0)];
     if (drawn_ && geometry == shown_ && split == split_ && analyzed == analyzedColor_) return;
     show(geometry, split, analyzed);
 }

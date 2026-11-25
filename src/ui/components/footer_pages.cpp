@@ -41,7 +41,7 @@ FooterPages::Cell FooterPages::cell(unsigned page, unsigned index) const {
         if (chosen_[cell.channel][index]) cell.slot = uint8_t(index);
         return cell;
     }
-    cell.channel = uint8_t(index / PerChannel);
+    cell.channel = uint8_t(view_.input(index / PerChannel));
     if (!enabled_[cell.channel]) { cell.slot = index % PerChannel ? Empty : ChannelOff; return cell; }
     const unsigned slot = (page - (spectrum_ ? 1 : 0)) * PerChannel + index % PerChannel;
     if (slot < scope::ReadoutSelection::PerChannel && chosen_[cell.channel][slot]) cell.slot = uint8_t(slot);

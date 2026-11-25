@@ -38,7 +38,7 @@ unsigned TriggerEditor::option(unsigned row) const {
 }
 void TriggerEditor::optionName(unsigned row, unsigned index, char *output, size_t capacity) const {
     static constexpr const char *modes[] = {"Auto", "Normal", "Single"};
-    if (row == Source) std::snprintf(output, capacity, "CH%u", index + 1);
+    if (row == Source) std::snprintf(output, capacity, "%s", view_.inputLabel(index));
     else if (row == Slope) std::snprintf(output, capacity, "%s", index ? "Falling" : "Rising");
     else if (row == Mode && index < 3) std::snprintf(output, capacity, "%s", modes[index]);
     else PropertyList::optionName(row, index, output, capacity); // Noise reject: Off/On.

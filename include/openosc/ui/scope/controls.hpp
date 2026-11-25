@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/ui/scope/options.hpp"
+#include "openosc/ui/scope/channel_view.hpp"
 #include "openosc/ui/editors/property_list.hpp"
 #include <cstddef>
 
@@ -58,6 +59,7 @@ public:
     int32_t savedPanPpb = 0; // An edit's exact pan (DisplayProperties: the list is rebuilt per key).
     unsigned channel = 0;
     bool enabled[2] = {true, true};
+    ChannelView view; // Swap CH1/CH2: rows and choices name each input by its on-screen number.
     // One row (Row) as a property: what it is, its name and value, its options, its steps.
     ui::PropertyKind kind(unsigned row) const;
     void name(unsigned row, char *output, size_t capacity) const;

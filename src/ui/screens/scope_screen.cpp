@@ -84,6 +84,7 @@ void ScopeScreen::cards() {
     const bool framed = model.hasFrame();
     const auto &shown = framed ? model.metadata() : next_;
     const auto &selected = shown.channels[channel_];
+    const auto &view = host_.channelView(); // Each card names and tints its input by its on-screen slot.
     char scale[24], time[24], value[64], title[64], details[160];
     const auto scaleValue = plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
     plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 3); // The strip uses the same precision.
@@ -93,7 +94,7 @@ void ScopeScreen::cards() {
     plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
-    std::snprintf(title, sizeof title, "Scale CH%u", channel_ + 1);
+    std::snprintf(title, sizeof title, "Scale CH%u", view.number(channel_));
     // Keep the value row at the plotted scale. A waiting record can still be on screen after its
     // range changes. Show the next setting in the title until a record at that scale arrives.
     if (framed) {
@@ -114,7 +115,7 @@ void ScopeScreen::cards() {
                 std::snprintf(title, sizeof title, "Next %s", first);
         }
     }
-    std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", channel_ + 1, plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
+    std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", view.number(channel_), plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
     // Keep the font fixed. A wide pair uses two significant digits, then coarser unit prefixes
     // if needed (for example, "500mcnt" becomes "0.5cnt").
     std::snprintf(value, sizeof value, "%s %s", scale, time);
@@ -127,10 +128,10 @@ void ScopeScreen::cards() {
     bar.item(0, title, value, *next, true);
     // F2 Position: the channel it moves, with its coupling and probe.
     const char *compactProbe = std::strcmp(probe, "x10000") == 0 ? "X10K" : probe;
-    std::snprintf(value, sizeof value, "CH%u %s %s", channel_ + 1, plot::DisplayScale::coupling(selected), compactProbe);
+    std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
     bar.item(1, "Position", value);
     static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
-    std::snprintf(value, sizeof value, "CH%u %s", unsigned(model.triggerChannel()) + 1, modes[unsigned(triggerMode_) % 3]);
+    std::snprintf(value, sizeof value, "CH%u %s", view.number(unsigned(model.triggerChannel())), modes[unsigned(triggerMode_) % 3]);
     bar.item(2, "Trigger", value);
     if (focus_ == plot::Focus::Zoom) { // Zoom & Pan: F4 goes back to the card it came from.
         char factor[16];
@@ -144,7 +145,7 @@ void ScopeScreen::cards() {
     // Selected, each card takes the colour of what it acts on (issue #21): F1 Scale and F2 Position
     // the selected channel's, F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
     using Tint = ParameterBar::Tint;
-    const auto channelTint = [](unsigned c) { return c == 0 ? Tint::Channel1 : c == 1 ? Tint::Channel2 : Tint::Neutral; };
+    const auto channelTint = [&](unsigned c) { return c > 1 ? Tint::Neutral : view.slot(c) ? Tint::Channel2 : Tint::Channel1; };
     bar.tint(0, channelTint(channel_));
     bar.tint(1, channelTint(channel_));
     bar.tint(2, channelTint(unsigned(model.triggerChannel())));

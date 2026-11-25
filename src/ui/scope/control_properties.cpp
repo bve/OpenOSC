@@ -37,10 +37,10 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case Zoom: std::snprintf(text, capacity, "Zoom"); break;
     case Pan: std::snprintf(text, capacity, "Horizontal position"); break;
     case CenterTrigger: std::snprintf(text, capacity, "Center trigger"); break;
-    case Visible: std::snprintf(text, capacity, "CH%u visible", channel + 1); break;
-    case Invert: std::snprintf(text, capacity, "CH%u invert", channel + 1); break;
-    case Gain: std::snprintf(text, capacity, "CH%u digital gain", channel + 1); break;
-    case Position: std::snprintf(text, capacity, "CH%u digital offset", channel + 1); break;
+    case Visible: std::snprintf(text, capacity, "CH%u visible", view.number(channel)); break;
+    case Invert: std::snprintf(text, capacity, "CH%u invert", view.number(channel)); break;
+    case Gain: std::snprintf(text, capacity, "CH%u digital gain", view.number(channel)); break;
+    case Position: std::snprintf(text, capacity, "CH%u digital offset", view.number(channel)); break;
     case TimeCursors: std::snprintf(text, capacity, "%s cursors", spectrum ? "Frequency" : "Time"); break;
     case VoltageCursors: std::snprintf(text, capacity, "%s cursors", spectrum ? "Level" : "Voltage"); break;
     case CursorAX: std::snprintf(text, capacity, "Cursor A %s", spectrum ? "freq" : "time"); break;
@@ -48,7 +48,7 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case CursorAY: std::snprintf(text, capacity, "Cursor a level"); break;
     case CursorBY: std::snprintf(text, capacity, "Cursor b level"); break;
     case MathTrace: std::snprintf(text, capacity, "MATH"); break;
-    case Reference: std::snprintf(text, capacity, "Capture CH%u reference", channel + 1); break;
+    case Reference: std::snprintf(text, capacity, "Capture CH%u reference", view.number(channel)); break;
     case Clear: std::snprintf(text, capacity, "Clear history and reference"); break;
     case SampleReduction: std::snprintf(text, capacity, "Samples"); break;
     case TraceInterpolation: std::snprintf(text, capacity, "Interpolation"); break;
@@ -107,22 +107,28 @@ unsigned Controls::choice(unsigned row) const {
 }
 void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity) const {
     static constexpr const char *views[] = {"Y-T", "X-Y", "FFT", "Y-T+FFT"}, *styles[] = {"Vectors", "Points", "Envelope"},
-        *grids[] = {"Full", "Major", "Axes", "None"}, *maths[] = {"Off", "CH1+CH2", "CH1-CH2"}, *reductions[] = {"Peak", "HD mean", "Auto (HD/Peak)"},
+        *grids[] = {"Full", "Major", "Axes", "None"}, *reductions[] = {"Peak", "HD mean", "Auto (HD/Peak)"},
         *interpolations[] = {"Linear", "Sinc", "Spline"}, *windows[] = {"Rectangular", "Hann", "Hamming", "Blackman"},
-        *scales[] = {"Linear", "dBFS"}, *counters[] = {"Off", "CH1", "CH2"}, *averaged[] = {"1", "3", "10"};
+        *scales[] = {"Linear", "dBFS"}, *averaged[] = {"1", "3", "10"};
     const auto pick = [&](const char *const *names, unsigned n) { std::snprintf(text, capacity, "%s", i < n ? names[i] : ""); };
     switch (row) {
     case Section: std::snprintf(text, capacity, "%s", groupName(i)); break;
-    case Channel: case FftSource: std::snprintf(text, capacity, "CH%u", i + 1); break;
+    case Channel: case FftSource: std::snprintf(text, capacity, "CH%u", view.number(i)); break;
+    case CounterSource: // Off, then each input by its on-screen number.
+        if (i == 1 || i == 2) std::snprintf(text, capacity, "CH%u", view.number(i - 1));
+        else std::snprintf(text, capacity, "%s", i ? "" : "Off");
+        break;
     case View: pick(views, 4); break;
     case TraceStyle: pick(styles, 3); break;
     case GridStyle: pick(grids, 4); break;
-    case MathTrace: pick(maths, 3); break;
+    case MathTrace: // CH1 op CH2 by input, each named by its on-screen number.
+        if (i == 1 || i == 2) std::snprintf(text, capacity, "CH%u%cCH%u", view.number(0), i == 1 ? '+' : '-', view.number(1));
+        else std::snprintf(text, capacity, "%s", i ? "" : "Off");
+        break;
     case SampleReduction: pick(reductions, 3); break;
     case TraceInterpolation: pick(interpolations, 3); break;
     case FftWindow: pick(windows, 4); break;
     case FftScale: pick(scales, 2); break;
-    case CounterSource: pick(counters, 3); break;
     case CounterAverage: pick(averaged, 3); break;
     case Persistence:
         if (i < choices(row) && Persistences[i] == InfinitePersistence) std::snprintf(text, capacity, "Infinite");

@@ -236,6 +236,7 @@ private:
     // F1-F4 held to their long press on that screen (issues #95, #96): Probe, the F2 reset, 50 %, the
     // F4 shortcut. Once a stroke (KeyGestures). True when the screen took the holds.
     [[gnu::noinline]] bool scopeHoldKeys(uint32_t holds, uint32_t now);
+    void openChannel(unsigned row = ui::ChannelEditor::Channel);
     void openProbe(uint32_t now);    // F1 hold: the selected channel's Probe choices.
     void openShortcut(uint32_t now); // F4 hold: the saved destination's editor, nothing changed by opening it.
     bool resetView(uint32_t now);    // F2 hold: Home view or Reset zoom & pan; explicit, so RUN keeps it.

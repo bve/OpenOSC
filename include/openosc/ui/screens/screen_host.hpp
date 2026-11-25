@@ -44,6 +44,10 @@ public:
     // Scope shows (no object rebuilt: the waveform's record, HOLD, zoom and the readouts stay).
     // `look`: the roles the theme has no field for (Trigger, TagText, Readout on the plot).
     void scopeTheme(const Theme *theme, const ScopeLook *look, bool apply = true); // apply false: only kept (a build: activate() follows).
+    // Settings > Display > Swap CH1/CH2 for the Scope's plot and footer (plot::ChannelView): repainted
+    // at once, a held record included; acquisition, options and readouts stay as they are.
+    void channelView(const plot::ChannelView &view) { channelView_ = view; waveform_.channelView(view); scopeFooter_.view(view); }
+    const plot::ChannelView &channelView() const { return channelView_; }
     StatusTone tone_ = StatusTone(255);
     Elements &elements() { return elements_; }
     ParameterBar &parameters() { return parameters_; }
@@ -88,6 +92,7 @@ private:
     BlockSpan generatorSpans_[GeneratorArrangement::Size];
     const Theme *theme_ = nullptr, *scopeTheme_ = nullptr;
     const ScopeLook *scopeLook_ = nullptr;
+    plot::ChannelView channelView_;
     Elements elements_;
     ParameterBar parameters_;
     WaveformWidget waveform_;

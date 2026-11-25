@@ -164,7 +164,7 @@ void Painter::density(unsigned c) {
     task.channel = uint8_t(c);
     task.width = uint16_t(view.width);
     task.height = uint16_t(view.height);
-    const uint32_t mono = o.gradeColor == ChannelOptions::InheritColor ? palette_.channels[c] : ColorCatalog::swatch(o.gradeColor).rgb;
+    const uint32_t mono = o.gradeColor == ChannelOptions::InheritColor ? palette_.channel(c) : ColorCatalog::swatch(o.gradeColor).rgb;
     task.palette(o, mono, model_.storage().persistence.peak(c), palette_.background);
     task.descriptor.base.dsc_size = sizeof(task);
     task.descriptor.render = task.opaque ? DensityTask::render<true> : DensityTask::render<false>;

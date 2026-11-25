@@ -124,6 +124,10 @@ public:
     // The kinds Settings > Display > Tooltips hides (Tooltips): from now on, and a notice of a kind
     // just hidden goes at once.
     void tooltips(uint8_t hidden);
+    // Settings > Display > Swap CH1/CH2 (plot::ChannelView): the Scope's plot, footer, cards and top
+    // bar trigger tag follow at once, a held record included; nothing is captured or recomputed.
+    void channelView(const plot::ChannelView &view);
+    const plot::ChannelView &channelView() const { return host_.channelView(); }
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
     const char *toast() const { return toastShowing() ? lv_label_get_text(toast_) : ""; } // On show now.
     bool toastShowing() const { return notice_ != Notice::None; } // A notice is on show (store(): none over another).

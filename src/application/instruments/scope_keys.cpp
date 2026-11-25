@@ -229,6 +229,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     syncZoomFocus();
     const auto openTrigger=[&] {
         triggerEditor_.begin(data_.scopeRequest().trigger);
+        triggerEditor_.channelView(view_.channelView());
         triggerEditor_.sources(data_.scopeRequest().frontend.enabled[0], data_.scopeRequest().frontend.enabled[1]);
         triggerEditor_.calibration(data_.scopeMetadata());
         markTriggerEditor();
@@ -245,8 +246,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         const auto card = focus_ == plot::Focus::Zoom ? zoomReturn_ : focus_;
         if (card == plot::Focus::Trigger) { openTrigger(); return; }
         if (card == plot::Focus::Cursor) { openAnalyze(ui::ScopeActions::Cursors); return; }
-        channelEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
-        openPanel(Panel::Channel, channelEditor_);
+        openChannel();
         return;
     }
     if (keys & Keypad::F4) {
@@ -379,9 +379,13 @@ bool ApplicationController::scopeHoldKeys(uint32_t holds, uint32_t now) {
     dataRefresh_ = true;
     return true;
 }
-void ApplicationController::openProbe(uint32_t now) {
+void ApplicationController::openChannel(unsigned row) {
     channelEditor_.begin(data_.scopeRequest(), view_.waveform().options(), selectedChannel_);
-    openPanel(Panel::Channel, channelEditor_, ui::ChannelEditor::Probe);
+    channelEditor_.channelView(view_.channelView());
+    openPanel(Panel::Channel, channelEditor_, row);
+}
+void ApplicationController::openProbe(uint32_t now) {
+    openChannel(ui::ChannelEditor::Probe);
     fieldKeys(Keypad::Menu, channelEditor_, now); // Its choices open: Up/Down, MENU takes one, F4 keeps the ratio.
 }
 // The editor of the saved destination, opened for review: nothing is applied until a field is
@@ -391,7 +395,7 @@ void ApplicationController::openShortcut(uint32_t) {
     analyzeRow_ = ~0U;
     switch (const auto destination = prefs_.scope.keys.destination()) {
     case Shortcut::Measurements:
-        measurementEditor_.begin(prefs_.scope.measurements);
+        measurementEditor_.begin(prefs_.scope.measurements, view_.channelView());
         openPanel(Panel::Measurements, measurementEditor_);
         return;
     case Shortcut::Acquisition: case Shortcut::RecordMemory:
@@ -408,6 +412,7 @@ void ApplicationController::openShortcut(uint32_t) {
         return;
     default: // Cursor settings: Analyze > Display > Cursors, its section only.
         for (unsigned c = 0; c < 2; ++c) plotControls_.enabled[c] = channelShown(c);
+        plotControls_.view = view_.channelView();
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
         plotControls_.options.cursors.channel = selectedChannel_;
         plotControls_.group = plot::Controls::Group::Cursors; plotControls_.listing = false;

@@ -258,6 +258,7 @@ void ApplicationController::applyPreferences() {
     idle_.configure(prefs_.idle,Board::milliseconds());
     battery_.trim(prefs_.batteryGainPermille, prefs_.batteryOffsetMv);
     view_.tooltips(prefs_.tooltipsHidden); // Boot and Reload settings JSON (GitHub #108).
+    view_.channelView(plot::ChannelView{prefs_.swapChannels != 0}); // Swap CH1/CH2: the Scope view only.
     dimmed_=false;
     applyBrightness();
     dataRefresh_=true;

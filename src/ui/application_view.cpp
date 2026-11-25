@@ -92,7 +92,7 @@ void ApplicationView::build(const Theme &theme) {
 }
 void ApplicationView::capture(const scope::FrameView &frame, bool held, unsigned channel, DataStatus health) {
     scope_.update(frame, held, channel, health);
-    if (!host_.overlayActive()) overview_.update(host_.waveform().model());
+    if (!host_.overlayActive()) overview_.update(host_.waveform().model(), host_.channelView());
     refreshIndicators();
 }
 void ApplicationView::refreshIndicators() {
@@ -197,18 +197,19 @@ void ApplicationView::drawChannelTag(lv_event_t *event) {
     ink.bg_color = lv_color_hex(self.channelTagInk_);
     lv_draw_rect(layer, &box, &area);
     const int x0 = area.x1 + plot::TagDigits::Left, y0 = area.y1 + plot::TagDigits::Top;
+    const unsigned digit = self.host_.channelView().slot(self.channelTagChannel_); // The source's on-screen number.
     for (int y = 0; y < plot::TagDigits::Height; ++y)
         for (int x = 0; x < plot::TagDigits::Width;) {
-            if (!plot::TagDigits::ink(self.channelTagChannel_, x, y)) { ++x; continue; }
+            if (!plot::TagDigits::ink(digit, x, y)) { ++x; continue; }
             const int start = x;
-            while (x < plot::TagDigits::Width && plot::TagDigits::ink(self.channelTagChannel_, x, y)) ++x;
+            while (x < plot::TagDigits::Width && plot::TagDigits::ink(digit, x, y)) ++x;
             lv_area_t run = {lv_coord_t(x0 + start), lv_coord_t(y0 + y), lv_coord_t(x0 + x - 1), lv_coord_t(y0 + y)};
             lv_draw_rect(layer, &ink, &run);
         }
 }
 void ApplicationView::refreshTriggerColors(unsigned channel) {
     if (!channelTag_ || channel >= NoTriggerChannel) return;
-    const uint32_t color = scopeLook_.trigger(channel ? scopeTheme_.channel2 : scopeTheme_.channel1);
+    const uint32_t color = scopeLook_.trigger(host_.channelView().slot(channel) ? scopeTheme_.channel2 : scopeTheme_.channel1);
     const uint32_t ink = scopeLook_.tagText(color);
     ui::Elements::textColor(trigger_, color);
     if (channel == channelTagChannel_ && color == channelTagColor_ && ink == channelTagInk_) return;
@@ -319,6 +320,17 @@ void ApplicationView::notify(Tooltip kind, const char *text, uint32_t now, Notic
     notice_ = notice;
     noticeKind_ = kind;
 }
+void ApplicationView::channelView(const plot::ChannelView &view) {
+    if (view == host_.channelView()) return;
+    if (!menu_ || mode_ != MeasurementMode::Oscilloscope) {
+        host_.channelView(view);
+        return;
+    }
+    scope_.channelView(view);
+    if (channelTag_) lv_obj_invalidate(channelTag_); // Its digit, even when both channels share a colour.
+    refreshTriggerColors(channelTagChannel_);
+    if (!host_.overlayActive()) overview_.update(host_.waveform().model(), view);
+}
 void ApplicationView::tooltips(uint8_t hidden) {
     tooltipsHidden_ = hidden;
     if (toastShowing() && !Tooltips::shown(hidden, noticeKind_)) dismissNotice(notice_);
@@ -331,7 +343,7 @@ void ApplicationView::dismissNotice(Notice kind) {
 void ApplicationView::service(uint32_t now) {
     host_.waveform().service(now);
     // The overview follows the projection itself, so HOLD pan and zoom move it without a new frame.
-    if (mode_ == MeasurementMode::Oscilloscope && !host_.overlayActive()) overview_.update(host_.waveform().model());
+    if (mode_ == MeasurementMode::Oscilloscope && !host_.overlayActive()) overview_.update(host_.waveform().model(), host_.channelView());
     if (statusRight_ != host_.statusRight()) refreshIndicators(); // Also catches states set by the screens.
     // Panels that refresh themselves must not bury a message the user has yet to read.
     if (toastShowing() && lv_obj_get_index(toast_)+1!=int32_t(lv_obj_get_child_count(lv_obj_get_parent(toast_))))

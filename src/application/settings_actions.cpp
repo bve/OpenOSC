@@ -116,6 +116,8 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
+    // Swap CH1/CH2: relabelled at once, a held record included; no capture, option or readout changes.
+    prefs_.swapChannels = chosen.swapChannels; view_.channelView(plot::ChannelView{prefs_.swapChannels != 0});
     prefs_.tooltipsHidden = chosen.tooltipsHidden; view_.tooltips(prefs_.tooltipsHidden); // A notice of a kind hidden goes now.
     prefs_.scope.keys = chosen.scope.keys; // Read by the next AUTO, F2 or F4 stroke.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }

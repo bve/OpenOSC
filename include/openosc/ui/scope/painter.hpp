@@ -1,6 +1,7 @@
 #pragma once
 #include "lvgl.h"
 #include "openosc/ui/scope/model.hpp"
+#include "openosc/ui/scope/channel_view.hpp"
 #include "openosc/ui/scope/plot_frame.hpp"
 #include "openosc/ui/scope/record_gaps.hpp"
 #include "openosc/settings/color_value.hpp"
@@ -10,11 +11,14 @@ namespace openosc::plot {
 // tagText: Contrast writes on a coloured tag (zero tags, the active cursor's) in the ink that
 // contrasts with that tag (ColorContrast); readout: neutral texts on the plot (scales, record-edge
 // and spectrum labels). The Scope appearance's Trigger, TagText and Readout roles (ScopeLook).
+// channels: the on-screen CH1 and CH2 slots' colours; view: the slot each input shows in (channel()).
 struct Palette {
     static constexpr uint32_t FollowSource = 0xffffffffu, Contrast = 0xfffffffeu;
     uint32_t background = 0, grid = 0, channels[2]{}, math = 0, reference = 0xa78bfa, cursor = 0xe2e8f0;
     uint32_t trigger = FollowSource, tagText = Contrast, readout = 0xe2e8f0;
-    uint32_t triggerColor(unsigned source) const { return trigger == FollowSource ? channels[source & 1] : trigger; }
+    ChannelView view;
+    uint32_t channel(unsigned input) const { return channels[view.slot(input)]; } // An input's colour on screen.
+    uint32_t triggerColor(unsigned source) const { return trigger == FollowSource ? channel(source) : trigger; }
     uint32_t tagInk(uint32_t fill) const { return tagText == Contrast ? ColorContrast::ink(fill) : tagText; }
 };
 // The trigger level marker's limit feedback (issue #61), drawn in the right margin only. limit: the

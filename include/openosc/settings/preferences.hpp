@@ -45,6 +45,9 @@ struct Preferences {
     // generatorLastOutput is that state (1 on).
     uint32_t generatorStartup = 0, generatorLastOutput = 0;
     GeneratorArrangement generatorArrangement; // The main GEN screen's blocks (default: frequency, preview, buttons).
+    // Settings > Display > Swap CH1/CH2: 1 shows input CH1 as the on-screen CH2 and CH2 as CH1 in the
+    // Scope view (plot::ChannelView); 0 (older files) as wired. In the padding after the 3-byte arrangement.
+    uint8_t swapChannels = 0;
     uint32_t generatorAmplitudeMillivolts = 3000; // ZT706S module; ZT703S keeps level/codes.
     ScopePreferences scope;
     MeterPreferences meter;
@@ -54,7 +57,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && holdTime < 3 && usbController <= 1 && bode.valid() &&
+               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && holdTime < 3 && usbController <= 1 && bode.valid() &&
                generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&

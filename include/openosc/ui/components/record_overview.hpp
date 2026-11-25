@@ -2,6 +2,7 @@
 #include "openosc/ui/components/elements.hpp"
 #include "openosc/ui/components/status_bar_layout.hpp"
 #include "openosc/ui/scope/model.hpp"
+#include "openosc/ui/scope/channel_view.hpp"
 
 namespace openosc::ui {
 // What the status bar's record map shows of the frame on show, in pixels of the map's inside.
@@ -46,7 +47,7 @@ public:
     void create(lv_obj_t *parent, const Theme &theme);
     // The colours of `theme` on the existing objects (a Scope appearance); the next update() repaints.
     void palette(const Theme &theme);
-    void update(const plot::Model &model);
+    void update(const plot::Model &model, const plot::ChannelView &view = {}); // view: the FFT bracket's colour slot.
     static void captionText(const OverviewGeometry &geometry, char *output, size_t capacity);
     void visible(bool value) { if (root_) lv_obj_set_hidden(root_, !value); }
     const OverviewGeometry &geometry() const { return shown_; }

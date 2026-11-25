@@ -51,7 +51,7 @@ void CalibrationRows::value(SettingsAction action, char *output, size_t capacity
     case Action::GainChannel: case Action::GainRange: case Action::GainReferenceStep: optionName(action, option(action), output, capacity); break;
     case Action::GainReference: plot::Format::exactMillivolts(draft_.referenceMillivolts, output, capacity); break;
     case Action::GainProbe:
-        std::snprintf(output, capacity, "%lu:%lu (CH%u menu)", (unsigned long)status_.probeNumerator,
+        std::snprintf(output, capacity, "%lu:%lu (input CH%u)", (unsigned long)status_.probeNumerator,
                       (unsigned long)status_.probeDenominator, draft_.channel + 1);
         break;
     case Action::GainSpan:

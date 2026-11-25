@@ -2,6 +2,7 @@
 #include "openosc/acquisition/request.hpp"
 #include "openosc/ui/editors/property_list.hpp"
 #include "openosc/ui/scope/options.hpp"
+#include "openosc/ui/scope/channel_view.hpp"
 
 namespace openosc::ui {
 class ScopeEditor : public PropertyList {
@@ -25,6 +26,7 @@ public:
     // Trace brightness (GitHub #86), Density and its colour (GitHub #85) are the view's, as Invert;
     // the colour row only for Mono.
     enum Row : unsigned { Channel, Enabled, Coupling, Probe, Scale, Zero, Invert, TraceBrightness, Density, DensityColor, Fields };
+    void channelView(plot::ChannelView view) { view_ = view; }
     const char *title() const override { return "CHANNEL"; }
     void value(unsigned row, char *output, size_t capacity) const override;
     unsigned options(unsigned row) const override;
@@ -39,6 +41,8 @@ public:
     void name(unsigned row, char *output, size_t capacity) const override;
     bool optionSwatch(unsigned row, unsigned option, uint32_t &rgb) const override;
     bool valueSwatch(unsigned row, uint32_t &rgb) const override { return optionSwatch(row, option(row), rgb); }
+private:
+    plot::ChannelView view_;
 };
 class AcquisitionEditor final : public ScopeEditor {
 public:

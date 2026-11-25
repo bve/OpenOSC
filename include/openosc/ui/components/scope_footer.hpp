@@ -19,6 +19,8 @@ public:
     // repainted at once, the readouts, page and record state kept.
     void theme(const Theme &theme) { theme_ = &theme; paint(); }
     void visible(bool value) { lv_obj_set_hidden(root_, !value); }
+    // Swap CH1/CH2 (plot::ChannelView): each input's panel, colour and number; repainted at once.
+    void view(const plot::ChannelView &view);
     void clear(); // No frame on display: no scales, values or state.
     void selection(const scope::ReadoutSelection &selection);
     void frame(const plot::Model &model); // Each painted frame: the scales and spectrum pages.
@@ -29,7 +31,7 @@ public:
     // What the rails and value shades show now (Screen until a Full result is painted).
     const ReadoutIndicator &indicator() const { return indicator_; }
     const FooterPanel &panel(unsigned channel) const { return panels_[channel]; }
-    // Every text on show, CH1's panel first, each followed by '|' ("f|19.9kHz|Vpp|5.5V|...").
+    // Every text on show, the on-screen CH1's panel first, each followed by '|' ("f|19.9kHz|Vpp|5.5V|...").
     void describe(char *output, size_t capacity) const;
     // The Scales page's note of what a channel's columns show, when not the default Peak: " Avg"
     // (frame averaging, over any Samples), " HD", or Samples Auto's choice now (" aHD"/" aPk").
@@ -61,5 +63,6 @@ private:
     scope::CounterSnapshot counters_;
     bool resultValid_ = false, countersValid_ = false;
     FooterPages pages_;
+    plot::ChannelView view_;
 };
 } // namespace openosc::ui
