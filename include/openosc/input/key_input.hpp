@@ -37,6 +37,7 @@ public:
         event=queue_[read&(Capacity-1)]; read_.store(read+1,std::memory_order_release);
         return true;
     }
+    bool pending() const { return read_.load(std::memory_order_acquire)!=written_.load(std::memory_order_acquire); } // Events not taken yet.
     uint32_t keys() const { return keys_.load(std::memory_order_acquire); }
     // REL/Power held towards power off: how long, as of the last sample.
     bool powerHold(uint32_t &elapsed) const {

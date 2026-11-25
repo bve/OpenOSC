@@ -49,6 +49,7 @@ public:
     void resetMeterStatistics() override;
     MeasurementMode screen() const override;
     bool screen(MeasurementMode) override;
+    bool pressKey(uint32_t key, uint32_t ms) override;
     bool busy() const override;
     uint32_t operationTimeoutMs() const override;
     DataStatus operationStatus() const override;
