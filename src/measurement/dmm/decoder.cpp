@@ -58,6 +58,7 @@ RangeMode Decoder::range(bool autoBit, bool manualBit, const Result &result) {
     return reading && Functions::ranged(function) && result.primary.quantity == Functions::quantity(function) ? RangeMode::Manual
                                                                                                              : RangeMode::Unknown;
 }
+
 bool Decoder::number(const uint8_t *p, unsigned first, unsigned count, char *text, size_t capacity) {
     size_t written = 0;
     if (p[first] & 0x10)
@@ -97,7 +98,6 @@ bool Decoder::number(const uint8_t *p, unsigned first, unsigned count, char *tex
     return true;
 }
 
-}
 bool Decoder::decode(const uint8_t *packet, size_t bytes, Result &output) {
     if (!Packet::valid(packet, bytes))
         return false;
