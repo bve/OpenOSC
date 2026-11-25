@@ -29,10 +29,12 @@ struct ScopePreferences {
     uint8_t triggerType = 0, triggerCondition = uint8_t(scope::TriggerCondition::Greater);
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
-    uint32_t rollAuto=1;
-    uint32_t longerRecord = 1;
+    // Bytes, rollAuto to interleave: the Scope part keeps its size as choices join them (sizeof checked
+    // in preferences.hpp).
+    uint8_t rollAuto=1;
+    uint8_t longerRecord = 1;
     // InterleaveMode: Off/On/Auto. Defaults: ZT706S Auto (its factory rule), ZT703S Off (Auto: MKR's rule).
-    uint32_t interleave = board::Current::Features.adcInterleave ? 2 : 0;
+    uint8_t interleave = board::Current::Features.adcInterleave ? 2 : 0;
     // A service choice (FactoryRecordPolicy: 0 auto, 1 long, 2 compact, 3 mkr) for reading the factory record
     // at the NEXT start (DataAccess::initialize); Reload settings never re-reads the record. Only on
     // outside evidence about an ambiguous record (docs/ZERO_CALIBRATION.md); files without it: auto.
