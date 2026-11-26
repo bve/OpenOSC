@@ -29,11 +29,13 @@ bool Settings::valid() const {
            can.bitrate >= Protocols::MinimumBitrate && can.bitrate <= Protocols::MaximumBitrate &&
            can.samplePointPermille >= 100 && can.samplePointPermille <= 900 && unsigned(can.source) < unsigned(CanSource::Count) &&
            within(can.differenceMv) && can.dataBitrate >= can.bitrate && can.dataBitrate <= Protocols::MaximumDataBitrate &&
-           can.dataSamplePointPermille >= 100 && can.dataSamplePointPermille <= 900;
+           can.dataSamplePointPermille >= 100 && can.dataSamplePointPermille <= 900 && within(rs485.thresholdMv) &&
+           unsigned(rs485.source) < unsigned(Rs485Source::Count) && rs485.inverted <= 1;
 }
 uint32_t Settings::hash() const {
     uint32_t h = 2166136261u;
-    for (uint32_t v : {uint32_t(protocol), uint32_t(update), uint32_t(hysteresis), channel, uint32_t(thresholdMv[0]), uint32_t(thresholdMv[1]),
+    for (uint32_t v : {uint32_t(protocol), uint32_t(update), uint32_t(hysteresis), uint32_t(channel),
+                       uint32_t(thresholdMv[0]), uint32_t(thresholdMv[1]),
                        hysteresisMv, minPulseNs, uart.baud, uint32_t(uart.dataBits | uart.parity << 8 | uart.stopHalfBits << 16),
                        uint32_t(uart.msbFirst | uart.inverted << 8 | i2c.sdaChannel << 16),
                        uint32_t(spi.clockChannel | spi.mode << 8 | spi.bits << 16 | uint32_t(spi.msbFirst) << 24), uint32_t(spi.manual),
@@ -42,11 +44,13 @@ uint32_t Settings::hash() const {
         h = mix(h, v);
     for (uint8_t b : lin.lengths) h = mix(h, b);
     if (protocol == Protocol::Rs232) h = mix(h, uint32_t(uart.rs232ThresholdMv));
+    if (rs485Line()) h = mix(mix(mix(h, uint32_t(rs485.thresholdMv)), uint32_t(rs485.source)), rs485.inverted);
     return h;
 }
 unsigned Settings::sources() const {
     switch (protocol) {
     case Protocol::Uart: case Protocol::Rs232: case Protocol::Lin: return 1u << channel;
+    case Protocol::Rs485: case Protocol::Dmx512: return rs485.source == Rs485Source::Difference ? 3u : 1u << channel;
     case Protocol::I2c: case Protocol::Spi: return 3;
     case Protocol::Can: return can.source == CanSource::Difference ? 3u : can.source == CanSource::RxdCh2 ? 2u : 1u;
     default: return 0;
@@ -55,17 +59,23 @@ unsigned Settings::sources() const {
 bool Settings::operator==(const Settings &o) const {
     return enabled == o.enabled && protocol == o.protocol && view == o.view && update == o.update && channel == o.channel &&
            thresholdMv[0] == o.thresholdMv[0] && thresholdMv[1] == o.thresholdMv[1] && hysteresis == o.hysteresis && hysteresisMv == o.hysteresisMv &&
-           minPulseNs == o.minPulseNs && uart == o.uart && i2c == o.i2c && spi == o.spi && lin == o.lin && can == o.can;
+           minPulseNs == o.minPulseNs && uart == o.uart && i2c == o.i2c && spi == o.spi && lin == o.lin && can == o.can &&
+           rs485 == o.rs485;
 }
 const char *Protocols::name(Protocol p) {
-    static constexpr const char *names[] = {"Off", "UART (TTL)", "I2C", "SPI", "LIN", "CAN", "RS-232"};
+    static constexpr const char *names[] = {"Off", "UART (TTL)", "I2C", "SPI", "LIN", "CAN", "RS-232", "RS-485", "DMX512"};
     static_assert(sizeof names / sizeof *names == unsigned(Protocol::Count), "a name per protocol");
     return unsigned(p) < unsigned(Protocol::Count) ? names[unsigned(p)] : "?";
 }
 const char *Protocols::key(Protocol p) {
-    static constexpr const char *keys[] = {"off", "uart", "i2c", "spi", "lin", "can", "rs232"};
+    static constexpr const char *keys[] = {"off", "uart", "i2c", "spi", "lin", "can", "rs232", "rs485", "dmx512"};
     static_assert(sizeof keys / sizeof *keys == unsigned(Protocol::Count), "a key per protocol");
     return unsigned(p) < unsigned(Protocol::Count) ? keys[unsigned(p)] : "";
+}
+unsigned Protocols::family(Protocol p) {
+    static constexpr uint8_t families[] = {0, 1, 2, 3, 4, 5, 1, 1, 6};
+    static_assert(sizeof families == unsigned(Protocol::Count), "a family per protocol");
+    return unsigned(p) < unsigned(Protocol::Count) ? families[unsigned(p)] : 0;
 }
 const char *Protocols::viewName(View v) {
     static constexpr const char *names[] = {"Wave + annotations", "Split", "Decoder only"};

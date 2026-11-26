@@ -24,9 +24,9 @@ public:
     }
     MenuRow &nextRow() { return rows_[nextRow_++]; }
     MenuRow &row(lv_obj_t *parent,int y,int height,const char *name,const char *value,
-                 bool selected,const Theme &theme,uint32_t accent) {
+                 bool selected,const MenuPalette &palette) {
         auto &row=nextRow();
-        row.update(parent,y,height,name,value,selected,theme,accent);
+        row.update(parent,y,height,name,value,selected,palette);
         return row;
     }
 private:

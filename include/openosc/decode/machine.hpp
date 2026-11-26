@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/decode/protocols/can_fd.hpp"
+#include "openosc/decode/protocols/dmx.hpp"
 #include "openosc/decode/protocols/i2c.hpp"
 #include "openosc/decode/protocols/lin.hpp"
 #include "openosc/decode/protocols/spi.hpp"
@@ -10,7 +11,7 @@
 
 namespace openosc::decoding {
 // The one protocol state machine of a record (docs/SCOPE_PROTOCOL_DECODERS_PROTOCOLS.md §7.1): built in
-// place in one storage as large as the largest of the five (CAN: the one automaton of Classical CAN and
+// place in one storage as large as the largest of the six (CAN: the one automaton of Classical CAN and
 // ISO CAN FD, CanFdDecoder), its options from Settings and the record
 // (Fs, the two lines' uncertainty window). Lives in the decoder workspace with the job.
 class ProtocolMachine {
@@ -46,7 +47,7 @@ private:
     template <class T> T &as() const { return *std::launder(reinterpret_cast<T *>(const_cast<unsigned char *>(storage_))); }
     union Storage {
         protocols::UartDecoder uart; protocols::I2cDecoder i2c; protocols::SpiDecoder spi;
-        protocols::LinDecoder lin; protocols::CanFdDecoder can;
+        protocols::LinDecoder lin; protocols::CanFdDecoder can; protocols::DmxDecoder dmx;
         Storage() {}
     };
     alignas(Storage) unsigned char storage_[sizeof(Storage)];

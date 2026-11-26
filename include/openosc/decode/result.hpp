@@ -24,7 +24,8 @@ struct DecodeEvent {
 static_assert(sizeof(DecodeEvent) == 24, "plan §5.5: 24-byte descriptors");
 // The status of one record's result (plan §5.3): what the status line says.
 // Timing: the protocol's bit (or SPI gap) lies outside the decoder's range at the record's Fs.
-enum class DecodeStatus : uint8_t { Idle, Decoding, Done, Cancelled, NoScale, OutOfRange, ChannelOff, Unsupported, Timing };
+// Coupling: a source channel of a protocol that needs DC (Settings::needsDc) was AC coupled.
+enum class DecodeStatus : uint8_t { Idle, Decoding, Done, Cancelled, NoScale, OutOfRange, ChannelOff, Unsupported, Timing, Coupling };
 // One record's result: descriptors and their byte pool, filled in order, never evicted (plan §5.5).
 class ResultSet {
 public:

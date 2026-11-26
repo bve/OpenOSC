@@ -14,7 +14,8 @@ enum class SettingsAction : uint8_t {
     GainFactory, MatchGain, AutoKey, ResetHold, ShortcutHold, BatteryGain, BatteryOffset, SwapChannels,
     // Settings > Display > Tooltips (GitHub #108): a row each, in Tooltip order, then the critical ones (always on).
     TooltipUsage, TooltipUnavailable, TooltipProgress, TooltipDone, TooltipAdvisory, TooltipCritical,
-    MenuLeftKey
+    MenuLeftKey,
+    MenuContrast // Settings > Display > Menu contrast (GitHub #44): Theme or High contrast.
 };
 struct SettingsEntry {
     const char *name;

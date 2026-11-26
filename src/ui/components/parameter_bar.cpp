@@ -16,6 +16,10 @@ void fillColor(lv_obj_t *object, uint32_t color) {
     if (!lv_color_eq(lv_obj_get_style_bg_color(object, LV_PART_MAIN), lv_color_hex(color)))
         lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
 }
+void frameColor(lv_obj_t *object, uint32_t color) {
+    if (!lv_color_eq(lv_obj_get_style_border_color(object, LV_PART_MAIN), lv_color_hex(color)))
+        lv_obj_set_style_border_color(object, lv_color_hex(color), 0);
+}
 void frame(lv_obj_t *object, int width) {
     if (lv_obj_get_style_border_width(object, LV_PART_MAIN) != width) lv_obj_set_style_border_width(object, width, 0);
 }
@@ -114,7 +118,6 @@ void ParameterBar::palette(const Theme &theme, const ElementStyle &style) {
     if (screenSelected_ >= Count) screenSelected_ = 0;
     if (!context_) selected_ = screenSelected_;
     for (unsigned i = 0; i < Count; ++i) {
-        lv_obj_set_style_border_color(cards_[i], lv_color_hex(border_), 0); // An inert key's frame.
         lv_obj_set_style_text_font(values_[i], Elements::font(style.font), 0);
         lv_obj_set_style_text_font(titles_[i], Elements::font(12), 0);
     }
@@ -144,19 +147,24 @@ uint32_t ParameterBar::accent(unsigned index) const {
 // that contrasts with it (an explicit Card text colour where it stays readable there), a marked
 // title underlined; the others with the grid colour, the value in the text colour, the title muted
 // or, marked, in the highlight. An inert key: the panel inside the grid frame, its texts muted.
-// Only what changed is written: an unchanged state redraws nothing.
+// Only what changed is written: an unchanged state redraws nothing. A context in a menu's colours
+// takes the same rules with the menu's surface, frame, selection fill, texts and accent.
 void ParameterBar::paint() {
+    const bool menu = context_ && menuColors_;
+    const uint32_t background = menu ? menu_.surface : background_, liveFill = menu ? menu_.selection : border_,
+                   edge = menu ? menu_.frame : border_, foreground = menu ? menu_.text : foreground_, muted = menu ? menu_.secondary : muted_;
     for (unsigned i = 0; i < Count; ++i) {
         const bool live = live_[i], selected = accented(i), marked = !context_ && screen_[i].marked;
-        const uint32_t fill = !live ? background_ : selected ? accent(i) : border_;
+        const uint32_t fill = !live ? background : selected ? (menu ? menu_.accent : accent(i)) : liveFill;
         fills_[i] = fill;
         fillColor(cards_[i], fill);
+        frameColor(cards_[i], edge);
         frame(cards_[i], live ? 0 : 1);
         const uint32_t on = ink(fill);
-        textColor(values_[i], !live ? readable(muted_, fill)
-                        : selected ? (selectedText_ && contrast(foreground_, fill) >= MinimumContrast ? foreground_ : on)
-                        : readable(foreground_, fill));
-        textColor(titles_[i], !live ? readable(muted_, fill) : selected ? on : readable(marked ? highlight_ : muted_, fill));
+        textColor(values_[i], !live ? readable(muted, fill)
+                        : selected ? (!menu && selectedText_ && contrast(foreground, fill) >= MinimumContrast ? foreground : on)
+                        : readable(foreground, fill));
+        textColor(titles_[i], !live ? readable(muted, fill) : selected ? on : readable(marked ? highlight_ : muted, fill));
         underline(titles_[i], selected && marked);
     }
 }
@@ -223,9 +231,11 @@ void ParameterBar::decorate(lv_obj_t *child, bool visible) {
     }
     if (lv_obj_is_hidden(child) == visible) lv_obj_set_hidden(child, !visible);
 }
-void ParameterBar::context(const SoftKeys &keys) {
+void ParameterBar::context(const SoftKeys &keys, const MenuPalette *menu) {
     if (!context_) decorations(false);
     context_ = true;
+    menuColors_ = menu != nullptr;
+    if (menu) menu_ = *menu;
     for (unsigned i = 0; i < Count; ++i) {
         live_[i] = keys.keys[i].live;
         show(i, keys.keys[i].title, keys.keys[i].value);

@@ -86,7 +86,7 @@ public:
     void generatorStatus(const generator::Snapshot &snapshot) { generator_.status(snapshot); }
     // What F1-F4 do now (ui::SoftKeys): a context over the instrument screen's cards, or (nullptr)
     // the screen's own cards again, as the screen last set them.
-    void softKeys(const ui::SoftKeys *keys) { if (keys) host_.parameters().context(*keys); else host_.parameters().release(); }
+    void softKeys(const ui::SoftKeys *keys) { if (keys) host_.parameters().context(*keys, menuKeys()); else host_.parameters().release(); }
     const ui::SoftKeys &generatorKeys(const ui::GeneratorKeys &keys) { return generator_.keys(keys); }
     void generatorActive(bool enabled);
     void usbConnected(bool connected);
@@ -124,6 +124,11 @@ public:
     // The kinds Settings > Display > Tooltips hides (Tooltips): from now on, and a notice of a kind
     // just hidden goes at once.
     void tooltips(uint8_t hidden);
+    // Settings > Display > Menu contrast (GitHub #44): every menu drawn from now on (the caller
+    // redraws one on show), with the keys' cards under it; instrument screens keep their colours.
+    void menuContrast(MenuContrast contrast) { menuContrast_ = contrast; }
+    MenuContrast menuContrast() const { return menuContrast_; }
+    const ui::MenuPalette &menuPalette() const { return menuPalette_; } // Of the menu drawn last (tests).
     // Settings > Display > Swap CH1/CH2 (plot::ChannelView): the Scope's plot, footer, cards and top
     // bar trigger tag follow at once, a held record included; nothing is captured or recomputed.
     void channelView(const plot::ChannelView &view);
@@ -147,6 +152,9 @@ private:
     void menuFrame(const char *title, bool instrument = false, bool retained = false, bool showUptime = false);
     static constexpr int MenuTop = ui::ScreenLayout::MenuTop, MenuHeight = ui::ScreenLayout::MenuHeight; // Above the cards.
     void choice(const ui::PropertyList &list, const ui::PropertyNavigator &navigator, int top); // The open list, if any.
+    // The menu's palette for the keys' cards: High contrast with a menu on show, else none (the
+    // cards keep the screen's colours, as under the decoder, Bode or Remote).
+    const ui::MenuPalette *menuKeys() const;
     ui::ChoicePopup choicePopup_;
     ui::GeneratorPreview draftPreview_;
     lv_obj_t *draftPreviewObject_ = nullptr;
@@ -203,6 +211,7 @@ private:
     uint8_t tooltipsHidden_ = 0;
     bool usbConnected_ = false;
     MeasurementMode mode_ = MeasurementMode::Oscilloscope;
-    uint32_t menuAccent_ = 0x38bdf8;
+    MenuContrast menuContrast_ = MenuContrast::Theme;
+    ui::MenuPalette menuPalette_; // menuFrame's: every row, list and text of the menu on show.
 };
 } // namespace openosc

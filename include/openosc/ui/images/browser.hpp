@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/screenshot/bitmap_layout.hpp"
 #include "openosc/ui/components/elements.hpp"
+#include "openosc/ui/components/menu_palette.hpp"
 
 namespace openosc::ui {
 struct ImageList {
@@ -10,9 +11,9 @@ struct ImageList {
 };
 class ImageBrowserView {
 public:
-    void list(lv_obj_t *parent,const Theme &theme,const ImageList &images);
+    void list(lv_obj_t *parent,const MenuPalette &palette,const ImageList &images);
     // keys: the live keys in one line (SoftKeys::line), in the fitted view's header.
-    void preview(lv_obj_t *parent,const Theme &theme,const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
+    void preview(lv_obj_t *parent,const MenuPalette &palette,const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
 private:
     lv_image_dsc_t bitmap_{};
 };

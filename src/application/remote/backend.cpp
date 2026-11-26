@@ -363,8 +363,9 @@ bool InstrumentBackend::frameKey(char *out, size_t capacity) const {
 // export of the workspace: this session keeps only the ticket.
 bool InstrumentBackend::decodeReport(scpi::DecodeReport &r) const {
     static constexpr const char *statuses[] = {"idle", "decoding", "done", "cancelled", "no_scale", "out_of_range", "channel_off",
-                                               "unsupported", "timing"};
-    static constexpr const char *protocols[] = {"OFF", "UART", "I2C", "SPI", "LIN", "CAN", "RS232"};
+                                               "unsupported", "timing", "ac_coupled"};
+    static constexpr const char *protocols[] = {"OFF", "UART", "I2C", "SPI", "LIN", "CAN", "RS232", "RS485", "DMX512"};
+    static_assert(std::size(statuses) == unsigned(decoding::DecodeStatus::Coupling) + 1);
     const auto protocol = [](decoding::Protocol p) { return protocols[unsigned(p) < std::size(protocols) ? unsigned(p) : 0]; };
     static_assert(std::size(protocols) == unsigned(decoding::Protocol::Count));
     const auto &d = application_.prefs_.scope.decoder;
@@ -377,7 +378,7 @@ bool InstrumentBackend::decodeReport(scpi::DecodeReport &r) const {
     if (!set) return true;
     const auto &k = set->key();
     r.protocol = protocol(set->protocol());
-    r.status = statuses[unsigned(set->status) < 9 ? unsigned(set->status) : 0];
+    r.status = statuses[unsigned(set->status) < std::size(statuses) ? unsigned(set->status) : 0];
     r.events = set->count(); r.lost = set->lost(); r.dropped = set->dropped; r.overflows = set->overflows; r.clipped = set->clipped;
     r.processed = set->processed; r.samples = set->samples;
     r.generation = k.generation; r.sequence = k.sequence; r.timestampUs = k.timestampUs; r.origin = k.origin;

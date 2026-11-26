@@ -29,7 +29,7 @@ void ApplicationController::baudAction(uint32_t now) {
         const unsigned valid = search.hint.valid, invalid = search.hint.invalid;
         applyDecoder(settings, now); // A new hash: the hint is stale now (never applied twice).
         char text[64];
-        const char *mode = settings.protocol == decoding::Protocol::Rs232 ? "RS-232" : "UART";
+        const char *mode = decoding::Protocols::name(settings.protocol);
         std::snprintf(text, sizeof text, "%s %lu bd applied (%u ok, %u bad)", mode, static_cast<unsigned long>(settings.uart.baud), valid, invalid);
         view_.notify(Tooltip::Done, text, now);
         return;

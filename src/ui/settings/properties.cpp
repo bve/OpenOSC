@@ -65,7 +65,7 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     switch (entry.action) {
     case Action::Brightness: case Action::BatteryGain: case Action::BatteryOffset: return PropertyKind::Number;
     case Action::SwapChannels: return PropertyKind::Toggle;
-    case Action::ShowFps: case Action::ClockIndicator: case Action::PanDirection: case Action::MenuLeftKey: case Action::HoldTime:
+    case Action::ShowFps: case Action::ClockIndicator: case Action::PanDirection: case Action::MenuLeftKey: case Action::MenuContrast: case Action::HoldTime:
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
     case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave:
@@ -83,6 +83,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::ShowFps: return 3;
     case Action::ClockIndicator: case Action::SwapChannels: return 2;
     case Action::PanDirection: case Action::MenuLeftKey: return 2;
+    case Action::MenuContrast: return MenuContrastCount;
     case Action::HoldTime: return 3;
     case Action::BatteryDisplay: return 3;
     case Action::RunProfile: return RunModeCount;
@@ -106,6 +107,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::SwapChannels: return prefs_.swapChannels;
     case Action::PanDirection: return prefs_.panReverse;
     case Action::MenuLeftKey: return prefs_.menuLeftStep;
+    case Action::MenuContrast: return unsigned(prefs_.menuContrast);
     case Action::HoldTime: return prefs_.holdTime;
     case Action::BatteryDisplay: return prefs_.batteryDisplay;
     case Action::RunProfile: return activeRunMode_ < RunModeCount ? activeRunMode_ : prefs_.scope.runMode;
@@ -129,6 +131,7 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
     case Action::ShowFps: { static constexpr const char *counters[] = {"Off", "FPS", "Sample rate"}; std::snprintf(output, capacity, "%s", counters[index % 3]); break; }
     case Action::PanDirection: std::snprintf(output, capacity, "%s", index ? "Move waveform" : "Move view"); break;
     case Action::MenuLeftKey: std::snprintf(output, capacity, "%s", index ? "Step" : "Back"); break;
+    case Action::MenuContrast: std::snprintf(output, capacity, "%s", MenuContrastNames[index % MenuContrastCount]); break;
     case Action::ClockIndicator: case Action::SwapChannels: case Action::TooltipUsage: case Action::TooltipUnavailable: case Action::TooltipProgress:
     case Action::TooltipDone: case Action::TooltipAdvisory: std::snprintf(output, capacity, "%s", index ? "On" : "Off"); break;
     case Action::HoldTime: { static constexpr const char *holds[] = {"1 s", "1.5 s", "2 s"}; std::snprintf(output, capacity, "%s", holds[index % 3]); break; }
@@ -244,6 +247,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::SwapChannels: prefs_.swapChannels = index; break;
     case Action::PanDirection: prefs_.panReverse = index; break;
     case Action::MenuLeftKey: prefs_.menuLeftStep = index != 0; break;
+    case Action::MenuContrast: prefs_.menuContrast = MenuContrast(index); break;
     case Action::HoldTime: prefs_.holdTime = index; break;
     case Action::BatteryDisplay: prefs_.batteryDisplay = index; break;
     case Action::RunProfile: prefs_.scope.runMode = index; break;

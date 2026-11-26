@@ -14,10 +14,9 @@ struct DeviceInfo {
 namespace ui {
 class SettingsView {
 public:
-    SettingsView(lv_obj_t *parent, const Theme &theme, MenuContent *content = nullptr) : content_(content), parent_(parent), theme_(theme) {}
+    SettingsView(lv_obj_t *parent, const MenuPalette &palette, MenuContent *content = nullptr) : content_(content), parent_(parent), palette_(palette) {}
     // The page's rows, the navigator's row on show; returns where its rows begin (for a choice list).
-    int menu(const SettingsMenu &menu, const SettingsProperties &rows, const PropertyNavigator &navigator, const char *persistence,
-             uint32_t accent);
+    int menu(const SettingsMenu &menu, const SettingsProperties &rows, const PropertyNavigator &navigator, const char *persistence);
     void information(const SettingsMenu &menu, const DeviceInfo &info);
 
 private:
@@ -25,7 +24,7 @@ private:
     void breadcrumb(const SettingsMenu &menu);
     MenuContent *content_;
     lv_obj_t *parent_;
-    const Theme &theme_;
+    const MenuPalette &palette_;
 };
 } // namespace ui
 } // namespace openosc

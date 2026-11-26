@@ -30,6 +30,10 @@ exporting::CsvContext CsvExport::context(const ResultSet &set, const Settings &s
         if (set.difference) { line("CANH", 0, 0); line("CANL", 1, 0); } // One difference: its threshold and hysteresis.
         else line("RXD", set.channel, set.channel);
         break;
+    case Protocol::Rs485: case Protocol::Dmx512: // Data+ CH1 - Data- CH2 (one difference), or a receiver's RO.
+        if (set.difference) { line("DATA+", 0, 0); line("DATA-", 1, 0); }
+        else line("RO", set.channel, set.channel);
+        break;
     default: break;
     }
     return c;

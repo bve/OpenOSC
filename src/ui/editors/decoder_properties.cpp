@@ -6,6 +6,7 @@
 
 namespace openosc::ui {
 using decoding::CanSource;
+using decoding::Rs485Source;
 using decoding::Protocol;
 using decoding::Protocols;
 using decoding::TableText;
@@ -69,6 +70,7 @@ const char *lineRole(Protocol p, bool first, const decoding::Settings &s) { // T
     case Protocol::I2c: return (s.i2c.sdaChannel == 0) == first ? "SDA" : "SCL";
     case Protocol::Spi: return (s.spi.clockChannel == 0) == first ? "SCLK" : "Data";
     case Protocol::Can: return "RXD";
+    case Protocol::Rs485: case Protocol::Dmx512: return "RO";
     default: return "";
     }
 }
@@ -91,9 +93,15 @@ void DecoderProperties::layout() {
         break;
     case Protocol::Lin: for (R r : {R::Line, R::LinBaud, R::LinChecksum, R::LinId, R::LinLength}) add(r); break;
     case Protocol::Can: for (R r : {R::CanSource, R::CanBitrate, R::SamplePoint, R::DataBitrate, R::DataSamplePoint}) add(r); break;
+    case Protocol::Rs485: case Protocol::Dmx512:
+        add(R::Rs485Source);
+        if (s.rs485.source == Rs485Source::Receiver) add(R::Line);
+        if (s.protocol == Protocol::Rs485) for (R r : {R::UartBaud, R::DetectBaud, R::DataBits, R::Parity, R::StopBits, R::BitOrder}) add(r);
+        add(R::Polarity);
+        break;
     default: break;
     }
-    if (s.protocol == Protocol::Can && s.can.source == CanSource::Difference) add(R::Difference);
+    if (s.difference()) add(R::Difference);
     else {
         const unsigned sources = s.sources();
         if (sources & 1) add(R::Threshold1);
@@ -116,6 +124,8 @@ const char *DecoderProperties::notice() const {
     if (settings_.protocol == Protocol::Spi) return "SPI without CS: words from pauses or a manual start";
     if (settings_.protocol == Protocol::Can) return "Classical and ISO CAN FD by FDF; data rate after BRS";
     if (settings_.protocol == Protocol::Rs232) return "DC coupling; negative idle, threshold near 0 V";
+    if (settings_.protocol == Protocol::Dmx512) return "250 kbaud 8N2; BREAK >= 88 us, MAB >= 8 us";
+    if (settings_.protocol == Protocol::Rs485) return "CH1 Data+, CH2 Data-, both DC; idle CH1 > CH2";
     if (settings_.protocol == Protocol::Uart) return "Baud: Up/Down standard rates, Left/Right fine";
     return "Decodes the record on show, whole";
 }
@@ -134,7 +144,7 @@ void DecoderProperties::name(unsigned i, char *output, size_t capacity) const {
     case R::Protocol: std::snprintf(output, capacity, "Protocol"); break;
     case R::View: std::snprintf(output, capacity, "View"); break;
     case R::Update: std::snprintf(output, capacity, "Update"); break;
-    case R::Line: std::snprintf(output, capacity, "%s line", s.protocol == Protocol::Lin ? "LIN" : "RX"); break;
+    case R::Line: std::snprintf(output, capacity, "%s line", s.protocol == Protocol::Lin ? "LIN" : s.rs485Line() ? "RO" : "RX"); break;
     case R::UartBaud: case R::LinBaud: std::snprintf(output, capacity, "Baud"); break;
     case R::DataBits: std::snprintf(output, capacity, "Data bits"); break;
     case R::Parity: std::snprintf(output, capacity, "Parity"); break;
@@ -158,7 +168,9 @@ void DecoderProperties::name(unsigned i, char *output, size_t capacity) const {
     case R::DataSamplePoint: std::snprintf(output, capacity, "FD data SP"); break;
     case R::Threshold1: std::snprintf(output, capacity, "%s thr CH1", lineRole(s.protocol, true, s)); break;
     case R::Threshold2: std::snprintf(output, capacity, "%s thr CH2", lineRole(s.protocol, false, s)); break;
-    case R::Difference: std::snprintf(output, capacity, "CANH-CANL thr"); break;
+    case R::Difference: std::snprintf(output, capacity, "%s thr", s.protocol == Protocol::Can ? "CANH-CANL" : "CH1-CH2"); break;
+    case R::Rs485Source: std::snprintf(output, capacity, "Source"); break;
+    case R::Polarity: std::snprintf(output, capacity, "Polarity"); break;
     case R::HysteresisMode: std::snprintf(output, capacity, "Hysteresis"); break;
     case R::Hysteresis: std::snprintf(output, capacity, "Hysteresis mV"); break;
     case R::MinPulse: std::snprintf(output, capacity, "Min pulse"); break;
@@ -197,7 +209,8 @@ unsigned DecoderProperties::options(unsigned i) const {
     case R::View: return unsigned(decoding::View::Count);
     case R::Update: return unsigned(decoding::Update::Count);
     case R::Line: case R::Sda: case R::Sclk: case R::BitOrder: case R::SpiOrder: case R::IdleLevel: case R::WordStart:
-    case R::LinChecksum: case R::HysteresisMode: return 2;
+    case R::LinChecksum: case R::HysteresisMode: case R::Polarity: return 2;
+    case R::Rs485Source: return unsigned(Rs485Source::Count);
     case R::DataBits: case R::Parity: return 5;
     case R::StopBits: return 3;
     case R::SpiMode: return 4;
@@ -228,6 +241,8 @@ unsigned DecoderProperties::option(unsigned i) const {
     case R::LinChecksum: return s.lin.enhanced;
     case R::LinLength: return s.lin.length(linId_);
     case R::CanSource: return unsigned(s.can.source);
+    case R::Rs485Source: return unsigned(s.rs485.source);
+    case R::Polarity: return s.rs485.inverted;
     case R::HysteresisMode: return unsigned(s.hysteresis);
     default: return 0;
     }
@@ -260,6 +275,8 @@ void DecoderProperties::optionName(unsigned i, unsigned index, char *output, siz
         else std::snprintf(output, capacity, "Unknown");
         break;
     case R::CanSource: std::snprintf(output, capacity, "%s", index < 3 ? sources[index] : ""); break;
+    case R::Rs485Source: std::snprintf(output, capacity, "%s", index ? "Receiver RO on CH1/CH2" : "Data+ CH1 - Data- CH2"); break;
+    case R::Polarity: std::snprintf(output, capacity, "%s", index ? "Inverted (idle low)" : "Normal (idle high)"); break;
     case R::HysteresisMode:
         if (index) std::snprintf(output, capacity, "Manual (mV)");
         else std::snprintf(output, capacity, "Auto (%u %% of swing)", Protocols::AutoHysteresisPercent);
@@ -299,10 +316,12 @@ bool DecoderProperties::choose(unsigned i, unsigned index) {
     case R::LinChecksum: s.lin.enhanced = uint8_t(index); break;
     case R::LinLength: s.lin.length(linId_, index); break;
     case R::CanSource: s.can.source = CanSource(index); break;
+    case R::Rs485Source: s.rs485.source = Rs485Source(index); break;
+    case R::Polarity: s.rs485.inverted = uint8_t(index); break;
     case R::HysteresisMode: s.hysteresis = decoding::Hysteresis(index); break;
     default: return false;
     }
-    layout(); // The protocol, word start, CAN source or hysteresis mode may change the rows.
+    layout(); // The protocol, word start, CAN or RS-485 source or hysteresis mode may change the rows.
     return true;
 }
 int DecoderProperties::coarseStep(unsigned i) const {
@@ -344,7 +363,7 @@ int32_t DecoderProperties::number(unsigned i) const {
     case R::DataSamplePoint: return s.can.dataSamplePointPermille;
     case R::Threshold1: return s.threshold(0);
     case R::Threshold2: return s.threshold(1);
-    case R::Difference: return s.can.differenceMv;
+    case R::Difference: return s.differenceThreshold();
     case R::Hysteresis: return int32_t(s.hysteresisMv);
     case R::MinPulse: return int32_t(s.minPulseNs);
     default: return 0;
@@ -368,7 +387,7 @@ void DecoderProperties::setNumber(unsigned i, int32_t value) {
             s.uart.rs232ThresholdMv = int16_t(clamp(-Protocols::Rs232ThresholdLimitMv, Protocols::Rs232ThresholdLimitMv));
         else s.thresholdMv[row(i) == R::Threshold2] = int32_t(clamp(-Protocols::ThresholdLimitMv, Protocols::ThresholdLimitMv));
         break;
-    case R::Difference: s.can.differenceMv = int32_t(clamp(-Protocols::ThresholdLimitMv, Protocols::ThresholdLimitMv)); break;
+    case R::Difference: s.differenceThreshold(int32_t(clamp(-Protocols::ThresholdLimitMv, Protocols::ThresholdLimitMv))); break;
     case R::Hysteresis: s.hysteresisMv = uint32_t(clamp(0, Protocols::HysteresisLimitMv)); break;
     case R::MinPulse: s.minPulseNs = uint32_t(clamp(0, Protocols::MinPulseLimitNs)); break;
     default: break;

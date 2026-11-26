@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/ui/components/elements.hpp"
+#include "openosc/ui/components/menu_palette.hpp"
 #include "openosc/ui/components/soft_keys.hpp"
 #include "openosc/ui/components/status_bar_layout.hpp"
 
@@ -41,7 +42,10 @@ public:
     void select(unsigned index);
     // A context's keys over the screen's: inert keys muted, never accented; the screen's own drawings
     // on the cards (the DMM's function signs) hidden. release(): the screen's cards as last set.
-    void context(const SoftKeys &keys);
+    // `menu`: the cards in that menu's colours while this context shows (High contrast, GitHub #44:
+    // a live card on its selection fill, an inert one on its surface in its frame, the selected one
+    // in its accent); null: the screen's colours. The screen's own cards never take it.
+    void context(const SoftKeys &keys, const MenuPalette *menu = nullptr);
     void release();
     // The screen's own drawing on a card shown or hidden (the DMM's signs): under a context it stays
     // hidden and appears with release(), whenever the screen asks.
@@ -81,5 +85,7 @@ private:
     uint32_t background_ = 0, border_ = 0, highlight_ = 0, foreground_ = 0, muted_ = 0;
     uint32_t channels_[2]{}, neutral_ = 0;
     uint32_t accent(unsigned index) const; // The selected card's fill.
+    bool menuColors_ = false; // The context shows in menu_'s colours.
+    MenuPalette menu_;
 };
 } // namespace openosc::ui

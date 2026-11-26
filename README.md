@@ -20,8 +20,7 @@ instrument, the SCPI reference, troubleshooting and pages for contributors.
 > If something does not work on a clone, please [open an issue](https://github.com/bve/OpenOSC/issues/new/choose).
 
 > [!WARNING]
-> **This firmware is for enthusiasts only.** If you are generally happy with the stock firmware,
-> I do not recommend installing OpenOSC.
+> **OpenOSC is in active development.** Use the stock firmware if you need its established operation.
 >
 > **I take no responsibility for bricked or damaged devices.** You install this firmware entirely
 > at your own risk.
@@ -110,6 +109,14 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
     <td align="center">UART baud rate detection</td>
   </tr>
   <tr>
+    <td><img src=".github/images/decoder-dmx512-detail.png" width="320" alt="DMX512 packet detail with the start code, numbered slots, BREAK and mark-after-break timing"></td>
+    <td><img src=".github/images/menu-high-contrast.png" width="320" alt="Display settings with white menu text on black and a cyan selection outline"></td>
+  </tr>
+  <tr>
+    <td align="center">DMX512 packet detail</td>
+    <td align="center">High-contrast menus</td>
+  </tr>
+  <tr>
     <td><img src=".github/images/multimeter-analog.png" width="320" alt="Multimeter analog view: 1 kV DC range with dial markings from 0 to 1000 V"></td>
     <td><img src=".github/images/generator.png" width="320" alt="Signal generator: sine at 1 kHz with frequency, waveform preview and soft-keys at the bottom"></td>
   </tr>
@@ -188,13 +195,20 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   background on dark and light schemes. Trace brightness also applies to Peak Hold, Persistence, Glow,
   X-Y (CH1) and Density. Channel colors, labels and markers keep full contrast
 - FFT up to 2048 points with four window functions, dBFS or linear scale
-- Protocol decoders (**Analyze → Decoder**): UART (TTL) and RS-232 with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
+- Protocol decoders (**Analyze → Decoder**): UART (TTL), RS-232 and RS-485 with autobaud, DMX512, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view, event detail; decoded data saved as CSV
 
   Select the RX channel and use DC coupling. **UART (TTL)** defaults to high idle with a 1.65 V
   threshold and also works on the logic side of an RS-232 transceiver. **RS-232** uses negative
   idle and a separate threshold that defaults to 0 V. Both modes share the baud rate, data bits,
   parity, stop bits and bit order.
+
+  **RS-485** and **DMX512** decode the pair as CH1 − CH2 (Data+ on CH1, Data− on CH2, both DC
+  coupled) against their own threshold, 0 V by default, with a Polarity choice for a pair wired
+  the other way round. A receiver's logic output on one channel also works. RS-485 uses the UART
+  framing settings; DMX512 checks BREAK and MAB against ANSI E1.11 and shows the START code and
+  each slot. See [RS-485 and DMX512 decoding](docs/DECODER_RS485_DMX512.md) for safe probe
+  connection and record requirements.
 - Bode analyzer (**Analyze → Bode (FRA)**): gain and phase of a circuit against frequency with the
   built-in generator, cursors, −3 dB corner `fc` for low-pass and high-pass responses,
   cutoffs `f1` and `f2` with measured center `f0` for band-pass and notch responses,
@@ -275,6 +289,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - **Settings → Display → Left key in menus** defaults to Back. Step selects the previous choice
   or switches a toggle off. In an open choice list, Left and Right move one item without wrapping.
   F4 goes back or cancels an edit.
+- **Settings → Display → Menu contrast** defaults to Theme. High contrast gives menus black
+  backgrounds, white text and a distinct selection highlight across all instruments.
 - Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
   plus custom RGB colors for individual elements. Multimeter looks: Custom and Hybrid
 - Lossless PNG screenshots with a built-in viewer that also opens earlier BMP screenshots

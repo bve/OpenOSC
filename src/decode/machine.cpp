@@ -14,7 +14,7 @@ bool ProtocolMachine::configure(const Settings &s, const scope::FrameMetadata &m
     protocol_ = s.protocol;
     const auto &fs = m.samplesPerSecond;
     switch (s.protocol) {
-    case Protocol::Uart: case Protocol::Rs232: {
+    case Protocol::Uart: case Protocol::Rs232: case Protocol::Rs485: { // RS-485: the same framing on CH1 - CH2 or RO.
         UartOptions o;
         o.baud = s.uart.baud; o.inverted = s.uartInverted();
         o.format.dataBits = s.uart.dataBits; o.format.parity = Parity(s.uart.parity);
@@ -50,6 +50,7 @@ bool ProtocolMachine::configure(const Settings &s, const scope::FrameMetadata &m
         o.dominantHigh = s.can.source == CanSource::Difference; // CANH - CANL is high when dominant; RXD low.
         return emplace<CanFdDecoder>().configure(o, fs);
     }
+    case Protocol::Dmx512: return emplace<DmxDecoder>().configure(s.uartInverted(), fs);
     default: decoder_ = nullptr; return false;
     }
 }
@@ -59,7 +60,8 @@ void ProtocolMachine::initialLevel(uint8_t channel, int level) {
 }
 uint32_t ProtocolMachine::dropped() const {
     switch (protocol_) {
-    case Protocol::Uart: case Protocol::Rs232: return as<UartDecoder>().dropped();
+    case Protocol::Uart: case Protocol::Rs232: case Protocol::Rs485: return as<UartDecoder>().dropped();
+    case Protocol::Dmx512: return as<DmxDecoder>().dropped();
     case Protocol::I2c: return as<I2cDecoder>().dropped();
     case Protocol::Spi: return as<SpiDecoder>().dropped();
     case Protocol::Lin: return as<LinDecoder>().dropped();

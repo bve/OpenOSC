@@ -10,6 +10,7 @@
 #include "openosc/power/battery.hpp"
 #include "openosc/settings/tooltips.hpp"
 #include "openosc/settings/bode_preferences.hpp"
+#include "openosc/settings/menu_contrast.hpp"
 #include <cstdint>
 
 namespace openosc {
@@ -39,6 +40,7 @@ struct Preferences {
     BodePreferences bode; // Analyze > Bode setup (GitHub #124), in the file's scope object.
     uint32_t generatorShape = 0, generatorDutyPermille = 500;
     bool menuLeftStep = false; // Settings > Display > Left key in menus. Uses the padding before generatorMillihertz.
+    MenuContrast menuContrast = MenuContrast::Theme; // Settings > Display > Menu contrast (GitHub #44). The same padding.
     uint64_t generatorMillihertz = 1000000; // uint64: the ZT706S module reaches 10 MHz = 1e10 mHz.
     uint32_t generatorLevel = 0, generatorMinimumCode = 1000, generatorMaximumCode = 3000;
     uint32_t generatorSquareDrive = 0; // generator::SquareDrive (ZT703S Dedicated square): 0 factory, 1 PWM.
@@ -58,7 +60,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && holdTime < 3 && usbController <= 1 && bode.valid() &&
+               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && unsigned(menuContrast) < MenuContrastCount && holdTime < 3 && usbController <= 1 && bode.valid() &&
                generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&

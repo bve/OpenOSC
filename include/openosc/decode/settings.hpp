@@ -5,7 +5,8 @@ namespace openosc::decoding {
 // What the Scope's protocol decoder does (docs/SCOPE_PROTOCOL_DECODERS_PLAN.md). Off by default: the
 // Scope is as it was. It is switched on by Analyze > Decoder > Protocol. `enabled` and `protocol` apart:
 // F4 Scope leaves the decoder (enabled 0) and keeps the protocol, view and parameters for the next time.
-enum class Protocol : uint8_t { Off, Uart, I2c, Spi, Lin, Can, Rs232, Count };
+// New protocols are appended: the IDs of the others never change.
+enum class Protocol : uint8_t { Off, Uart, I2c, Spi, Lin, Can, Rs232, Rs485, Dmx512, Count };
 enum class View : uint8_t { Annotations, Split, Table, Count };
 // Complete: the record shown is decoded whole (the capture waits for it). Live: a bit snapshot, then
 // the record released; only once its spike and memory owner are accepted (Protocols::liveAvailable).
@@ -71,14 +72,26 @@ struct CanSettings {
                differenceMv == o.differenceMv && dataBitrate == o.dataBitrate && dataSamplePointPermille == o.dataSamplePointPermille;
     }
 };
+// RS-485 and DMX512 (GitHub #163): Data+ on CH1 and Data- on CH2, decoded on CH1 - CH2 against its own
+// threshold (the centre of the hysteresis band; near 0 V for any EIA-485 swing), or the logic output (RO)
+// of an external receiver on one channel (`channel`, its thresholdMv). Normal: MARK (idle) where CH1 - CH2
+// (or RO) is high; Inverted swaps the logical polarity, for a pair wired the other way round, without
+// rewiring. RS-485 frames characters with UartSettings; DMX512 is fixed at 250 kbaud 8N2, LSB first.
+enum class Rs485Source : uint8_t { Difference, Receiver, Count };
+struct Rs485Settings {
+    int32_t thresholdMv = 0; // CH1 - CH2 at the probe tips.
+    Rs485Source source = Rs485Source::Difference;
+    uint8_t inverted = 0;
+    bool operator==(const Rs485Settings &o) const { return thresholdMv == o.thresholdMv && source == o.source && inverted == o.inverted; }
+};
 struct Settings {
-    uint32_t enabled = 0;
+    uint8_t enabled = 0;               // Boolean, kept beside the other byte-sized settings.
     Protocol protocol = Protocol::Off;  // Off by default; F4 keeps the last protocol (shown Off while not enabled).
     View view = View::Table;            // Decoder only at the first enable (plan §4.4); then the last chosen.
     Update update = Update::Complete;
-    uint32_t channel = 0;               // The line of UART, RS-232 and LIN: 0 CH1, 1 CH2.
-    int32_t thresholdMv[2] = {1650, 1650}; // At the probe tip, per channel.
+    uint8_t channel = 0;               // The single-ended line: 0 CH1, 1 CH2.
     Hysteresis hysteresis = Hysteresis::Auto;
+    int32_t thresholdMv[2] = {1650, 1650}; // At the probe tip, per channel.
     uint32_t hysteresisMv = 200;        // Manual: the total width around the threshold.
     uint32_t minPulseNs = 0;            // Anti-glitch: 0 off everywhere (plan §6.2).
     UartSettings uart;
@@ -86,8 +99,18 @@ struct Settings {
     SpiSettings spi;
     LinSettings lin;
     CanSettings can;
-    bool uartInverted() const { return protocol == Protocol::Rs232 || uart.inverted; }
+    Rs485Settings rs485;
+    bool rs485Line() const { return protocol == Protocol::Rs485 || protocol == Protocol::Dmx512; }
+    bool uartInverted() const { return protocol == Protocol::Rs232 || (rs485Line() ? rs485.inverted : uart.inverted); }
     int32_t threshold(unsigned c) const { return protocol == Protocol::Rs232 ? uart.rs232ThresholdMv : thresholdMv[c]; }
+    // CH1 - CH2 is decoded (the CAN bus or an RS-485 pair), against differenceThreshold().
+    bool difference() const {
+        return protocol == Protocol::Can ? can.source == CanSource::Difference : rs485Line() && rs485.source == Rs485Source::Difference;
+    }
+    int32_t differenceThreshold() const { return protocol == Protocol::Can ? can.differenceMv : rs485.thresholdMv; }
+    void differenceThreshold(int32_t mv) { (protocol == Protocol::Can ? can.differenceMv : rs485.thresholdMv) = mv; }
+    // Both source channels must be DC coupled (RS-485, DMX512): an AC-coupled level is never decoded.
+    bool needsDc() const { return rs485Line(); }
     bool valid() const;
     // The parameters a result depends on (not enabled or view): a cached result is reused for the
     // same record only while this is unchanged.
@@ -99,7 +122,11 @@ struct Settings {
 };
 struct Protocols {
     static bool available(Protocol protocol) { return protocol != Protocol::Off && protocol < Protocol::Count; }
-    static bool uartFraming(Protocol protocol) { return protocol == Protocol::Uart || protocol == Protocol::Rs232; }
+    // The protocols framed by UartSettings (baud, data bits, parity, stop bits, bit order) and UartDecoder.
+    static bool uartFraming(Protocol protocol) { return protocol == Protocol::Uart || protocol == Protocol::Rs232 || protocol == Protocol::Rs485; }
+    // The event family of a protocol (protocols::protocolOf of its events' kinds): 1 UART, RS-232 and
+    // RS-485, 2 I2C, 3 SPI, 4 LIN, 5 CAN, 6 DMX512; 0 Off.
+    static unsigned family(Protocol protocol);
     static bool liveAvailable() { return false; } // Until the snapshot spike and its owner are accepted.
     static const char *name(Protocol protocol);
     static const char *key(Protocol protocol); // settings.json value

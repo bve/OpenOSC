@@ -132,6 +132,8 @@ constexpr const char *channels[] = {"ch1", "ch2"}, *parities[] = {"none", "even"
 constexpr const char *stops[] = {"1", "1.5", "2"}, *aligns[] = {"gap", "manual"}, *checksums[] = {"classic", "enhanced"};
 constexpr const char *canSources[] = {"rxd_ch1", "rxd_ch2", "difference"};
 static_assert(sizeof canSources / sizeof *canSources == unsigned(decoding::CanSource::Count), "a key per CAN source");
+constexpr const char *rs485Sources[] = {"diff", "ro"};
+static_assert(sizeof rs485Sources / sizeof *rs485Sources == unsigned(decoding::Rs485Source::Count), "a key per RS-485 source");
 template<class T> bool small(JsonObjectConst object, const char *name, T &value) { // A uint8_t/uint16_t field.
     uint32_t v = value;
     if (!number(object, name, v) || v > 0xFFFFu) return false;
@@ -162,6 +164,20 @@ bool lengths(JsonObjectConst lin, decoding::LinSettings &out) {
     }
     return true;
 }
+// RS-485 / DMX512 (GitHub #163) as [threshold_mv, "diff" | "ro", inverted]: the shortest form the file's
+// string budget leaves room for (settings_layout); absent at the defaults.
+bool rs485Of(JsonObjectConst object, decoding::Rs485Settings &out) {
+    if (!object.containsKey("rs485")) return true;
+    const auto a = object["rs485"].as<JsonArrayConst>();
+    if (!object["rs485"].is<JsonArrayConst>() || a.size() != 3 || !a[0].is<int32_t>() || !a[1].is<const char *>() || !a[2].is<bool>())
+        return false;
+    for (unsigned i = 0; i < unsigned(decoding::Rs485Source::Count); ++i)
+        if (!std::strcmp(a[1].as<const char *>(), rs485Sources[i])) {
+            out.thresholdMv = a[0].as<int32_t>(); out.source = decoding::Rs485Source(i); out.inverted = a[2].as<bool>();
+            return true;
+        }
+    return false;
+}
 bool protocolsOf(JsonObjectConst object, decoding::Settings &d) {
     const auto part = [&](const char *name) { return object[name].as<JsonObjectConst>(); };
     for (const char *name : {"uart", "i2c", "spi", "lin", "can"})
@@ -177,7 +193,7 @@ bool protocolsOf(JsonObjectConst object, decoding::Settings &d) {
            named(lin, "checksum", d.lin.enhanced, checksums) && lengths(lin, d.lin) && number(can, "bitrate", d.can.bitrate) &&
            small(can, "sample_point", d.can.samplePointPermille) && named(can, "source", d.can.source, canSources) &&
            number(can, "difference_mv", d.can.differenceMv) && number(can, "data_bitrate", d.can.dataBitrate) &&
-           small(can, "data_sample_point", d.can.dataSamplePointPermille);
+           small(can, "data_sample_point", d.can.dataSamplePointPermille) && rs485Of(object, d.rs485);
 }
 void decoder(JsonObjectConst object, decoding::Settings &output) {
     using decoding::Protocols;
@@ -185,7 +201,7 @@ void decoder(JsonObjectConst object, decoding::Settings &output) {
     uint32_t protocol = uint32_t(d.protocol), view = uint32_t(d.view), update = uint32_t(d.update);
     // A file from before the Auto hysteresis with its hysteresis_mv: that value stays in force (Manual).
     uint32_t hysteresis = uint32_t(object.containsKey("hysteresis_mv") ? decoding::Hysteresis::Manual : d.hysteresis);
-    static constexpr const char *protocols[] = {"off", "uart", "i2c", "spi", "lin", "can", "rs232"};
+    static constexpr const char *protocols[] = {"off", "uart", "i2c", "spi", "lin", "can", "rs232", "rs485", "dmx512"};
     static constexpr const char *views[] = {"annotations", "split", "table"}, *updates[] = {"complete", "live"};
     static constexpr const char *hysteresisModes[] = {"auto", "manual"};
     static_assert(sizeof hysteresisModes / sizeof *hysteresisModes == unsigned(decoding::Hysteresis::Count));
@@ -233,6 +249,9 @@ void encodeDecoder(JsonObject scope, const decoding::Settings &d) {
     can["bitrate"] = d.can.bitrate; can["sample_point"] = d.can.samplePointPermille;
     can["source"] = canSources[unsigned(d.can.source)]; can["difference_mv"] = d.can.differenceMv;
     can["data_bitrate"] = d.can.dataBitrate; can["data_sample_point"] = d.can.dataSamplePointPermille;
+    if (d.rs485 == decoding::Rs485Settings()) return; // Written only once changed: the file's budget.
+    auto rs485 = object.createNestedArray("rs485");
+    rs485.add(d.rs485.thresholdMv); rs485.add(rs485Sources[unsigned(d.rs485.source)]); rs485.add(bool(d.rs485.inverted));
 }
 // scope.bode (GitHub #124): the Bode setup, written only when it differs from the defaults. Each field
 // stands alone (as scope.keys): a missing or damaged one keeps its default, the rest of the file kept.

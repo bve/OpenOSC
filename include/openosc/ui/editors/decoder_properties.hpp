@@ -7,8 +7,8 @@ namespace openosc::ui {
 // committed field taken at once by the controller (saved, the job reconfigured; no Apply). The rows
 // follow the protocol: the common ones (Protocol, View, Update), the protocol's own (lines, rates,
 // formats, roles, LIN lengths, CAN source and the nominal and data rates and sample points of Classical
-// CAN and ISO CAN FD), then each line's threshold named by its role (RX, SDA,
-// SCL, SCLK, data, RXD, CANH-CANL), the hysteresis (Auto: 10 % of each line's swing in the record; Manual:
+// CAN and ISO CAN FD, the RS-485 / DMX512 source and polarity), then each line's threshold named by its role (RX, SDA,
+// SCL, SCLK, data, RXD, CANH-CANL, CH1-CH2, RO), the hysteresis (Auto: 10 % of each line's swing in the record; Manual:
 // its width in mV, a row of its own), the minimum pulse and Save CSV (the result it saves
 // named as its value; an action the controller runs). Protocol Off leaves the
 // decoder; Live (no accepted snapshot) is listed and refused with its reason.
@@ -26,6 +26,7 @@ public:
         Sclk, SpiMode, WordBits, SpiOrder, WordStart, PauseNs, ManualStart,      // SPI
         LinBaud, LinChecksum, LinId, LinLength,                                  // LIN
         CanSource, CanBitrate, SamplePoint, DataBitrate, DataSamplePoint,        // CAN (Classical and ISO CAN FD)
+        Rs485Source, Polarity,                                                   // RS-485, DMX512 (Line: RO)
         Threshold1, Threshold2, Difference, HysteresisMode, Hysteresis, MinPulse, // Hysteresis: Manual only
         SaveCsv,                                                                 // Stage 7: the shown result to a file
     };

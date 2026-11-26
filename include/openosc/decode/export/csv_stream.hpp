@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-// The decoded events of one ResultSet as a CSV file (plan §9 stage 7; format v2 in
+// The decoded events of one ResultSet as a CSV file (plan §9 stage 7; format v2, v3 for DMX512, in
 // docs/SCOPE_PROTOCOL_DECODERS_CSV.md): "# key=value" metadata lines, then one fixed table of events,
 // one row per stored descriptor (a CONT segment is a row of its own). Pull-based and non-blocking:
 // read() fills at most `capacity` bytes and returns; any split of the reads gives the same bytes.
@@ -48,8 +48,9 @@ public:
         Context,   // A firmware or role text too long, or more lines than MaxLines.
     };
     static constexpr unsigned ChunkBytes = 64;
-    static constexpr unsigned Columns = 50; // v2: v1's 37, then 13 CAN / CAN FD columns.
-    static const char *column(unsigned index); // The header's column names, "" past the last.
+    static constexpr unsigned Columns = 50; // v2: v1's 37 plus 13 CAN / CAN FD columns.
+    static constexpr unsigned DmxColumns = Columns + 4; // v3: appends the DMX512 fields.
+    static const char *column(unsigned index); // The v2 header's column names, "" past the last.
 
     // Checks the whole set once (O(events)) and starts the file. False: nothing will be written,
     // error() says why; a stream begun earlier is ended.
@@ -78,7 +79,9 @@ private:
     bool cell();             // Writes the next piece of the current row; true when the row is complete.
     bool simple(unsigned column, const DecodeEvent &e); // A one-piece column; false: not one.
     bool lastOfGroup() const;
+    unsigned columns() const { return set_->protocol() == Protocol::Dmx512 ? DmxColumns : Columns; }
     void time(uint32_t index);
+    void duration(uint32_t points); // A span in seconds, as time().
     // Every piece is far below ChunkBytes (the longest, a metadata line, 44); the bound only keeps
     // the chunk in place.
     void put(char c) { if (chunkLen_ < ChunkBytes) chunk_[chunkLen_++] = c; }

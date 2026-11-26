@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/ui/components/color_swatch.hpp"
 #include "openosc/ui/components/elements.hpp"
+#include "openosc/ui/components/menu_palette.hpp"
 
 namespace openosc::ui {
 // Hardware keys edit the model; these native LVGL controls display its state.
@@ -11,10 +12,10 @@ public:
     static constexpr int X = 6, Border = 1, Padding = 7, NameX = X + Border + Padding;
     MenuRow() = default;
     void update(lv_obj_t *parent, int y, int height, const char *name, const char *value,
-                bool selected, const Theme &theme, uint32_t accent, int x = X, int width = 290);
+                bool selected, const MenuPalette &palette, int x = X, int width = 290);
     void visible(bool value) { if (root_) lv_obj_set_hidden(root_, !value); }
     MenuRow(lv_obj_t *parent, int y, int height, const char *name, const char *value,
-            bool selected, const Theme &theme, uint32_t accent);
+            bool selected, const MenuPalette &palette);
     void toggle(bool checked);
     void slider(unsigned value, unsigned minimum, unsigned maximum);
     // A colour sample before the name (an option of a colour list) or before the value (a colour
@@ -32,7 +33,9 @@ private:
     lv_obj_t *root_ = nullptr, *name_ = nullptr, *value_ = nullptr;
     lv_obj_t *toggle_ = nullptr, *slider_ = nullptr;
     ColorSwatch nameSwatch_, valueSwatch_;
-    uint32_t accent_, ink_ = 0;
+    // update()'s palette, what toggle(), slider() and the samples draw with: only these colours,
+    // since the menu's rows stay in the application's stack frame.
+    struct Ink { uint32_t text = 0, accent = 0, track = 0, knob = 0, knobOn = 0; } ink_;
     int height_ = 0, width_ = 0, valueWidth_ = 0;
 };
 } // namespace openosc::ui

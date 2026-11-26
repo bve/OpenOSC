@@ -12,10 +12,10 @@ lv_obj_t *SettingsView::text(const char *value, int x, int y, int width, unsigne
 }
 void SettingsView::breadcrumb(const SettingsMenu &menu) {
     auto *path = text(menu.path(), 10, 29, 282);
-    lv_obj_set_style_text_color(path, lv_color_hex(theme_.muted), 0);
+    lv_obj_set_style_text_color(path, lv_color_hex(palette_.secondary), 0);
 }
 int SettingsView::menu(const SettingsMenu &menu, const SettingsProperties &rows, const PropertyNavigator &navigator,
-                       const char *persistence, uint32_t accent) {
+                       const char *persistence) {
     breadcrumb(menu);
     int firstY = 54;
     const char *header = menu.page() == SettingsPage::Files ? persistence
@@ -36,7 +36,7 @@ int SettingsView::menu(const SettingsMenu &menu, const SettingsProperties &rows,
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, 0);
     }
     MenuContent local;
-    page.draw(content_ ? *content_ : local, parent_, rows, navigator, theme_, accent);
+    page.draw(content_ ? *content_ : local, parent_, rows, navigator, palette_);
     return firstY;
 }
 } // namespace openosc::ui

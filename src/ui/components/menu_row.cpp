@@ -4,12 +4,12 @@
 
 namespace openosc::ui {
 MenuRow::MenuRow(lv_obj_t *parent, int y, int height, const char *name, const char *value,
-                 bool selected, const Theme &theme, uint32_t accent) : accent_(accent) {
-    update(parent,y,height,name,value,selected,theme,accent);
+                 bool selected, const MenuPalette &palette) {
+    update(parent,y,height,name,value,selected,palette);
 }
 void MenuRow::update(lv_obj_t *parent, int y, int height, const char *name, const char *value,
-                     bool selected, const Theme &theme, uint32_t accent, int x, int width) {
-    accent_=accent;
+                     bool selected, const MenuPalette &palette, int x, int width) {
+    ink_={palette.text,palette.accent,palette.track,palette.knob,palette.knobOn};
     if (!root_) {
         root_=lv_button_create(parent);
         lv_obj_remove_style_all(root_);
@@ -22,14 +22,14 @@ void MenuRow::update(lv_obj_t *parent, int y, int height, const char *name, cons
     if (slider_) lv_obj_set_hidden(slider_,true);
     nameSwatch_.hide(); valueSwatch_.hide();
     lv_obj_set_style_pad_left(name_, 0, 0);
-    ink_=theme.foreground; height_=height; width_=width;
+    height_=height; width_=width;
     lv_obj_set_pos(root_, x, y);
     lv_obj_set_size(root_, width, height);
     lv_obj_set_scrollable(root_, false);
     lv_obj_set_style_radius(root_, 2, 0);
     lv_obj_set_style_border_width(root_, Border, 0);
-    lv_obj_set_style_border_color(root_, lv_color_hex(selected ? accent : theme.panel), 0);
-    lv_obj_set_style_bg_color(root_, lv_color_hex(selected ? theme.grid : theme.panel), 0);
+    lv_obj_set_style_border_color(root_, lv_color_hex(selected ? palette.accent : palette.surface), 0);
+    lv_obj_set_style_bg_color(root_, lv_color_hex(selected ? palette.selection : palette.surface), 0);
     lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_hor(root_, Padding, 0);
     lv_obj_set_style_pad_ver(root_, 0, 0);
@@ -45,7 +45,7 @@ void MenuRow::update(lv_obj_t *parent, int y, int height, const char *name, cons
     if (std::strcmp(lv_label_get_text(name_),name)) lv_label_set_text(name_,name);
     lv_obj_set_height(name_, 18);
     lv_obj_set_style_text_font(name_, Elements::font(14), 0);
-    lv_obj_set_style_text_color(name_, lv_color_hex(theme.foreground), 0);
+    lv_obj_set_style_text_color(name_, lv_color_hex(palette.text), 0);
     lv_obj_set_grid_cell(name_, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     lv_label_set_long_mode(name_, LV_LABEL_LONG_DOT);
     if (std::strcmp(lv_label_get_text(value_),value ? value : "")) lv_label_set_text(value_,value ? value : "");
@@ -53,7 +53,7 @@ void MenuRow::update(lv_obj_t *parent, int y, int height, const char *name, cons
     lv_obj_set_height(value_, 18);
     lv_obj_set_style_text_font(value_, Elements::font(14), 0);
     lv_obj_set_style_text_align(value_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_color(value_, lv_color_hex(selected ? accent : theme.foreground), 0);
+    lv_obj_set_style_text_color(value_, lv_color_hex(selected ? palette.accent : palette.text), 0);
     lv_obj_set_grid_cell(value_, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     lv_label_set_long_mode(value_, LV_LABEL_LONG_DOT);
     if (!value || !value[0]) {
@@ -68,13 +68,14 @@ void MenuRow::toggle(bool checked) {
     lv_obj_set_size(control, 32, 16);
     lv_obj_set_grid_cell(control, LV_GRID_ALIGN_END, 1, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     lv_obj_set_style_bg_opa(control, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(control, lv_color_hex(0x475569), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(control, lv_color_hex(ink_.track), LV_PART_MAIN);
     lv_obj_set_style_radius(control, LV_RADIUS_CIRCLE, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(control, LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(control, lv_color_hex(accent_), LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(control, lv_color_hex(ink_.accent), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_radius(control, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(control, LV_OPA_COVER, LV_PART_KNOB);
-    lv_obj_set_style_bg_color(control, lv_color_hex(0xe2e8f0), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(control, lv_color_hex(ink_.knob), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(control, lv_color_hex(ink_.knobOn), LV_PART_KNOB | LV_STATE_CHECKED);
     lv_obj_set_style_radius(control, LV_RADIUS_CIRCLE, LV_PART_KNOB);
     lv_obj_set_style_anim_duration(control, 0, 0);
     if (checked) lv_obj_add_state(control, LV_STATE_CHECKED);
@@ -90,7 +91,7 @@ void MenuRow::slider(unsigned value, unsigned minimum, unsigned maximum) {
     lv_slider_set_value(control, value, LV_ANIM_OFF);
     for (auto part : {LV_PART_MAIN, LV_PART_INDICATOR, LV_PART_KNOB}) {
         lv_obj_set_style_bg_opa(control, LV_OPA_COVER, part);
-        lv_obj_set_style_bg_color(control, lv_color_hex(part == LV_PART_MAIN ? 0x475569 : accent_), part);
+        lv_obj_set_style_bg_color(control, lv_color_hex(part == LV_PART_MAIN ? ink_.track : ink_.accent), part);
         lv_obj_set_style_radius(control, LV_RADIUS_CIRCLE, part);
     }
     lv_obj_set_style_pad_all(control, 3, LV_PART_KNOB);
@@ -107,13 +108,13 @@ int MenuRow::contentHeight() const {
 // its left before the name, the value's Gap before the value text or the slider, whatever its length.
 void MenuRow::nameSwatch(uint32_t rgb) {
     if (!root_) return;
-    nameSwatch_.update(root_, 0, (contentHeight() - ColorSwatch::Size) / 2, rgb, ink_);
+    nameSwatch_.update(root_, 0, (contentHeight() - ColorSwatch::Size) / 2, rgb, ink_.text);
     lv_obj_set_style_pad_left(name_, ColorSwatch::Size + ColorSwatch::Gap, 0);
 }
 void MenuRow::valueSwatch(uint32_t rgb) {
     if (!root_) return;
     const bool slid = slider_ && !lv_obj_is_hidden(slider_);
     const int right = slid ? SliderWidth : lv_obj_is_hidden(value_) ? 0 : valueWidth_;
-    valueSwatch_.update(root_, contentWidth() - right - ColorSwatch::Gap - ColorSwatch::Size, (contentHeight() - ColorSwatch::Size) / 2, rgb, ink_);
+    valueSwatch_.update(root_, contentWidth() - right - ColorSwatch::Gap - ColorSwatch::Size, (contentHeight() - ColorSwatch::Size) / 2, rgb, ink_.text);
 }
 } // namespace openosc::ui

@@ -5,7 +5,7 @@
 // kinds, flags and the payload format byte, the bit clock, the event writer and the two-line coincidence
 // queue. None of it changes the base contract of decoder.hpp / result.hpp.
 namespace openosc::decoding::protocols {
-// DecodeEvent::kind: protocol in the high nibble (1 UART .. 5 CAN), the type in the low one. The base
+// DecodeEvent::kind: protocol in the high nibble (1 UART .. 6 DMX512), the type in the low one. The base
 // kinds (EdgeRise 1, EdgeFall 2) stay below 16.
 enum Kind : uint8_t {
     UartData = 0x10,     // Characters (a group of them, see UartOptions::groupIdleBits).
@@ -20,8 +20,11 @@ enum Kind : uint8_t {
     CanErrorFlag = 0x51, // A dominant run of 6..12 bits after an error (active error flag).
     CanOverload = 0x52,  // An overload flag after EOF / in the intermission.
     CanFragment = 0x53,  // Bus activity before the record's first 11 recessive bits (Cut).
+    DmxPacket = 0x60,    // BREAK .. last slot: START code (field), data slots 1..512, BREAK and MAB (DmxDecoder).
+    DmxBreak = 0x61,     // A BREAK without a START code after it (another BREAK, the record's end).
+    DmxFragment = 0x62,  // Activity before the record's first BREAK (Cut).
 };
-inline unsigned protocolOf(uint8_t kind) { return kind >> 4; } // 1 UART, 2 I2C, 3 SPI, 4 LIN, 5 CAN.
+inline unsigned protocolOf(uint8_t kind) { return kind >> 4; } // 1 UART, 2 I2C, 3 SPI, 4 LIN, 5 CAN, 6 DMX512.
 // DecodeEvent::flags above the base ones (Open 0, Cut 1, Continued 2, Glitch 3). One bit may name a
 // protocol's own case of a common meaning; the status code a table shows is in the comment.
 enum Flag : uint16_t {
@@ -32,14 +35,16 @@ enum Flag : uint16_t {
     Framing = 1u << 7,       // "FE" UART/LIN stop bit, "FRM" CAN form, I2C START/STOP inside a byte,
                              // SPI clock not at its CPOL idle level before a frame, LIN short response.
     ParityError = 1u << 8,   // "PE": UART parity, LIN PID parity bits.
-    CheckFailed = 1u << 9,   // "CRC" (CAN), "CHK" (LIN).
+    CheckFailed = 1u << 9,   // "CRC" (CAN), "CHK" (LIN), "LEN" (DMX512: more than 512 data slots).
     NotChecked = 1u << 10,   // The checksum or CRC was not verified (unknown length, incomplete).
     NoAck = 1u << 11,        // "NAK" I2C, "ACK" CAN (recessive ACK slot), LIN header without response.
     StuffError = 1u << 12,   // "STF": six equal CAN bits.
-    SyncError = 1u << 13,    // "SYN": LIN SYNC not 0x55 at a consistent bit time.
+    SyncError = 1u << 13,    // "SYN": LIN SYNC not 0x55 at a consistent bit time; "TIM" DMX512 MAB below 8 us
+                             // or BREAK to BREAK below 1196 us (ANSI E1.11 table 7).
     LengthUnknown = 1u << 14, // "LEN?": LIN ID without a length: raw bytes to the next break.
     Note = 1u << 15,         // I2C: clock stretched; CAN error/overload: one view of the bus (observation);
-                             // CAN frame: DLC above 8 (8 bytes carried, DLC in the format byte).
+                             // CAN frame: DLC above 8 (8 bytes carried, DLC in the format byte); DMX512:
+                             // the BREAK began before the record (its length a lower bound).
 };
 constexpr uint16_t ErrorFlags = Framing | ParityError | CheckFailed | NoAck | StuffError | SyncError;
 // DecodeEvent::format: bits 0-2 the element width (DecodeEvent::Format: None, Bytes, Words16), bits 3-7
@@ -51,7 +56,7 @@ inline unsigned formatMeta(uint8_t format) { return format >> 3; }
 inline unsigned elementBytes(uint8_t format) {
     return formatWidth(format) == DecodeEvent::Words16 ? 2u : formatWidth(format) == DecodeEvent::Bytes ? 1u : 0u;
 }
-// The segment group of a CONT chain (plan §5.5) sits in aux bits 24-31 of I2C, SPI, UART and LIN events.
+// The segment group of a CONT chain (plan §5.5) sits in aux bits 24-31 of I2C, SPI, UART, LIN and DMX512 events.
 constexpr unsigned GroupShift = 24;
 inline uint8_t groupOf(const DecodeEvent &e) { return uint8_t(e.aux >> GroupShift); }
 

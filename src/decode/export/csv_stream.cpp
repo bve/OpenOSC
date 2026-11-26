@@ -1,6 +1,7 @@
 #include "openosc/decode/export/csv_stream.hpp"
 #include "openosc/data/decimal.hpp"
 #include "openosc/decode/protocols/can_fd_view.hpp"
+#include "openosc/decode/protocols/dmx.hpp"
 #include "openosc/decode/protocols/types.hpp"
 #include "openosc/decode/table_text.hpp"
 #include <cstring>
@@ -9,7 +10,7 @@
 namespace openosc::decoding::exporting {
 namespace {
 using namespace protocols;
-constexpr const char *Names[DecodeCsvStream::Columns] = {
+constexpr const char *Names[DecodeCsvStream::DmxColumns] = {
     "event_index", "group", "cont", "group_last", "start_sample", "end_sample", "start_s", "end_s", "time_ref",
     "protocol", "kind", "status", "flags", "flags_hex", "id_hex", "id_bits", "lin_pid_hex", "rw", "element_bits",
     "element_count", "data_hex", "data_ascii", "crc_model", "crc_state", "crc_received", "crc_calculated", "ack",
@@ -17,13 +18,15 @@ constexpr const char *Names[DecodeCsvStream::Columns] = {
     "dominant_bits", "aux_hex",
     // v2: CAN / ISO CAN FD (docs/SCOPE_PROTOCOL_DECODERS_CSV.md §3.5), after every v1 column.
     "can_fd", "can_brs", "can_esi", "can_rrs", "can_res", "crc_bits", "sbc_received", "sbc_value", "sbc_calculated",
-    "sbc_parity", "stop_field", "crc_delimiter_bits", "ack_bits"};
+    "sbc_parity", "stop_field", "crc_delimiter_bits", "ack_bits",
+    // v3: DMX512 (docs/DECODER_RS485_DMX512.md), after every v2 column.
+    "dmx_first_slot", "dmx_slots", "break_s", "mab_s"};
 enum Column : uint8_t {
     EventIndex, Group, Cont, GroupLast, StartSample, EndSample, StartS, EndS, TimeRef, ProtocolName, KindName, Status,
     FlagNames, FlagsHex, IdHex, IdBits, LinPid, ReadWrite, ElementBits, ElementCount, DataHex, DataAscii, CrcModel,
     CrcState, CrcReceived, CrcCalculated, Ack, NakCount, NakFirst, StartCond, EndCond, CanExtended, CanRtr, CanDlc,
     SpiPartial, DominantBits, AuxHex, CanFd, CanBrs, CanEsi, CanRrs, CanRes, CrcBits, SbcReceivedBits, SbcValue,
-    SbcCalculated, SbcParityState, StopField, CrcDelimiterBits, AckBits};
+    SbcCalculated, SbcParityState, StopField, CrcDelimiterBits, AckBits, DmxFirstSlot, DmxSlots, BreakS, MabS};
 constexpr const char *StopNames[] = {"complete", "arbitration", "control", "data", "stuff_count", "crc", "crc_delimiter",
                                      "ack_slot", "ack_delimiter", "eof", "data_clock"};
 static_assert(sizeof StopNames / sizeof *StopNames == unsigned(canfd::Stop::Count), "a name for every stop");
@@ -32,7 +35,7 @@ constexpr const char *FlagName[16] = {"OPEN", "CUT", "CONT", "GLITCH", "AMBIGUOU
                                       "PARITY", "CHECK_FAILED", "NOT_CHECKED", "NO_ACK", "STUFF", "SYNC",
                                       "LEN_UNKNOWN", "NOTE"};
 constexpr const char *StatusNames[] = {"idle", "decoding", "done", "cancelled", "no_scale", "out_of_range",
-                                       "channel_off", "unsupported", "timing"};
+                                       "channel_off", "unsupported", "timing", "ac_coupled"};
 // The I2C summary in aux (i2c.cpp) and the LIN checksum model bits (lin.cpp), as documented in
 // docs/SCOPE_PROTOCOL_DECODERS_PROTOCOLS.md §4.3.
 constexpr uint32_t I2cRead = 1u << 0, I2cTenBit = 1u << 1, I2cAddressNack = 1u << 2, I2cBeganSr = 1u << 3,
@@ -53,10 +56,13 @@ const char *kindName(uint8_t kind) {
     case CanErrorFlag: return "can_error_flag";
     case CanOverload: return "can_overload";
     case CanFragment: return "can_fragment";
+    case DmxPacket: return "dmx_packet";
+    case DmxBreak: return "dmx_break";
+    case DmxFragment: return "dmx_fragment";
     default: return nullptr;
     }
 }
-bool grouped(const DecodeEvent &e) { return protocolOf(e.kind) >= 1 && protocolOf(e.kind) <= 4; }
+bool grouped(const DecodeEvent &e) { return (protocolOf(e.kind) >= 1 && protocolOf(e.kind) <= 4) || protocolOf(e.kind) == 6; }
 // The PID was received: the decoder then marks the length as known (aux) or unknown (flag).
 bool linPid(const DecodeEvent &e) { return e.kind == LinFrame && ((e.aux & LinLengthKnown) || (e.flags & LengthUnknown)); }
 // The checksum byte was received and compared (lin.cpp: aux bits 0-15 are written only then). A frame
@@ -82,8 +88,7 @@ bool readable(const ResultSet &set, unsigned index, Protocol protocol) {
     const DecodeEvent &e = set.event(index);
     CanFdView view;
     if (e.kind == CanFrame && !CanFdView::of(set, index, view)) return false; // Count, trailer, fields agree.
-    const auto family = protocol == Protocol::Rs232 ? Protocol::Uart : protocol; // Both profiles emit UART events.
-    if (!kindName(e.kind) || protocolOf(e.kind) != unsigned(family) || e.first > e.last) return false;
+    if (!kindName(e.kind) || protocolOf(e.kind) != Protocols::family(protocol) || e.first > e.last) return false;
     const unsigned width = formatWidth(e.format);
     if (width > DecodeEvent::Words16) return false;
     if (!e.count) return true;
@@ -171,7 +176,7 @@ void DecodeCsvStream::fill() {
         case Section::Header:
             if (item_) put(',');
             put(Names[item_]);
-            if (++item_ == Columns) {
+            if (++item_ == columns()) {
                 put("\r\n");
                 section_ = set_->count() ? Section::Rows : Section::Done;
                 event_ = 0; column_ = 0; element_ = 0;
@@ -225,6 +230,12 @@ void DecodeCsvStream::time(uint32_t index) {
     if (delta < 0) put('-');
     put(text);
 }
+// Seconds of a span of points, as time() writes them (12 decimals, truncated).
+void DecodeCsvStream::duration(uint32_t points) {
+    const Rational &fs = set_->samplesPerSecond;
+    char text[48];
+    if (fs.valid() && Decimal::fraction(uint64_t(points) * fs.denominator, fs.numerator, text, sizeof text, 12)) put(text);
+}
 bool DecodeCsvStream::metadata() {
     const ResultSet &s = *set_;
     const auto &key = s.key();
@@ -233,7 +244,10 @@ bool DecodeCsvStream::metadata() {
         SettingsHash, FsNumerator, FsDenominator, FsHz, Reference, Trigger, Window, Events, Lost, Dropped, Overflows,
         Clipped, Glitches, Skipped, Processed, Decoded, LineItems};
     switch (item_) {
-    case Format: put("# format=openosc-decode-events-csv-v2\r\n"); break;
+    case Format:
+        put(s.protocol() == Protocol::Dmx512 ? "# format=openosc-decode-events-csv-v3\r\n"
+                                            : "# format=openosc-decode-events-csv-v2\r\n");
+        break;
     case Firmware:
         // The one text of the caller's: streamed a character at a time (escaped, up to 4 bytes each).
         if (!firmware_[0]) break;
@@ -339,7 +353,7 @@ bool DecodeCsvStream::cell() {
     }
     if (!complete) { ++element_; return false; }
     element_ = 0;
-    if (++column_ < Columns) return false;
+    if (++column_ < columns()) return false;
     put("\r\n");
     column_ = 0;
     return true;
@@ -347,6 +361,7 @@ bool DecodeCsvStream::cell() {
 bool DecodeCsvStream::simple(unsigned column, const DecodeEvent &e) {
     const unsigned protocol = protocolOf(e.kind);
     const bool i2c = e.kind == I2cTransaction, last = grouped(e) && lastOfGroup();
+    const bool dmx = e.kind == DmxPacket, reset = dmx || e.kind == DmxBreak; // A BREAK and MAB were measured.
     // A CAN frame: every column from the one view (checked at begin(), so always readable here).
     CanFdView v;
     const bool can = e.kind == CanFrame && CanFdView::of(*set_, event_, v), fd = can && v.fd;
@@ -374,11 +389,13 @@ bool DecodeCsvStream::simple(unsigned column, const DecodeEvent &e) {
         if (i2c) hex(e.field, e.aux & I2cTenBit ? 3 : 2);
         else if (linPid(e)) hex(e.field & 0x3Fu, 2);
         else if (known) hex(v.id, v.extended ? 8 : 3);
+        else if (dmx) hex(DmxDecoder::startCode(e), 2); // The START code.
         break;
     case IdBits:
         if (i2c) integer(e.aux & I2cTenBit ? 10 : 7);
         else if (linPid(e)) integer(6);
         else if (known) integer(v.extended ? 29 : 11);
+        else if (dmx) integer(8);
         break;
     case LinPid: if (linPid(e)) hex(e.field & 0xFFu, 2); break;
     case ReadWrite: if (i2c) put(e.aux & I2cRead ? 'R' : 'W'); break;
@@ -454,6 +471,10 @@ bool DecodeCsvStream::simple(unsigned column, const DecodeEvent &e) {
     case SpiPartial: if (e.kind == SpiFrame) integer(e.aux & 31u); break;
     case DominantBits: if (e.kind == CanErrorFlag || e.kind == CanOverload) integer(e.aux); break;
     case AuxHex: hex(e.aux, 8); break;
+    case DmxFirstSlot: if (dmx && e.count) integer(DmxDecoder::firstSlot(*set_, event_)); break;
+    case DmxSlots: if (dmx && last) integer(DmxDecoder::slots(*set_, event_)); break; // The packet's, on its last segment.
+    case BreakS: if (reset) duration(DmxDecoder::breakPoints(e)); break;
+    case MabS: if (reset) duration(DmxDecoder::mabPoints(e)); break;
     default: return false;
     }
     return true;

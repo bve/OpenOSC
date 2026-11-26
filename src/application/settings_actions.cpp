@@ -116,6 +116,8 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
     prefs_.menuLeftStep = chosen.menuLeftStep;
+    // Menu contrast (GitHub #44): the next menu draw takes it; the open Settings page is redrawn after this.
+    prefs_.menuContrast = chosen.menuContrast; view_.menuContrast(prefs_.menuContrast);
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
     // Swap CH1/CH2: relabelled at once, a held record included; no capture, option or readout changes.
     prefs_.swapChannels = chosen.swapChannels; view_.channelView(plot::ChannelView{prefs_.swapChannels != 0});

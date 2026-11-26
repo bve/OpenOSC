@@ -53,7 +53,7 @@ public:
     // The published result if it is of exactly this record (full RecordKey, this generation, and
     // the settings in force), else none: annotations are never drawn over another record.
     const ResultSet *shows(const scope::FrameMetadata &metadata) const;
-    // UART autobaud (plan §6.3): a hint, never applied here. On a held record (HOLD's, offered by the
+    // UART autobaud (plan §6.3; RS-232 and RS-485 too, CH1 - CH2 included): a hint, never applied here. On a held record (HOLD's, offered by the
     // controller): the record's transitions through BaudEstimator (a candidate), then all of them again
     // through BaudValidator (that rate, half and a third: exactly one clean, at least MinFrames correct
     // characters and at most one bad per eight). Bounded slices as a decode; revoked as one; decoding
@@ -82,7 +82,11 @@ private:
     void finishSearch(BaudSearch::State state);
     void finishRecord(DecodeStatus status, uint32_t nowMs);
     RecordKey keyOf(const scope::FrameMetadata &metadata) const;
+    // The record's source channels for the settings: enabled and recorded, sampled as pairs for CH1 - CH2,
+    // DC coupled where the protocol needs it; Decoding when usable, else the status to say.
+    DecodeStatus sourceStatus(const scope::FrameMetadata &metadata) const;
     DecodeStatus prepare(const scope::FrameMetadata &metadata, ResultSet &set); // Sources, scale, machine; Decoding when ready.
+    void beginSearchStream(); // A baud search's stream: searchCodes_, or CH1 - CH2 with searchHysteresisMv_.
     DecodeStatus beginStreams(const scope::FrameMetadata &metadata, ResultSet &set); // Each line's hysteresis, its stream.
     bool measure(const scope::FrameView &frame, const Budget &budget, uint32_t start); // Auto: the swing; true once read.
     unsigned scanBlock(const scope::FrameView &frame, uint32_t n); // Both lines' transitions, merged by index.
@@ -120,6 +124,8 @@ private:
     Task task_ = Task::Decode;
     BaudSearch search_;
     ThresholdCodes searchCodes_;
+    uint32_t searchHysteresisMv_ = 0;
+    bool searchDifference_ = false;
     protocols::BaudEstimator *estimator_ = nullptr;
     protocols::BaudValidator *validator_ = nullptr;
 };

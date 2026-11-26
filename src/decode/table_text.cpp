@@ -1,5 +1,6 @@
 #include "openosc/decode/table_text.hpp"
 #include "openosc/decode/protocols/can_fd_view.hpp"
+#include "openosc/decode/protocols/dmx.hpp"
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -80,8 +81,9 @@ void describe(const ResultSet &set, unsigned index, char *id, unsigned idSize, c
     Writer w(data, dataWidth);
     if (e.flags & DecodeEvent::Continued) w.add("+");
     switch (e.kind) {
-    case UartBreak: w.add("BREAK"); return;
-    case UartFragment: case I2cFragment: case LinFragment: case CanFragment: w.add("fragment"); return;
+    case UartBreak: case DmxBreak: w.add("BREAK"); return;
+    case UartFragment: case I2cFragment: case LinFragment: case CanFragment: case DmxFragment: w.add("fragment"); return;
+    case DmxPacket: std::snprintf(id, idSize, "%02X", DmxDecoder::startCode(e)); break; // The START code, then the slots.
     case I2cTransaction:
         std::snprintf(id, idSize, (e.aux & 2) ? "%03X%c" : "%02X%c", unsigned(e.field), (e.aux & 1) ? 'R' : 'W');
         break;
@@ -106,7 +108,8 @@ const char *kindName(uint8_t kind) {
     case I2cTransaction: return "I2C transaction"; case I2cFragment: return "I2C fragment";
     case SpiFrame: return "SPI frame"; case LinFrame: return "LIN frame"; case LinFragment: return "LIN fragment";
     case CanFrame: return "CAN frame"; case CanErrorFlag: return "CAN error flag"; case CanOverload: return "CAN overload";
-    case CanFragment: return "CAN fragment"; default: return "event";
+    case CanFragment: return "CAN fragment"; case DmxPacket: return "DMX512 packet"; case DmxBreak: return "DMX512 break";
+    case DmxFragment: return "DMX512 fragment"; default: return "event";
     }
 }
 double seconds(const ResultSet &set, int64_t points) { return double(points) / set.samplesPerSecond.value(); }
@@ -180,7 +183,7 @@ void levelLine(const ResultSet &set, unsigned n, Writer &w) {
     char a[24], b[24];
     TableText::millivolts(set.thresholdMv[c & 1], a, sizeof a);
     TableText::millivolts(set.hysteresisMv[c & 1], b, sizeof b);
-    if (set.difference) w.add("CANH-CANL thr %s hyst %s", a, b);
+    if (set.difference) w.add("%s thr %s hyst %s", set.protocol() == Protocol::Can ? "CANH-CANL" : "CH1-CH2", a, b);
     else w.add("CH%u thr %s hyst %s", (c & 1) + 1, a, b);
     if (set.hysteresisAuto) w.add(" auto%u%%", Protocols::AutoHysteresisPercent);
 }
@@ -204,8 +207,9 @@ void protocolLine(const ResultSet &set, unsigned index, const Settings &s, unsig
         case 1: {
             static constexpr char parity[] = {'N', 'E', 'O', 'M', 'S'};
             static constexpr const char *stops[] = {"1", "1.5", "2"};
-            w.add("%lu bd %u%c%s %s%s RX CH%u", static_cast<unsigned long>(s.uart.baud), s.uart.dataBits, parity[s.uart.parity % 5],
-                  stops[(s.uart.stopHalfBits - 2) % 3], s.uart.msbFirst ? "MSB" : "LSB", s.uartInverted() ? " inv" : "", set.channel + 1u);
+            w.add("%lu bd %u%c%s %s%s", static_cast<unsigned long>(s.uart.baud), s.uart.dataBits, parity[s.uart.parity % 5],
+                  stops[(s.uart.stopHalfBits - 2) % 3], s.uart.msbFirst ? "MSB" : "LSB", s.uartInverted() ? " inv" : "");
+            if (set.difference) w.add(" CH1-CH2"); else w.add(" %s CH%u", set.protocol() == Protocol::Rs485 ? "RO" : "RX", set.channel + 1u);
             return;
         }
         case 2:
@@ -217,6 +221,15 @@ void protocolLine(const ResultSet &set, unsigned index, const Settings &s, unsig
             return;
         case 4: w.add("PID 0x%02X ID 0x%02X  CH%u", unsigned(e.field & 0xFF), unsigned(e.field & 0x3F), set.channel + 1u); return;
         case 5: w.add("dominant run %lu bits", static_cast<unsigned long>(e.aux)); return; // Error flag, overload.
+        case 6: {
+            if (e.kind == DmxFragment) { w.add("before the first BREAK"); return; }
+            if (e.kind != DmxPacket) { w.add("no START code  %s", set.difference ? "CH1-CH2" : "RO"); return; }
+            const unsigned startCode = DmxDecoder::startCode(e);
+            if (!e.count) { w.add("SC %02X 0 slots", startCode); return; }
+            const unsigned first = DmxDecoder::firstSlot(set, index);
+            w.add("SC %02X slots %u-%u of %u", startCode, first, first + e.count - 1, DmxDecoder::slots(set, index));
+            return;
+        }
         default: return;
         }
     }
@@ -226,6 +239,16 @@ void protocolLine(const ResultSet &set, unsigned index, const Settings &s, unsig
               unsigned(e.aux >> 8 & 0xFF), (e.aux & 32) ? "STOP" : (e.aux & 16) ? "Sr" : "-");
         return;
     case 3: w.add("partial last word %u bits", unsigned(e.aux & 31)); return;
+    case 6: { // ANSI E1.11 table 7: BREAK >= 88 us, MAB >= 8 us at the receiver.
+        if (e.kind == DmxFragment) return;
+        char a[24] = "?", b[24] = "?";
+        if (set.samplesPerSecond.valid()) {
+            TableText::quantity(seconds(set, DmxDecoder::breakPoints(e)), "s", a, sizeof a);
+            TableText::quantity(seconds(set, DmxDecoder::mabPoints(e)), "s", b, sizeof b);
+        }
+        w.add("BREAK %s%s MAB %s 250k 8N2", (e.flags & Note) ? ">=" : "", a, b);
+        return;
+    }
     case 4:
         w.add("chk rx %02X calc %02X %s%s", unsigned(e.aux & 0xFF), unsigned(e.aux >> 8 & 0xFF),
               (e.aux >> 16 & 1) ? "enhanced" : "classic", (e.aux >> 17 & 1) ? " len table" : " len ?");
@@ -284,12 +307,12 @@ void TableText::header(const ResultSet *set, const Unit &unit, Line &out) {
 const char *TableText::code(const DecodeEvent &e) {
     const unsigned protocol = protocolOf(e.kind);
     if (e.flags & StuffError) return "STF";
-    if (e.flags & CheckFailed) return protocol == 5 ? "CRC" : "CHK";
+    if (e.flags & CheckFailed) return protocol == 5 ? "CRC" : protocol == 6 ? "LEN" : "CHK";
     if (e.flags & ParityError) return "PE";
-    if (e.flags & Framing) return protocol == 1 || protocol == 4 ? "FE" : "FRM";
-    if (e.flags & SyncError) return "SYN";
+    if (e.flags & Framing) return protocol == 1 || protocol == 4 || protocol == 6 ? "FE" : "FRM";
+    if (e.flags & SyncError) return protocol == 6 ? "TIM" : "SYN";
     if (e.flags & NoAck) return protocol == 5 ? "ACK" : "NAK";
-    if (e.kind == UartBreak) return "BRK";
+    if (e.kind == UartBreak || e.kind == DmxBreak) return "BRK";
     if (e.flags & Truncated) return "EVT>";
     if (e.flags & DecodeEvent::Cut) return "CUT";
     if (e.flags & LengthUnknown) return "LEN?";
@@ -307,7 +330,7 @@ const char *TableText::code(const ResultSet &set, unsigned index) {
     return v.crcBits && v.crcReceived == v.crcCalculated && (e.aux & (canfd::SbcParity | canfd::SbcMismatch)) ? "SBC" : c;
 }
 bool TableText::error(const DecodeEvent &e) {
-    return (e.flags & (ErrorFlags | Truncated | DecodeEvent::Cut)) || e.kind == UartBreak;
+    return (e.flags & (ErrorFlags | Truncated | DecodeEvent::Cut)) || e.kind == UartBreak || e.kind == DmxBreak;
 }
 void TableText::label(const ResultSet &set, unsigned index, char *out, unsigned capacity) {
     const auto &e = set.event(index);
@@ -320,11 +343,12 @@ void TableText::label(const ResultSet &set, unsigned index, char *out, unsigned 
         if (v.dlcKnown) std::snprintf(out, capacity, "%s %s %uB", id, fdMark(v), v.length);
         else std::snprintf(out, capacity, "%s %s ?B", id, fdMark(v));
     } else if (e.kind == LinFrame && hasId) std::snprintf(out, capacity, "ID%s", id);
+    else if (e.kind == DmxPacket) std::snprintf(out, capacity, "SC%s %u", id, DmxDecoder::slots(set, index));
     else if (hasId) std::snprintf(out, capacity, "%s", id);
     else { // The first element, or the whole data word ("fragment" fits as "fragme~": shown as "..").
         if (char *space = std::strchr(data, ' ')) *space = 0;
         std::snprintf(out, capacity, "%s", e.kind == UartFragment || e.kind == I2cFragment || e.kind == LinFragment ||
-                                               e.kind == CanFragment ? ".." : data);
+                                               e.kind == CanFragment || e.kind == DmxFragment ? ".." : data);
     }
 }
 void TableText::row(const ResultSet &set, unsigned index, const Unit &unit, bool selected, Line &out) {
@@ -400,7 +424,7 @@ bool TableText::detail(const ResultSet &set, unsigned index, const Settings &s, 
     const bool words = elementBytes(e.format) == 2;
     const unsigned per = words ? 6 : 8, from = (line - first) * per;
     if (from >= e.count) return false;
-    w.add("%03u", from);
+    w.add("%03u", from + (e.kind == DmxPacket ? DmxDecoder::firstSlot(set, index) : 0u)); // DMX512: the slot number.
     for (unsigned i = from; i < from + per && i < e.count; ++i) w.add(words ? " %04X" : " %02X", element(set, e, i));
     if (!words) {
         w.add("  ");
@@ -433,6 +457,7 @@ void TableText::info(const Settings &s, const ResultSet *shown, const ResultSet 
         case DecodeStatus::OutOfRange: word(Must, "THR OUT", "THR OUT"); break;
         case DecodeStatus::ChannelOff: word(Must, "SOURCE OFF", "SRC OFF"); break;
         case DecodeStatus::Timing: word(Must, "RATE OUT", "RATE OUT"); break;
+        case DecodeStatus::Coupling: word(Must, "AC: USE DC", "AC CPL"); break;
         default: word(Must, "WAIT", "WAIT"); break;
         }
     if (c.exporting) word(Must, "EXPORT", "EXP");
@@ -488,6 +513,7 @@ const char *TableText::empty(const ResultSet *shown, bool decoding) {
     case DecodeStatus::ChannelOff: return "A source channel is off or not recorded";
     case DecodeStatus::Timing: return "Bit time out of range at this Fs";
     case DecodeStatus::Unsupported: return "Not decoded by this firmware";
+    case DecodeStatus::Coupling: return "Source AC coupled: set DC on CH1 and CH2";
     default: return "Waiting for a record";
     }
 }

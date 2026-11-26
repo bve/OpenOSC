@@ -22,6 +22,7 @@ constexpr SettingsEntry display[] = {
     {"Scope shortcuts", Action::None, Page::ScopeKeys},
     {"Generator layout", Action::GeneratorLayout},
     {"Tooltips", Action::None, Page::Tooltips},
+    {"Menu contrast", Action::MenuContrast}, // Menus black with white text (GitHub #44), next to the theme.
     {"Appearance", Action::None, Page::Appearance},
     {"Back", Action::Back},
 };

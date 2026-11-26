@@ -76,10 +76,15 @@ The instrument saves screenshots as PNG. Use the filename from
 
 ## Serial decoder results
 
-Select **UART (TTL)** or **RS-232** on the instrument under **Analyze → Decoder**.
-`DEC:PROT?` and `DEC:RES?` report `UART` or `RS232`. The CSV returned by
-`DEC:DATA?` uses the protocol names `uart` and `rs232`. Both use the UART
-event kinds `uart_data`, `uart_break` and `uart_fragment`.
+Select **UART (TTL)**, **RS-232**, **RS-485** or **DMX512** on the instrument under
+**Analyze → Decoder**. `DEC:PROT?` and `DEC:RES?` report `UART`, `RS232`, `RS485`
+or `DMX512`. The CSV returned by `DEC:DATA?` uses the protocol names `uart`, `rs232`,
+`rs485` and `dmx512`. The first three use the UART event kinds `uart_data`,
+`uart_break` and `uart_fragment`. DMX512 uses `dmx_packet`, `dmx_break` and
+`dmx_fragment` in a v3 file with four more columns; see
+[DECODER_RS485_DMX512.md](DECODER_RS485_DMX512.md). A `DEC:RES?` status of
+`ac_coupled` means an RS-485 or DMX512 source channel was AC coupled and nothing
+was decoded.
 
 ## Idle settings
 

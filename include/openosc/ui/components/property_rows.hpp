@@ -10,7 +10,7 @@ struct PropertyRows {
     int top, pitch, height;
     unsigned visible;
     void draw(MenuContent &content, lv_obj_t *parent, const PropertyList &list, const PropertyNavigator &navigator,
-              const Theme &theme, uint32_t accent) const;
+              const MenuPalette &palette) const;
     unsigned first(unsigned row) const { return row / visible * visible; }
 };
 } // namespace openosc::ui

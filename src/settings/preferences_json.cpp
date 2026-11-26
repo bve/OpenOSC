@@ -78,6 +78,13 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["menu_left_step"].is<bool>()) return false;
         candidate.menuLeftStep = indicators["menu_left_step"].as<bool>();
     }
+    if (indicators.containsKey("menu_contrast")) { // GitHub #44; absent in older files: the theme's colours.
+        const char *name = indicators["menu_contrast"].is<const char *>() ? indicators["menu_contrast"].as<const char *>() : "";
+        unsigned index = 0;
+        while (index < MenuContrastCount && std::strcmp(name, MenuContrastKeys[index])) ++index;
+        if (index == MenuContrastCount) return false;
+        candidate.menuContrast = MenuContrast(index);
+    }
     if (root.containsKey("hold_ms")) {
         if (!root["hold_ms"].is<unsigned>()) return false;
         const unsigned ms = root["hold_ms"].as<unsigned>();
@@ -230,6 +237,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["show_sample_rate"] = values.showFps == 2;
     document["display"]["pan_moves_waveform"] = values.panReverse == 1;
     if (values.menuLeftStep) document["display"]["menu_left_step"] = true;
+    if (values.menuContrast != MenuContrast::Theme) document["display"]["menu_contrast"] = MenuContrastKeys[unsigned(values.menuContrast)];
     document["display"]["tooltips_off"] = unsigned(values.tooltipsHidden); // A bit per kind hidden (Tooltips).
     document["display"]["clock_indicator"] = values.clockIndicator == 1;
     document["display"]["swap_channels"] = values.swapChannels == 1;

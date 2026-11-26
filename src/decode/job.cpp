@@ -44,25 +44,33 @@ bool DecodeJob::wants(const scope::FrameMetadata &metadata) const {
 // threshold in codes (or the difference's scale), the protocol's timing at this Fs. Anything else is a
 // status published at once, never a guess. Manual hysteresis: the streams begin now. Auto: each line's
 // swing is measured first (measuring_, bounded slices of step()), then beginStreams().
-DecodeStatus DecodeJob::prepare(const scope::FrameMetadata &m, ResultSet &set) {
+DecodeStatus DecodeJob::sourceStatus(const scope::FrameMetadata &m) const {
     const unsigned sources = settings_.sources();
     if (!sources) return DecodeStatus::Unsupported;
     for (unsigned c = 0; c < 2; ++c)
         if ((sources >> c & 1) && (!m.channels[c].enabled || (m.layout == scope::Layout::InterleavedCh1 && c)))
             return DecodeStatus::ChannelOff;
+    // A difference is read point by point from one word of both channels (FrameView::pairs).
+    if (settings_.difference() && m.layout != scope::Layout::Linear && m.layout != scope::Layout::FourBanks) return DecodeStatus::ChannelOff;
+    for (unsigned c = 0; c < 2; ++c)
+        if (settings_.needsDc() && (sources >> c & 1) && m.channels[c].coupling != scope::Coupling::Dc) return DecodeStatus::Coupling;
+    return DecodeStatus::Decoding;
+}
+DecodeStatus DecodeJob::prepare(const scope::FrameMetadata &m, ResultSet &set) {
+    const unsigned sources = settings_.sources();
+    if (const auto status = sourceStatus(m); status != DecodeStatus::Decoding) return status;
     minPulse_ = 0; // The minimum pulse in points of this record (0: off), rounded up.
     if (settings_.minPulseNs && m.samplesPerSecond.valid())
         minPulse_ = uint32_t(std::ceil(double(settings_.minPulseNs) * m.samplesPerSecond.value() / 1e9));
-    const bool difference = settings_.protocol == Protocol::Can && settings_.can.source == CanSource::Difference;
+    const bool difference = settings_.difference();
     const bool automatic = settings_.hysteresis == Hysteresis::Auto;
     lines_ = difference ? 1 : uint8_t(sources == 3 ? 2 : 1);
     block_ = lines_ == 2 ? PairBlock : ThresholdStream::Block;
     set.lines = uint8_t(sources); set.difference = difference; set.hysteresisAuto = automatic;
     streams_[0] = streams_[1] = ThresholdStream{};
     if (difference) {
-        if (m.layout != scope::Layout::Linear && m.layout != scope::Layout::FourBanks) return DecodeStatus::ChannelOff;
-        if (!DifferenceScale::of(m, difference_)) return DecodeStatus::NoScale;
-        set.thresholdMv[0] = settings_.can.differenceMv;
+        if (!DifferenceScale::of(m, difference_)) return DecodeStatus::NoScale; // Both enabled and calibrated.
+        set.thresholdMv[0] = settings_.differenceThreshold();
         ranges_[0].beginDifference(difference_);
     } else {
         unsigned line = 0;
@@ -93,7 +101,7 @@ DecodeStatus DecodeJob::beginStreams(const scope::FrameMetadata &m, ResultSet &s
     if (set.difference) {
         const uint32_t h = automatic ? difference_.autoHysteresisMv(ranges_[0].swing(), percent) : settings_.hysteresisMv;
         set.hysteresisMv[0] = h;
-        streams_[0].beginDifference(difference_, settings_.can.differenceMv, h, minPulse_, 0);
+        streams_[0].beginDifference(difference_, settings_.differenceThreshold(), h, minPulse_, 0);
     } else {
         for (unsigned line = 0; line < lines_; ++line) {
             const unsigned c = lineChannel_[line];
@@ -137,7 +145,8 @@ bool DecodeJob::offer(scope::FrameLease &lease) {
     running_ = keyOf(m);
     set.reset(running_, settings_.hash(), settings_.protocol);
     set.samples = m.samples;
-    set.channel = uint8_t(settings_.protocol == Protocol::Can ? (settings_.can.source == CanSource::RxdCh2) : settings_.channel);
+    set.channel = uint8_t(settings_.protocol == Protocol::Can ? (settings_.can.source == CanSource::RxdCh2)
+                          : settings_.difference() ? 0u : settings_.channel);
     set.samplesPerSecond = m.samplesPerSecond; set.triggerIndex = m.triggerIndex; set.triggered = m.triggered;
     set.window = ProtocolMachine::window(m);
     position_ = 0;
@@ -192,19 +201,29 @@ bool DecodeJob::searchBaud(scope::FrameLease &lease) {
     if (!settings_.enabled || !Protocols::uartFraming(settings_.protocol) || lease_.valid() || !lease.valid()) return false;
     const auto &m = lease.view().metadata();
     const unsigned channel = settings_.channel;
-    if (!m.channels[channel].enabled || (m.layout == scope::Layout::InterleavedCh1 && channel)) return false;
+    if (sourceStatus(m) != DecodeStatus::Decoding || !m.samplesPerSecond.valid()) return false;
     const bool automatic = settings_.hysteresis == Hysteresis::Auto; // Auto: the swing first, as a decode.
-    searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.threshold(channel), automatic ? 0 : settings_.hysteresisMv);
-    if (searchCodes_.status != ThresholdCodes::Status::Ok || !m.samplesPerSecond.valid()) return false;
+    searchDifference_ = settings_.difference();
+    searchHysteresisMv_ = automatic ? 0 : settings_.hysteresisMv;
+    if (searchDifference_) { if (!DifferenceScale::of(m, difference_)) return false; }
+    else {
+        searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.threshold(channel), searchHysteresisMv_);
+        if (searchCodes_.status != ThresholdCodes::Status::Ok) return false;
+    }
     decoded_.release();
     measuring_ = automatic;
-    if (automatic) ranges_[0].begin(scope::Channel(channel));
-    else streams_[0].begin(searchCodes_, 0, scope::Channel(channel)); // No minimum pulse: the edges as they are.
+    if (!automatic) beginSearchStream(); // No minimum pulse: the edges as they are.
+    else if (searchDifference_) ranges_[0].beginDifference(difference_);
+    else ranges_[0].begin(scope::Channel(channel));
     estimator_ = &machine_.estimator(); estimator_->reset();
     search_ = {}; search_.state = BaudSearch::State::Running; search_.key = keyOf(m); search_.settingsHash = settings_.hash();
     task_ = Task::Estimate; position_ = 0; lines_ = 1;
     lease_ = std::move(lease);
     return true;
+}
+void DecodeJob::beginSearchStream() {
+    if (searchDifference_) streams_[0].beginDifference(difference_, settings_.differenceThreshold(), searchHysteresisMv_, 0, 0);
+    else streams_[0].begin(searchCodes_, 0, scope::Channel(settings_.channel));
 }
 void DecodeJob::finishSearch(BaudSearch::State state) {
     search_.state = state;
@@ -218,12 +237,14 @@ bool DecodeJob::stepSearch(const Budget &budget) {
     const uint32_t start = budget.cycles ? budget.cycles() : 0;
     if (measuring_) {
         if (!measure(frame, budget, start)) return true;
-        const unsigned channel = settings_.channel;
-        const uint32_t h = ThresholdCodes::autoHysteresisMv(m.channels[channel], uint32_t(ranges_[0].swing()),
-                                                            Protocols::AutoHysteresisPercent);
-        searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.threshold(channel), h);
-        if (searchCodes_.status != ThresholdCodes::Status::Ok) { finishSearch(BaudSearch::State::Done); return false; }
-        streams_[0].begin(searchCodes_, 0, scope::Channel(channel));
+        const unsigned channel = settings_.channel, percent = Protocols::AutoHysteresisPercent;
+        if (searchDifference_) searchHysteresisMv_ = difference_.autoHysteresisMv(ranges_[0].swing(), percent);
+        else {
+            const uint32_t h = ThresholdCodes::autoHysteresisMv(m.channels[channel], uint32_t(ranges_[0].swing()), percent);
+            searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.threshold(channel), h);
+            if (searchCodes_.status != ThresholdCodes::Status::Ok) { finishSearch(BaudSearch::State::Done); return false; }
+        }
+        beginSearchStream();
         measuring_ = false; position_ = 0;
         return true;
     }
@@ -243,7 +264,7 @@ bool DecodeJob::stepSearch(const Budget &budget) {
         validator_ = &machine_.validator(); // In place of the estimator: its candidate is kept in q16.
         estimator_ = nullptr;
         if (!q16 || !validator_->begin(q16, format, settings_.uartInverted(), m.samplesPerSecond)) { finishSearch(BaudSearch::State::Done); return false; }
-        streams_[0].begin(searchCodes_, 0, scope::Channel(settings_.channel));
+        beginSearchStream();
         task_ = Task::Validate; position_ = 0;
         return true;
     }
