@@ -10,7 +10,8 @@
 
 namespace openosc {
 FIL FirmwareUpload::file_{};
-char FirmwareUpload::name_[NameBytes]{}, FirmwareUpload::temporary_[PathBytes]{}, FirmwareUpload::final_[PathBytes]{};
+char FirmwareUpload::name_[NameBytes]{}, FirmwareUpload::temporary_[PathBytes]{}, FirmwareUpload::final_[PathBytes]{},
+    FirmwareUpload::aside_[PathBytes]{};
 void FirmwareUpload::cancel() {
     if (!open_) return;
     f_close(&file_); f_unlink(temporary_);
@@ -28,6 +29,7 @@ int FirmwareUpload::write(const void *owner, const char *name, uint32_t offset, 
         if (!fs_.mounted()) return -200;
         if (!path(name, final_, sizeof final_)) return -224;
         std::snprintf(temporary_, sizeof temporary_, "%s.TMP", final_);
+        std::snprintf(aside_, sizeof aside_, "%s.OLD", final_);
         if (f_open(&file_, temporary_, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) return -200;
         open_ = true; owner_ = owner; written_ = 0; crc_ = Crc32(); std::strcpy(name_, name);
     } else if (!open_ || owner_ != owner || offset != written_ || std::strcmp(name, name_)) {
@@ -67,8 +69,17 @@ int FirmwareUpload::end(const void *owner, uint32_t &bytes, uint32_t &crc) {
     open_ = false; owner_ = nullptr;
     const int code = closed == FR_OK ? check() : -200;
     if (code) { f_unlink(temporary_); return code; } // The existing file stays.
-    const FRESULT removed = f_unlink(final_);
-    if ((removed != FR_OK && removed != FR_NO_FILE) || f_rename(temporary_, final_) != FR_OK) { f_unlink(temporary_); return -200; }
+    // The existing <name> moves aside to <name>.OLD and is removed only once the new file holds the name:
+    // a failed rename puts it back, and if even that fails it survives as <name>.OLD.
+    FRESULT aside = f_rename(final_, aside_);
+    if (aside == FR_EXIST) { f_unlink(aside_); aside = f_rename(final_, aside_); } // A stale .OLD beside <name>.
+    if (aside != FR_OK && aside != FR_NO_FILE) { f_unlink(temporary_); return -200; }
+    if (f_rename(temporary_, final_) != FR_OK) {
+        if (aside == FR_OK) f_rename(aside_, final_);
+        f_unlink(temporary_);
+        return -200;
+    }
+    f_unlink(aside_); // The new file holds the name: no older copy is needed, a stale one included.
     bytes = written_; crc = crc_.value();
     return 0;
 }

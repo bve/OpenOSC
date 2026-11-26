@@ -105,8 +105,9 @@ as Recovery does before flashing (extension `.OSC` or `.BIN`, header, board,
 size, vectors and the CRC of the whole payload). A whole image replaces
 `FILENAME`, and the reply is `bytes,crc32` for the data received, with the
 CRC-32 in decimal. Anything else returns `-230`, removes the `.TMP` and
-keeps the old `FILENAME`. An upload is canceled when its session ends or the
-device shuts down.
+keeps the old `FILENAME`. If the replacement itself fails (`-200`), the old
+`FILENAME` is restored, or at worst kept as `FILENAME.OLD`. An upload is
+canceled when its session ends or the device shuts down.
 
 `SYST:REC:INST "FILENAME"` restarts into Recovery, which installs
 `/openosc/UPDATE/FILENAME` and starts the new firmware without a key press.
