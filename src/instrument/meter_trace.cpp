@@ -35,6 +35,7 @@ void DataAccess::serviceMeterTrace(uint32_t now) {
         breakMeterTrace();
         dmm_.abandon();
         framer_.reset();
+        meter_.expire(timeUs_); // A reading from before is not current, as on entering the DMM (activate()).
         uint32_t remainingMs = 0;
         // Unpowered too recently (a DMM left just now): LinkWatchdog powers it once OffMs has passed.
         if (watchdog_.activate(now, timeUs_, remainingMs)) dmmActivatedAtUs_ = timeUs_ + uint64_t(remainingMs) * 1000;
