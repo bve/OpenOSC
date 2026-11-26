@@ -24,7 +24,8 @@ A good bug report lets someone else see the same problem. Please include:
 - the firmware version from **Settings → About**, or the release you installed;
 - the performance profile (200/100, 280/140 or 360/90);
 - what you did, what you expected and what happened instead;
-- a screenshot if the problem is visible on screen (BMP screenshots are saved on the device);
+- a screenshot if the problem is visible on screen (PNG screenshots are saved on the device in
+  `/openosc/SCREENSHOTS/`);
 - for USB problems: the operating system, the PC software and whether a USB hub is used.
 
 Do not attach your factory block backup (`FACTORY_BOOT_08000000.bin`). It contains your unit's own
@@ -32,10 +33,10 @@ calibration and is not needed for bug reports.
 
 ## Testing on ZT706S
 
-The ZT706S build has not been run on hardware yet. If you own a ZT706S and are prepared to take the
-risk, test reports are especially valuable. You can back up the factory block first (optional, see the
-[README](README.md#optional-back-up-the-factory-block)) and open an issue with your results,
-even if everything works.
+The ZT706S build runs on users' devices, but the maintainer does not own one and many features are
+untested on that model. If you own a ZT706S, test reports are especially valuable. You can back up
+the factory block first (optional, see the [README](README.md#optional-back-up-the-factory-block))
+and open an issue with your results, even if everything works.
 
 ## Building
 
