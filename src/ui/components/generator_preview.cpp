@@ -12,17 +12,25 @@ lv_obj_t *GeneratorPreview::create(lv_obj_t *parent) {
     lv_obj_add_event_cb(object_, draw, LV_EVENT_DRAW_MAIN, this);
     return object_;
 }
-void GeneratorPreview::update(const generator::Settings &settings, uint32_t color) {
+void GeneratorPreview::update(const generator::Settings &settings, uint32_t color, const uint16_t *samples, unsigned points, uint32_t revision) {
     char level[sizeof level_];
     generator::LevelText::describe(settings, level, sizeof level);
-    if (valid_ && shape_ == settings.shape && duty_ == settings.dutyPermille && color_ == color && !std::strcmp(level, level_))
+    const uint32_t shown = settings.arbitrary() && samples ? revision + 1 : 0; // Which waveform it draws (0: a built one).
+    if (valid_ && shape_ == settings.shape && duty_ == settings.dutyPermille && color_ == color && revision_ == shown && !std::strcmp(level, level_))
         return;
     std::memcpy(level_, level, sizeof level_);
-    auto preview = settings;
-    preview.level=generator::Level::Custom;
-    preview.minimumCode = 0;
-    preview.maximumCode = 1000;
-    valid_ = generator::WaveTable::build(preview, samples_, 96);
+    revision_ = shown;
+    if (settings.arbitrary()) { // The loaded codes, one in points/96 (their full 0..4095 span on the 0..1000 grid).
+        valid_ = samples && generator::ArbitraryLimits::points(points);
+        for (unsigned i = 0; valid_ && i < 96; ++i)
+            samples_[i] = uint16_t(uint32_t(samples[i * points / 96]) * 1000 / generator::ArbitraryLimits::MaximumCode);
+    } else {
+        auto preview = settings;
+        preview.level=generator::Level::Custom;
+        preview.minimumCode = 0;
+        preview.maximumCode = 1000;
+        valid_ = generator::WaveTable::build(preview, samples_, 96);
+    }
     shape_ = settings.shape;
     duty_ = settings.dutyPermille;
     color_ = color;

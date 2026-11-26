@@ -8,7 +8,10 @@ namespace openosc::ui {
 namespace {
 using Caps = generator::Capabilities;
 using Row = GeneratorEditor::Row;
-constexpr Row WaveRows[] = {Row::Shape, Row::Duty, Caps::Levels ? Row::Level : Row::Amplitude, Row::Frequency};
+constexpr Row DacWaveRows[] = {Row::Shape, Row::Duty, Row::Level, Row::Frequency, Row::File};
+constexpr Row ModuleWaveRows[] = {Row::Shape, Row::Duty, Row::Amplitude, Row::Frequency};
+constexpr const Row *WaveRows = Caps::Arbitrary ? DacWaveRows : ModuleWaveRows;
+constexpr unsigned WaveCount = Caps::Arbitrary ? sizeof DacWaveRows / sizeof *DacWaveRows : sizeof ModuleWaveRows / sizeof *ModuleWaveRows;
 // Layout last: the screen's block order (GENERATOR LAYOUT), not a setting of the output.
 constexpr Row DacParameters[] = {Row::Duty, Row::Level, Row::Drive, Row::MinimumCode, Row::MaximumCode, Row::Preset, Row::Frequency, Row::Layout};
 constexpr Row ModuleParameters[] = {Row::Duty, Row::Amplitude, Row::Preset, Row::Frequency, Row::Layout};
@@ -20,7 +23,7 @@ constexpr unsigned PresetOptions = PresetCount + (Caps::Levels ? 1 : 0);
 bool drives(const generator::Settings &s) { return s.shape == generator::Shape::Square && s.level == generator::Level::Dedicated; }
 }
 unsigned GeneratorEditor::count() const {
-    if (wave_) return sizeof WaveRows / sizeof *WaveRows;
+    if (wave_) return WaveCount;
     return Caps::Levels ? sizeof DacParameters / sizeof *DacParameters : sizeof ModuleParameters / sizeof *ModuleParameters;
 }
 GeneratorEditor::Row GeneratorEditor::row(unsigned index) const {
@@ -29,7 +32,9 @@ GeneratorEditor::Row GeneratorEditor::row(unsigned index) const {
 }
 PropertyKind GeneratorEditor::kind(unsigned index) const {
     switch (row(index)) {
-    case Row::Shape: case Row::Level: case Row::Preset: return PropertyKind::Choice;
+    case Row::Level: return draft_.settings.arbitrary() && wave_ ? PropertyKind::Info : PropertyKind::Choice; // AWG: the waveform's codes.
+    case Row::Shape: case Row::Preset: return PropertyKind::Choice;
+    case Row::File: return PropertyKind::Action; // MENU opens the AWG file list.
     case Row::Drive: return drives(draft_.settings) ? PropertyKind::Choice : PropertyKind::Info;
     case Row::Duty: return Caps::duty(draft_.settings.shape) ? PropertyKind::Number : PropertyKind::Info;
     case Row::Amplitude: case Row::MinimumCode: case Row::MaximumCode: return PropertyKind::Number;
@@ -39,12 +44,13 @@ PropertyKind GeneratorEditor::kind(unsigned index) const {
     return PropertyKind::Info;
 }
 void GeneratorEditor::name(unsigned index, char *output, size_t capacity) const {
-    static constexpr const char *names[] = {"Wave", "Duty", "Level", "Amplitude", "DAC min", "DAC max", "Preset", "Frequency", "Square out", "Layout"};
-    std::snprintf(output, capacity, "%s", names[unsigned(row(index))]);
+    static constexpr const char *names[] = {"Wave", "Duty", "Level", "Amplitude", "DAC min", "DAC max", "Preset", "Frequency", "Square out", "Layout", "AWG file"};
+    const Row r = row(index);
+    std::snprintf(output, capacity, "%s", r == Row::Frequency && wave_ && draft_.settings.arbitrary() ? "Sample rate" : names[unsigned(r)]);
 }
 unsigned GeneratorEditor::options(unsigned index) const {
     switch (row(index)) {
-    case Row::Shape: return 6;
+    case Row::Shape: return generator::OfferedShapes;
     case Row::Level: return 4;
     case Row::Preset: return PresetOptions;
     case Row::Drive: return drives(draft_.settings) ? 2 : 0;
@@ -64,7 +70,7 @@ unsigned GeneratorEditor::option(unsigned index) const {
 }
 void GeneratorEditor::optionName(unsigned index, unsigned option, char *output, size_t capacity) const {
     switch (row(index)) {
-    case Row::Shape: std::snprintf(output, capacity, "%s", generator::ShapeNames[option % 6]); break;
+    case Row::Shape: std::snprintf(output, capacity, "%s", generator::ShapeNames[option % generator::ShapeCount]); break;
     case Row::Level: std::snprintf(output, capacity, "%s", generator::Levels::Names[option % 4]); break;
     case Row::Drive: std::snprintf(output, capacity, "%s", option ? "PWM always" : "Factory: DAC <1kHz"); break;
     case Row::Preset:
@@ -75,6 +81,7 @@ void GeneratorEditor::optionName(unsigned index, unsigned option, char *output, 
     }
 }
 void GeneratorEditor::limit() {
+    if (draft_.settings.arbitrary()) return; // Its own rate: the other shapes' frequency is kept as it is.
     const uint64_t maximum = Caps::maximumMillihertz(draft_.settings.shape, draft_.settings.level, timerHz_);
     if (generator::Frequency::millihertz(draft_.settings.frequencyHz) > maximum) {
         draft_.settings.frequencyHz = generator::Frequency::rational(maximum); draft_.clamped = true;
@@ -143,6 +150,10 @@ void GeneratorEditor::adjust(unsigned index, int direction) {
 void GeneratorEditor::value(unsigned index, char *output, size_t capacity) const {
     char requested[24], maximum[24];
     switch (row(index)) {
+    case Row::Level:
+        if (wave_ && draft_.settings.arbitrary()) { std::snprintf(output, capacity, "DAC codes 0-4095"); return; }
+        PropertyList::value(index, output, capacity);
+        return;
     case Row::Duty:
         if (Caps::duty(draft_.settings.shape)) std::snprintf(output, capacity, "%u.%u%%", draft_.settings.dutyPermille / 10, draft_.settings.dutyPermille % 10);
         else std::snprintf(output, capacity, "Not available");
@@ -160,6 +171,11 @@ void GeneratorEditor::value(unsigned index, char *output, size_t capacity) const
         plot::Format::quantity(draft_.settings.frequencyHz.value(), "Hz", output, capacity);
         return;
     case Row::Layout: std::snprintf(output, capacity, ">"); return;
+    case Row::File: // The loaded waveform and its file, or what MENU does.
+        if (!arbitrary_.points) std::snprintf(output, capacity, "None: MENU to load");
+        else if (*arbitrary_.file) std::snprintf(output, capacity, "%s, %u pts", arbitrary_.file, arbitrary_.points);
+        else std::snprintf(output, capacity, "USB data, %u pts", arbitrary_.points);
+        return;
     case Row::Drive: // The choice, then the path it gives at this frequency (or the path of any other output).
         if (drives(draft_.settings))
             std::snprintf(output, capacity, "%s, now %s", generator::Levels::DriveNames[unsigned(draft_.settings.squareDrive) & 1],
@@ -167,6 +183,14 @@ void GeneratorEditor::value(unsigned index, char *output, size_t capacity) const
         else std::snprintf(output, capacity, "%s", generator::Levels::pwm(draft_.settings) ? "PWM" : "DAC");
         return;
     case Row::Frequency:
+        if (wave_ && draft_.settings.arbitrary()) { // The rate, and the frequency it repeats the loaded points at.
+            plot::Format::quantity(draft_.settings.arbitrarySamplesPerSecond, "S/s", requested, sizeof requested);
+            if (arbitrary_.points) {
+                plot::Format::quantity(double(draft_.settings.arbitrarySamplesPerSecond) / arbitrary_.points, "Hz", maximum, sizeof maximum);
+                std::snprintf(output, capacity, "%s = %s", requested, maximum);
+            } else std::snprintf(output, capacity, "%s", requested);
+            return;
+        }
         plot::Format::quantity(draft_.settings.frequencyHz.value(), "Hz", requested, sizeof requested);
         plot::Format::quantity(Caps::maximumMillihertz(draft_.settings.shape, draft_.settings.level, timerHz_) / 1000.0, "Hz", maximum, sizeof maximum);
         std::snprintf(output, capacity, "%s (max %s)", requested, maximum);

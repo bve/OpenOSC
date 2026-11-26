@@ -7,6 +7,7 @@
 #include "openosc/ui/screens/screen_layout.hpp"
 #include "openosc/usb/instrument_usb.hpp"
 #include <cstring>
+#include <type_traits>
 
 namespace openosc {
 namespace {
@@ -262,6 +263,13 @@ bool ApplicationController::requestGeneratorOutput(bool on, uint32_t now) {
 void ApplicationController::followGeneratorOutput(uint32_t now) {
     if (startup_.follow(prefs_, GeneratorStartup::confirmed(data_.generator())) && prefs_.generatorStartup) changed(now);
 }
+bool ApplicationController::commitArbitrary(const void *owner, unsigned points, generator::ArbitrarySource source, uint32_t now) {
+    auto &output = data_.generator();
+    const bool done = output.commitArbitrary(owner, points, source) == std::remove_reference_t<decltype(output)>::Commit::Done;
+    followGeneratorOutput(now); // A failed restart while on may have left it off.
+    dataRefresh_ = true;
+    return done;
+}
 bool ApplicationController::applyGenerator(const generator::Settings &settings, uint32_t now) {
     if (data_.zeroBusy()) return false;
     if (!data_.generator().configure(settings)) return false;
@@ -290,6 +298,7 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     case Panel::Acquisition: scopeEditorKeys(keys, now); break;
     case Panel::Measurements: measurementKeys(keys, now); break;
     case Panel::Generator: generatorEditorKeys(keys, now); break;
+    case Panel::AwgFiles: awgFileKeys(keys, now); break;
     case Panel::Bode: bodeKeys(KeyEvents{}, keys, now); break; // onKeys hands it on first (MODE included).
     default: dataKeys(keys, now, fine); break;
     }

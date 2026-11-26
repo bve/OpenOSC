@@ -3,6 +3,7 @@
 #include "openosc/scpi/backend.hpp"
 #include "openosc/acquisition/mailbox.hpp"
 #include "openosc/decode/record_key.hpp"
+#include "openosc/generator/arbitrary.hpp"
 
 namespace openosc {
 class ApplicationController;
@@ -56,6 +57,11 @@ public:
     generator::Snapshot generator() const override;
     bool configureGenerator(const generator::Settings &) override;
     bool output(bool) override;
+    int16_t arbitraryBegin(const void *owner, uint32_t bytes) override;
+    void arbitraryByte(const void *owner, uint8_t byte) override;
+    int16_t arbitraryCommit(const void *owner) override;
+    void arbitraryAbort(const void *owner) override;
+    size_t arbitraryRead(uint32_t revision, uint32_t offset, uint8_t *out, size_t size) override;
     bool generatorStartup() const override;
     bool generatorStartup(bool restore) override;
     InterleaveStatus interleave() const override;
@@ -90,6 +96,11 @@ public:
     const char *version() const override;
 private:
     bool configure(const ScopeRequest &request, bool level); // configureScope and setTrigger: LevelIntent.
+    // SOUR:ARB:DATA's block, decoded into the generator's stage as it comes (remote/arbitrary.cpp).
+    struct ArbitraryStage {
+        const void *owner = nullptr; // The session whose block is staged (none: no stage of this backend's).
+        generator::ArbitraryBlock block;
+    } arbitrary_;
     ApplicationController &application_;
     scope::FrameLease lease_;
     decoding::RecordKey leaseKey_; // The lease's full key, frozen when it was taken (WAV:KEY?).

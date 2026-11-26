@@ -40,7 +40,10 @@ struct Preferences {
     static constexpr uint8_t UsbDisabled = 0, UsbEnabled = 1, UsbAuto = 2, UsbControllerCount = 3;
     uint8_t usbController = UsbEnabled;
     BodePreferences bode; // Analyze > Bode setup (GitHub #124), in the file's scope object.
-    uint32_t generatorShape = 0, generatorDutyPermille = 500;
+    // Shape and duty in 16 bits each: the word they free holds the ZT703S AWG sample rate, S/s
+    // (generator::Settings::arbitrarySamplesPerSecond), so the size stays.
+    uint16_t generatorShape = 0, generatorDutyPermille = 500;
+    uint32_t generatorArbitraryRate = 1024000;
     bool menuLeftStep = false; // Settings > Display > Left key in menus. Uses the padding before generatorMillihertz.
     MenuContrast menuContrast = MenuContrast::Theme; // Settings > Display > Menu contrast (GitHub #44). The same padding.
     uint64_t generatorMillihertz = 1000000; // uint64: the ZT706S module reaches 10 MHz = 1e10 mHz.
@@ -63,7 +66,7 @@ struct Preferences {
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
                useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && unsigned(menuContrast) < MenuContrastCount && holdTime < 3 && usbController < UsbControllerCount && bode.valid() &&
-               generatorShape < 6 &&
+               generatorShape < generator::OfferedShapes && generator::ArbitraryLimits::rate(generatorArbitraryRate) &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&
                generatorDutyPermille >= generator::Capabilities::MinimumDutyPermille &&

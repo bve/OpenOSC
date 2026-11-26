@@ -20,6 +20,7 @@ size_t ThemeJson::encode(const Theme& theme, char* output, size_t capacity) {
     if (!lease) return 0;
     auto &document = *lease;
     document["schema"] = 1;
+    document["palette_revision"] = 1; // A deliberate MATH/CH2 match stays explicit after saving (#184).
     static constexpr const char *layouts[] = {"cards", "compact", "legacy"};
     if (unsigned(theme.layout) >= 3) return 0;
     document["layout"] = layouts[unsigned(theme.layout)];

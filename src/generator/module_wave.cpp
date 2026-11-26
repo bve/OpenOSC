@@ -25,7 +25,7 @@ uint16_t ModuleWave::limitMillivolts(Shape shape, uint64_t millihertz) {
     case Shape::Triangle: case Shape::HalfSine: case Shape::PositiveSine:
         return hertz < 1000000 ? 5000 : 4000;
     case Shape::Sawtooth: return 4000;
-    case Shape::Square: break;
+    case Shape::Square: case Shape::Arbitrary: break; // No AWG on the module (ModuleCapabilities::accepts).
     }
     return 5000;
 }
@@ -47,6 +47,7 @@ OPENOSC_FACTORY_FLOAT float ModuleWave::correction(Shape shape, uint32_t hertz, 
     case Shape::Triangle: case Shape::PositiveSine: if (hertz >= 1000000) raw = volts * 6.25f; break;
     case Shape::HalfSine: if (hertz >= 1000000) raw = volts * 5.0f; break;
     case Shape::Sawtooth: raw = volts * 5.0f; break;
+    case Shape::Arbitrary: break;
     }
     return f32(double(raw) * 1.2);
 }
@@ -122,6 +123,7 @@ void ModuleWave::samples(Shape shape, unsigned count, uint16_t code, unsigned du
         case Shape::HalfSine: value = code * std::sin(2 * pi * i / count); break; // Negative half: 0 below.
         case Shape::PositiveSine: value = code * std::sin(pi * i / count); break;
         case Shape::Sawtooth: value = count > 1 ? double(code) * i / (count - 1) : 0; break;
+        case Shape::Arbitrary: break;
         }
         const long rounded = std::lround(value);
         output[i] = uint8_t(rounded < 0 ? 0 : rounded > code ? code : rounded);
@@ -130,7 +132,7 @@ void ModuleWave::samples(Shape shape, unsigned count, uint16_t code, unsigned du
 bool ModuleWave::build(const Settings &settings, bool enabled, Frame &frame) {
     frame = {};
     const uint64_t millihertz = Frequency::millihertz(settings.frequencyHz);
-    if (!settings.valid() || !millihertz) return false;
+    if (!settings.valid() || settings.arbitrary() || !millihertz) return false;
     uint8_t wave[MaximumSamples];
     const Shape shape = settings.shape;
     uint64_t target = millihertz;

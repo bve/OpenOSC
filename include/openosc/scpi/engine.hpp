@@ -7,13 +7,15 @@
 
 namespace openosc::scope { class Measurements; }
 namespace openosc::scpi {
-class Engine {
+class Engine final : private BlockSink {
 public:
     // Bound of a generator operation's wait (above generator::ModuleLink::ExchangeMs, checked in generator.cpp).
     static constexpr uint32_t GeneratorMs = 6000;
     // Bound of a DMM operation's wait (function, AUTO, range: above their own deadlines, checked in meter.cpp).
     static constexpr uint32_t OperationMs = 8000;
-    explicit Engine(Backend &backend) : backend_(backend) {}
+    explicit Engine(Backend &backend) : backend_(backend) { parser_.sink(this); }
+    Engine(const Engine &) = delete;
+    Engine &operator=(const Engine &) = delete;
     bool feed(uint8_t byte, uint32_t now);
     bool endMessage(uint32_t now);
     void poll(uint32_t now);
@@ -40,6 +42,15 @@ private:
     bool meterCommand(const Command &command);
     bool meterHoldCommand(const Command &command); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
     bool generatorCommand(const Command &command);
+    bool arbitraryCommand(const Command &command); // SOURce:ARBitrary: and SOUR:FUNC ARB's frequency (arbitrary.cpp).
+    // BlockSink: SOUR:ARB:DATA's block goes to the backend's stage as it comes (arbitrary.cpp).
+    int16_t blockBegin(const char *header, uint32_t bytes) override;
+    void blockByte(uint8_t byte) override { backend_.arbitraryByte(this, byte); }
+    void blockAbort() override { backend_.arbitraryAbort(this); }
+    void dropBlock() { backend_.arbitraryAbort(this); } // A taken block's stage, with the input that held it.
+    // SOUR:ARB:DATA?: the loaded waveform as a definite block (Backend::arbitraryRead), pinned to its revision.
+    bool arbitraryBinary_ = false;
+    uint32_t arbitraryRevision_ = 0, arbitraryAt_ = 0, arbitraryBytes_ = 0;
     bool decodeCommand(const Command &command); // DECode: (decode.cpp).
     bool systemCommand(const Command &command); // Idle settings and MMEMory: (system.cpp), either profile.
     void endFile();

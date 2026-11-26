@@ -7,6 +7,7 @@
 namespace openosc::scpi {
 static_assert(generator::ModuleLink::ExchangeMs < Engine::GeneratorMs, "A module exchange ends before the SCPI wait");
 bool Engine::generatorCommand(const Command &c) {
+    if (arbitraryCommand(c)) return true;
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
     const bool shape = match("SOURce:FUNCtion"), frequency = match("SOURce:FREQuency"), duty = match("SOURce:PULSe:DCYCle"), output = match("OUTPut");
     const bool level=match("SOURce:LEVel:PROFile"), low=match("SOURce:LEVel:LOW"), high=match("SOURce:LEVel:HIGH");
@@ -30,6 +31,10 @@ bool Engine::generatorCommand(const Command &c) {
     auto settings = snapshot.requested;
     if (c.query) {
         if (output) reply("%u", backend_.generator().enabled);
+        else if (frequency && settings.arbitrary()) { // The waveform's repetition: rate / points.
+            if (snapshot.arbitraryPoints) number(double(settings.arbitrarySamplesPerSecond) / snapshot.arbitraryPoints);
+            else error(-230, true);
+        }
         else if (frequency) number(settings.frequencyHz.value());
         else if (duty) number(settings.dutyPermille / 10.);
         else if (amplitude) number(settings.amplitudeMillivolts / 1000.);
@@ -37,7 +42,7 @@ bool Engine::generatorCommand(const Command &c) {
         else if (drive) reply("%s", settings.squareDrive == generator::SquareDrive::Pwm ? "PWM" : "FACT");
         else if (path) reply("%s", generator::Levels::pwm(settings) ? "PWM" : "DAC");
         else if (low || high) { const auto codes=generator::Levels::codes(settings); reply("%u",low ? codes.minimum : codes.maximum); }
-        else { constexpr const char *names[] = {"SIN","SQU","TRI","HALF","POS","RAMP"}; reply("%s", names[unsigned(settings.shape)]); }
+        else { constexpr const char *names[] = {"SIN","SQU","TRI","HALF","POS","RAMP","ARB"}; reply("%s", names[unsigned(settings.shape) % generator::ShapeCount]); }
         return true;
     }
     if (output) {
@@ -63,9 +68,15 @@ bool Engine::generatorCommand(const Command &c) {
         settings.level=generator::Level::Custom;
         if (!settings.valid()) { error(-222); return true; }
     } else if (shape) {
-        constexpr const char *names[] = {"SINusoid","SQUare","TRIangle","HALF","POSitive","RAMP"};
-        unsigned i = 0; while (i < 6 && !Header::word(c.argument, names[i])) ++i;
-        if (i == 6) { error(-224); return true; } settings.shape = generator::Shape(i);
+        constexpr const char *names[] = {"SINusoid","SQUare","TRIangle","HALF","POSitive","RAMP","ARBitrary"};
+        unsigned i = 0; while (i < generator::OfferedShapes && !Header::word(c.argument, names[i])) ++i;
+        if (i == generator::OfferedShapes) { error(-224); return true; } settings.shape = generator::Shape(i);
+    } else if (frequency && settings.arbitrary()) { // Arbitrary: the rate that repeats the waveform at this frequency.
+        double value; if (!argument(c, value, Header::Unit::Frequency)) return true;
+        if (!snapshot.arbitraryPoints) { error(-221); return true; }
+        const double rate = std::round(value * snapshot.arbitraryPoints);
+        if (!(rate >= 0) || rate > 4294967295.0 || !generator::ArbitraryLimits::rate(uint32_t(rate), snapshot.timerHz)) { error(-222); return true; }
+        settings.arbitrarySamplesPerSecond = uint32_t(rate);
     } else if (frequency) {
         double value; if (!argument(c, value, Header::Unit::Frequency)) return true;
         const double millihertz = std::round(value * 1000);

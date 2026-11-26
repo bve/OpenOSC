@@ -10,13 +10,13 @@
 namespace openosc::scpi {
 bool Engine::feed(uint8_t byte, uint32_t now) {
     if (!parser_.feed(byte)) return false;
-    inputAt_ = now; inputPending_ = byte != '\n'; return true;
+    inputAt_ = now; inputPending_ = parser_.inBlock() || byte != '\n'; return true; // An LF inside a block is data.
 }
 bool Engine::endMessage(uint32_t now) {
     if (!parser_.endMessage()) return false;
     inputAt_ = now; inputPending_ = false; return true;
 }
-void Engine::abortInput() { parser_.reset(); inputPending_ = false; }
+void Engine::abortInput() { parser_.reset(); dropBlock(); inputPending_ = false; }
 void Engine::endDecode() {
     if (decodeTicket_) backend_.decodeEnd(decodeTicket_);
     decodeTicket_ = decodeTotal_ = decodeSent_ = 0;
@@ -54,16 +54,16 @@ void Engine::discardOutput() {
     ++generation_;
     endMeasure(); backend_.releaseFrame();
     endDecode(); endScreen(); endFile(); endWave();
-    responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = 0;
-    binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
+    responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = arbitraryAt_ = arbitraryBytes_ = 0;
+    binary_ = suffix_ = waitingOperation_ = waitingReading_ = waitingWaveform_ = waitingGenerator_ = screenBinary_ = arbitraryBinary_ = false;
     completion_ = Completion::None;
 }
 void Engine::reset() {
     ++generation_;
-    endMeasure(); parser_.reset(); errors_.clear(); backend_.endSession(); endDecode(); endScreen(); endFile(); endWave();
-    responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = 0;
+    endMeasure(); parser_.reset(); dropBlock(); errors_.clear(); backend_.endSession(); endDecode(); endScreen(); endFile(); endWave();
+    responseSize_ = responseAt_ = binaryBytes_ = binarySent_ = padding_ = screenAt_ = arbitraryAt_ = arbitraryBytes_ = 0;
     binary_ = suffix_ = waitingOperation_ = waitingReading_ = inputPending_ = false;
-    waitingWaveform_ = waitingGenerator_ = screenBinary_ = false;
+    waitingWaveform_ = waitingGenerator_ = screenBinary_ = arbitraryBinary_ = false;
     completion_ = Completion::None;
     waveStart_ = 1; waveStop_ = 0; wavePoints_ = 0; wavePeak_ = false; waveChannel_ = preambleChannels_ = 0; ese_ = sre_ = 0;
     profileKnown_ = false;
@@ -78,7 +78,7 @@ size_t Engine::unstaged() const {
 size_t Engine::available() const {
     return responseSize_ - responseAt_ + (binary_ ? (peakStream_ ? waveEnd_ - waveAt_ : binaryBytes_ - binarySent_) : 0) +
            (decodeBinary_ ? decodeTotal_ - decodeSent_ : 0) +
-           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + (fileBinary_ ? stageEnd_ - stageAt_ : 0) + padding_ + unsigned(suffix_ && !more()); // The LF only with the file's last bytes.
+           (screenBinary_ ? ScreenBytes - screenAt_ : 0) + (arbitraryBinary_ ? arbitraryBytes_ - arbitraryAt_ : 0) + (fileBinary_ ? stageEnd_ - stageAt_ : 0) + padding_ + unsigned(suffix_ && !more()); // The LF only with the file's last bytes.
 }
 size_t Engine::read(uint8_t *output, size_t capacity) {
     if (!output || !capacity) return 0;
@@ -120,14 +120,21 @@ size_t Engine::read(uint8_t *output, size_t capacity) {
         else { used += n; screenAt_ += uint32_t(n); }
         if (screenAt_ == ScreenBytes) endScreen(); // Every byte sent (or owed as padding): the buffer is free.
     }
+    // SOUR:ARB:DATA?: the waveform loaded when it was asked; another one loaded meanwhile pads it.
+    if (arbitraryBinary_ && used < capacity && responseAt_ == responseSize_ && arbitraryAt_ < arbitraryBytes_) {
+        const size_t want = std::min<size_t>(arbitraryBytes_ - arbitraryAt_, capacity - used);
+        const size_t n = backend_.arbitraryRead(arbitraryRevision_, arbitraryAt_, output + used, want);
+        if (!n) { padding_ += arbitraryBytes_ - arbitraryAt_; arbitraryAt_ = arbitraryBytes_; errors_.push(-230); }
+        else { used += n; arbitraryAt_ += uint32_t(n); }
+    }
     if (fileBinary_ && used < capacity && responseAt_ == responseSize_ && stageAt_ < stageEnd_) { // Staged bytes only.
         const size_t n = std::min<size_t>(stageEnd_ - stageAt_, capacity - used);
         std::memcpy(output + used, stage_ + stageAt_, n); used += n; stageAt_ = uint16_t(stageAt_ + n);
     }
     while (used < capacity && padding_) { output[used++] = 0; --padding_; }
     if (used < capacity && suffix_ && !padding_ && (!binary_ || binarySent_ == binaryBytes_) && (!decodeBinary_ || decodeSent_ == decodeTotal_) &&
-        (!screenBinary_ || screenAt_ == ScreenBytes) && fileDone()) {
-        output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false; screenBinary_ = false;
+        (!screenBinary_ || screenAt_ == ScreenBytes) && (!arbitraryBinary_ || arbitraryAt_ == arbitraryBytes_) && fileDone()) {
+        output[used++] = '\n'; suffix_ = false; binary_ = false; decodeBinary_ = false; screenBinary_ = false; arbitraryBinary_ = false;
         endFile(); endWave();
     }
     if (!available()) responseSize_ = responseAt_ = 0;
@@ -155,8 +162,9 @@ void Engine::poll(uint32_t now) {
     const uint32_t faults = backend_.generator().faults;
     if (generatorFaultsKnown_ && faults != generatorFaults_) errors_.push(-240);
     generatorFaults_ = faults; generatorFaultsKnown_ = true;
-    if (inputPending_ && int32_t(now - inputAt_) >= 3000) {
-        parser_.reset(); inputPending_ = false; errors_.push(-102);
+    if (inputPending_ && int32_t(now - inputAt_) >= 3000) { // A block cut short (or after #0) too: its stage goes.
+        errors_.push(parser_.inBlock() ? -161 : -102);
+        parser_.reset(); dropBlock(); inputPending_ = false;
     }
     fillStage(); // The next file bytes, here in the foreground.
     fillWave();  // And the next peak pairs.
@@ -212,6 +220,7 @@ void Engine::dispatch(const Command &c) {
     uint32_t head; std::memcpy(&head, c.header, sizeof head);
     usbtrace::mark(usbtrace::Tag::Command, head);
     if (c.error) { error(c.error, c.query); return; }
+    if (c.block) { arbitraryCommand(c); return; } // Only SOUR:ARB:DATA takes a block (blockBegin).
     const bool queryArgument = Header::matches(c.header, "WAVeform:MEASure") || Header::matches(c.header, "WAVeform:ENVelope") ||
                                Header::matches(c.header, "MMEMory:CATalog") ||
                                Header::matches(c.header, "MMEMory:DATA");

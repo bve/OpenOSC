@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/generator/module_link.hpp"
 #include "openosc/generator/module_recovery.hpp"
+#include "openosc/generator/arbitrary.hpp"
 #include "openosc/platform/resources.hpp"
 
 namespace openosc::generator {
@@ -47,6 +48,14 @@ public:
     const Settings &settings() const { return settings_; }
     const OutputPlan &plan() const { return plan_; }
     Snapshot snapshot() const { return {settings_, plan_, status(), requested_, 0, 0, OutputFault::None}; } // No DAC: no clock limit, no stream faults.
+    // No Arbitrary waveform (ModuleCapabilities::Arbitrary): the module plays its own shapes only.
+    ArbitraryBanks::Stage beginArbitrary(const void *) { return ArbitraryBanks::Stage::Unsupported; }
+    bool putArbitrary(const void *, unsigned, uint16_t) { return false; }
+    enum class Commit : uint8_t { Done, Lost, Refused };
+    Commit commitArbitrary(const void *, unsigned, ArbitrarySource) { return Commit::Refused; }
+    void abortArbitrary(const void *) {}
+    bool holdsArbitrary(const void *) const { return false; }
+    const uint16_t *arbitrarySamples() const { return nullptr; }
 
 private:
     bool start();

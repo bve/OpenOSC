@@ -99,6 +99,10 @@ or `DMX512`. The CSV returned by `DEC:DATA?` uses the protocol names `uart`, `rs
 `ac_coupled` means an RS-485 or DMX512 source channel was AC coupled and nothing
 was decoded.
 
+## Arbitrary waveform (ZT703S)
+
+`SOUR:ARB:DATA` loads 2 to 1024 DAC codes as a binary block of little-endian int16 values, and `SOUR:ARB:DATA?` reads them back. [Arbitrary waveform generator](AWG.md) lists the commands, limits and errors.
+
 ## Idle settings
 
 | Command | Units and choices |

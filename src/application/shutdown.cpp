@@ -32,6 +32,7 @@ public:
     void prepare() override {
         a_.imageReader_.cancel(); a_.images_.cancelClear();
         a_.closeSessions(false);
+        a_.closeAwgFiles(false);
         cancelCsvFiles();
     }
     bool screenshotBusy() override { return a_.shots_.busy(); }

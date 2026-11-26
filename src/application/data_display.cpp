@@ -76,6 +76,7 @@ void ApplicationController::refreshSoftKeys() {
     }
     else if (panel_ == Panel::Images) keys = imageSoftKeys();
     else if (panel_ == Panel::Sessions) keys = sessionSoftKeys();
+    else if (panel_ == Panel::AwgFiles) keys = awgSoftKeys();
     else if (panel_ == Panel::Generator || panel_ == Panel::Frequency) {
         using Generator = ui::GeneratorKeys::Panel;
         ui::GeneratorKeys generator;
@@ -183,7 +184,7 @@ void ApplicationController::displayData(uint32_t now) {
                               : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
     // Bode (#72): the sweep's own service takes its records; no readouts, no decoder, no trace meanwhile.
-    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Sessions || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::GainMatch ||
+    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Sessions || panel_==Panel::AwgFiles || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::GainMatch ||
         panel_==Panel::Bode) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
         dataAt_ = now;

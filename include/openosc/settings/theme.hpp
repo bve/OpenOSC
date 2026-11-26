@@ -28,7 +28,9 @@ struct Theme {
     uint32_t background = 0x0b1120, foreground = 0xe2e8f0, accent = 0x38bdf8;
     uint32_t grid = 0x243449, channel1 = 0xfacc15, channel2 = 0x38bdf8;
     uint32_t panel = 0x132034, muted = 0x94a3b8, generator = 0xfb923c;
-    uint32_t math=0x38bdf8,reference=0xa78bfa,cursor=0xe2e8f0;
+    // MATH in the palette's Green: apart from CH1's yellow, CH2's sky and the reference violet (#184).
+    static constexpr uint32_t StockMath = 0x4ade80;
+    uint32_t math=StockMath,reference=0xa78bfa,cursor=0xe2e8f0;
     ElementStyle elements[InstrumentModeCount][ElementCount];
     static Theme defaults(LayoutPreset layout = LayoutPreset::Cards);
 };

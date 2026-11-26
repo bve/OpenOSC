@@ -21,6 +21,8 @@ const char *ErrorQueue::message(int16_t code) {
     case -113: return "Undefined header";
     case -114: return "Header suffix out of range";
     case -131: return "Invalid suffix";
+    case -161: return "Invalid block data";
+    case -168: return "Block data not allowed";
     case -200: return "Execution error";
     case -221: return "Settings conflict";
     case -222: return "Data out of range";

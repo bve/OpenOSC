@@ -1,4 +1,5 @@
 #include "openosc/application/controller.hpp"
+#include "openosc/generator/capabilities.hpp"
 #include <cstdio>
 #include "openosc/platform/input.hpp"
 #include "openosc/ui/scope/trace_move.hpp"
@@ -108,9 +109,9 @@ void ApplicationController::frequencyPanelKeys(uint32_t keys, uint32_t now) {
     if (keys & Keypad::F2) frequencyEditor_.nextUnit();
     if (keys & Keypad::Menu) {
         auto settings = data_.generator().settings();
-        settings.frequencyHz = generator::Frequency::rational(frequencyEditor_.value());
+        generator::Tuning::set(settings, frequencyEditor_.value());
         if (!applyGenerator(settings, now)) {
-            view_.notify(Tooltip::Unavailable, "Unsupported output frequency", now);
+            view_.notify(Tooltip::Unavailable, settings.arbitrary() ? "Unsupported sample rate" : "Unsupported output frequency", now);
             return;
         }
         closePanel();

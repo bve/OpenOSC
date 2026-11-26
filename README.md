@@ -272,6 +272,7 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Rearrangeable screen (**Settings → Display → Generator layout**)
 - ZT703S: square output as in the stock firmware (DAC below 1 kHz, PWM from 1 kHz) or PWM
   always; Reference 1 kHz preset
+- ZT703S: [arbitrary waveform playback](docs/AWG.md) from a CSV file or a binary SCPI/VISA upload
 - ZT706S: its external generator module, up to 10 MHz
 
 **USB and remote control**
@@ -283,6 +284,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - [Fyfar](https://github.com/Fyfar) built a web app for the oscilloscope, multimeter, signal generator
   and Bode analyzer.
   It connects over USB via Web Serial. [OpenOSC Panel](https://github.com/Fyfar/openosc-panel)
+- [Flavio Morsoletto (fletto2)](https://github.com/fletto2) built a desktop app for Windows, macOS and
+  Linux with a live oscilloscope view and multimeter and generator panels. It uses OpenOSC's
+  desktop SCPI extensions over USB. [zoyi_gui](https://github.com/fletto2/zoyi_gui)
 - `SYSTem:KEY <name>[,<ms>]` presses a panel key through the real input path: `F1`..`F4`, `MENU`, `UP`,
   `DOWN`, `LEFT`, `RIGHT`, `MODE`, `HOLD`, `AUTO`, `REL`, held for `<ms>` (default 100, 30 to 10000);
   `*OPC?` answers when the key is released and its press has been handled. The long press (1 s; 2 s

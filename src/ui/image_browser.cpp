@@ -20,6 +20,10 @@ void ApplicationView::sessions(const ui::ImageList &list) {
     menuFrame("DMM SESSIONS");
     imageBrowser_.list(menu_,menuPalette_,list);
 }
+void ApplicationView::awgFiles(const ui::ImageList &list) {
+    menuFrame("AWG FILES");
+    imageBrowser_.list(menu_,menuPalette_,list);
+}
 void ApplicationView::sessionTrend(const char *name, ui::SessionTrendView &view, const ui::SessionTrendData &data, bool rebuild) {
     if (rebuild || !sessionTrendLive_ || sessionTrend_ != &view || lv_obj_is_hidden(menu_)) {
         menuFrame(name);

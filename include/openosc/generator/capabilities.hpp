@@ -22,6 +22,7 @@ struct ModuleCapabilities {
     }
     static bool duty(Shape shape) { return shape == Shape::Square; }
     static uint16_t amplitudeLimitMillivolts(Shape shape, uint64_t millihertz) { return ModuleWave::limitMillivolts(shape, millihertz); }
+    static constexpr bool Arbitrary = false; // The module's own shapes only (no AWG).
     // The highest sine the module plays at `amplitudeMillivolts` as set (its limit for that frequency not
     // below it) and represents exactly: ClockHz/n, n samples of one tick each (ModuleWave::timing finds
     // that very n for it); 0 for an amplitude no frequency takes. 10 MHz at 3 V or less, 9.52 MHz at
@@ -40,7 +41,7 @@ struct ModuleCapabilities {
     // this frequency holds (1 % needs 50 samples or more).
     static bool accepts(const Settings &s, uint32_t = 0) {
         const uint64_t millihertz = Frequency::millihertz(s.frequencyHz);
-        return s.valid() && millihertz >= MinimumMillihertz && millihertz <= maximumMillihertz(s.shape) &&
+        return s.valid() && !s.arbitrary() && millihertz >= MinimumMillihertz && millihertz <= maximumMillihertz(s.shape) &&
                s.dutyPermille >= MinimumDutyPermille && s.dutyPermille <= MaximumDutyPermille &&
                !(s.amplitudeMillivolts % AmplitudeStepMillivolts) && // The factory's 0.1 V grid, everywhere.
                s.amplitudeMillivolts <= amplitudeLimitMillivolts(s.shape, millihertz) &&
@@ -49,15 +50,38 @@ struct ModuleCapabilities {
 };
 using Capabilities = std::conditional_t<board::Current::Features.generator == board::GeneratorDriver::SerialModule,
                                         ModuleCapabilities, DacCapabilities>;
+// The shapes the board offers (UI lists, SCPI, the settings file): the six, and Arbitrary on the DAC.
+inline constexpr unsigned OfferedShapes = Capabilities::Arbitrary ? ShapeCount : StandardShapes;
+// The value the FREQUENCY editor and the screen's Left/Right steps change, in thousandths (GitHub
+// #175): a shape's frequency in mHz, the Arbitrary waveform's sample rate in mS/s (whole S/s when set:
+// its frequency is that rate over its points).
+struct Tuning {
+    static uint64_t value(const Settings &s) {
+        return s.arbitrary() ? uint64_t(s.arbitrarySamplesPerSecond) * 1000 : Frequency::millihertz(s.frequencyHz);
+    }
+    static void set(Settings &s, uint64_t milli) {
+        if (s.arbitrary()) s.arbitrarySamplesPerSecond = uint32_t((milli + 500) / 1000);
+        else s.frequencyHz = Frequency::rational(milli);
+    }
+    static uint64_t minimum(const Settings &s) {
+        return s.arbitrary() ? uint64_t(ArbitraryLimits::MinimumSamplesPerSecond) * 1000 : Capabilities::MinimumMillihertz;
+    }
+    static uint64_t maximum(const Settings &s, uint32_t timerHz) {
+        return s.arbitrary() ? uint64_t(ArbitraryLimits::maximumSamplesPerSecond(timerHz)) * 1000
+                             : Capabilities::maximumMillihertz(s.shape, s.level, timerHz);
+    }
+};
 // What sets the output level, in words for the generator screen: ZT703S its level profile
 // (Levels), ZT706S the module's amplitude as set, nominal (its output has not been measured).
 struct LevelText {
     static void name(const Settings &s, char *output, size_t capacity) { // "Dedicated", "3.0 V".
-        if (Capabilities::Levels) std::snprintf(output, capacity, "%s", Levels::Names[unsigned(s.level) % 4]);
+        if (s.arbitrary()) std::snprintf(output, capacity, "DAC codes"); // The waveform's own, unscaled.
+        else if (Capabilities::Levels) std::snprintf(output, capacity, "%s", Levels::Names[unsigned(s.level) % 4]);
         else std::snprintf(output, capacity, "%u.%u V", s.amplitudeMillivolts / 1000, s.amplitudeMillivolts % 1000 / 100);
     }
     static void describe(const Settings &s, char *output, size_t capacity) {
-        if (Capabilities::Levels) Levels::describe(s, output, capacity);
+        if (s.arbitrary()) std::snprintf(output, capacity, "AWG: the waveform's DAC codes 0-4095");
+        else if (Capabilities::Levels) Levels::describe(s, output, capacity);
         else std::snprintf(output, capacity, "Amplitude %u.%u V, module nominal", s.amplitudeMillivolts / 1000,
                            s.amplitudeMillivolts % 1000 / 100);
     }

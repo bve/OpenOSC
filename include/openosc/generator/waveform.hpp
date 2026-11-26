@@ -4,7 +4,10 @@
 #include <cstddef>
 
 namespace openosc::generator {
-enum class Shape : uint8_t { Sine, Square, Triangle, HalfSine, PositiveSine, Sawtooth };
+// Arbitrary (ZT703S only, GitHub #175, docs/AWG.md): DAC codes loaded from a CSV file or over SCPI,
+// played at its own sample rate. The board's Capabilities say whether it is offered.
+enum class Shape : uint8_t { Sine, Square, Triangle, HalfSine, PositiveSine, Sawtooth, Arbitrary };
+inline constexpr unsigned StandardShapes = 6, ShapeCount = 7;
 enum class Level : uint8_t { Dedicated, Low, High, Custom };
 // How a Dedicated square leaves the ZT703S: Factory as GEN 703S apply 2406E65C (DAC samples 0/4000
 // below 1 kHz, TIM13 PWM from 1 kHz), or Pwm at every frequency (no DAC stream, exact duty).
@@ -16,11 +19,15 @@ struct Settings {
     Rational frequencyHz{1000, 1};
     uint16_t minimumCode = 1000, maximumCode = 3000, dutyPermille = 500;
     uint16_t amplitudeMillivolts = 3000; // ZT706S module only (factory default 3.0 V); ZT703S levels use codes.
+    // The Arbitrary waveform's sample rate (S/s): its own setting, so the other shapes keep their
+    // frequency. The waveform repeats at arbitrarySamplesPerSecond / points (ArbitraryLimits).
+    uint32_t arbitrarySamplesPerSecond = 1024000;
     bool valid() const;
+    bool arbitrary() const { return shape == Shape::Arbitrary; }
     bool same(const Settings &other) const {
         return shape == other.shape && level == other.level && squareDrive == other.squareDrive && minimumCode == other.minimumCode && maximumCode == other.maximumCode &&
-            dutyPermille == other.dutyPermille && amplitudeMillivolts == other.amplitudeMillivolts && uint64_t(frequencyHz.numerator) * other.frequencyHz.denominator ==
-                uint64_t(other.frequencyHz.numerator) * frequencyHz.denominator;
+            dutyPermille == other.dutyPermille && amplitudeMillivolts == other.amplitudeMillivolts && arbitrarySamplesPerSecond == other.arbitrarySamplesPerSecond &&
+            uint64_t(frequencyHz.numerator) * other.frequencyHz.denominator == uint64_t(other.frequencyHz.numerator) * frequencyHz.denominator;
     }
 };
 // The ZT703S calibration reference (GitHub #32): the factory main OUTPUT's selector 0, a TIM13 PWM
@@ -74,7 +81,8 @@ public:
     static void describe(const Settings &settings, char *output, size_t capacity);
     static constexpr const char *Names[] = {"Dedicated", "Low", "High", "Custom"};
 };
-inline constexpr const char *ShapeNames[] = {"Sine", "Square", "Triangle", "Half sine", "Positive sine", "Sawtooth"};
+inline constexpr const char *ShapeNames[] = {"Sine", "Square", "Triangle", "Half sine", "Positive sine", "Sawtooth", "Arbitrary"};
+static_assert(sizeof ShapeNames / sizeof *ShapeNames == ShapeCount);
 // ZT703S: DAC2 + BDMA + TIM6 (TIM13 PWM for the dedicated square) on PA6. Frequencies in millihertz.
 struct DacCapabilities {
     static constexpr bool Levels = true, Amplitude = false;
@@ -116,7 +124,17 @@ struct DacCapabilities {
             return highest;
         }
         constexpr uint64_t maxima[] = {344000000, 1000000000, 100000000, 129000000, 294000000, 100000000};
-        if (unsigned(shape) >= 6) return 0;
+        // Arbitrary plays at its own sample rate (ArbitraryLimits): the frequency kept for the other
+        // shapes meanwhile may be any of theirs.
+        if (shape == Shape::Arbitrary) {
+            uint64_t highest = 0;
+            for (unsigned other = 0; other < StandardShapes; ++other) {
+                const uint64_t top = maximumMillihertz(Shape(other), level, timerHz);
+                if (top > highest) highest = top;
+            }
+            return highest;
+        }
+        if (unsigned(shape) >= StandardShapes) return 0;
         // A square on the DAC: 100 kHz. A Dedicated square is PWM from 1 kHz up (either drive): no stream.
         if (shape == Shape::Square && level == Level::Dedicated) return maxima[1];
         const uint64_t stream = uint64_t(timerHz) * 1000 / (uint64_t(minimumDivider(timerHz)) * MinimumPoints);
@@ -125,13 +143,34 @@ struct DacCapabilities {
     }
     static bool duty(Shape shape) { return shape == Shape::Square; }
     static uint16_t amplitudeLimitMillivolts(Shape, uint64_t) { return 5000; } // Not used: the module's field is kept as stored.
+    static constexpr bool Arbitrary = true;
     // Frequency within the shape and level at `timerHz` (0: any run mode; the timer plan checks what
     // it can represent).
-    static bool accepts(const Settings &s, uint32_t timerHz = 0) {
-        const double millihertz = s.frequencyHz.value() * 1000;
-        return s.valid() && millihertz >= MinimumMillihertz && millihertz <= double(maximumMillihertz(s.shape, s.level, timerHz));
-    }
+    static bool accepts(const Settings &s, uint32_t timerHz = 0);
 };
+// The Arbitrary waveform on the ZT703S DAC (GitHub #175, docs/AWG.md). Its samples live in one of the
+// two 1024-halfword SRAM4 banks the DAC stream already has (.generator: BDMA2 reaches SRAM4 only, and
+// SRAM4 has no other room), so a waveform holds MinimumPoints..MaximumPoints unscaled DAC codes
+// 0..MaximumCode. One DAC update a sample: the waveform repeats at rate / points. The rate is at least
+// MinimumSamplesPerSecond and at most the DAC stream's ceiling at the clock that runs (6.25 MS/s on
+// the 200 MHz profile, 10 MS/s on the others: DacCapabilities::minimumDivider).
+struct ArbitraryLimits {
+    static constexpr unsigned MinimumPoints = 2, MaximumPoints = 1024;
+    static constexpr uint16_t MaximumCode = 4095;
+    static constexpr uint32_t MinimumSamplesPerSecond = 1, MaximumSamplesPerSecond = DacCapabilities::MaximumSamplesPerSecond;
+    // `timerHz` 0: the highest of any run mode (what a stored setting may hold).
+    static uint32_t maximumSamplesPerSecond(uint32_t timerHz = 0) {
+        if (!timerHz) return MaximumSamplesPerSecond;
+        const uint32_t rate = timerHz / DacCapabilities::minimumDivider(timerHz);
+        return rate < MaximumSamplesPerSecond ? rate : MaximumSamplesPerSecond;
+    }
+    static bool rate(uint32_t samplesPerSecond, uint32_t timerHz = 0) {
+        return samplesPerSecond >= MinimumSamplesPerSecond && samplesPerSecond <= maximumSamplesPerSecond(timerHz);
+    }
+    static bool points(unsigned count) { return count >= MinimumPoints && count <= MaximumPoints; }
+};
+// Where the loaded Arbitrary samples came from (none after every reset: they live in RAM only).
+enum class ArbitrarySource : uint8_t { None, File, Remote };
 class WaveTable {
 public:
     static bool build(const Settings &settings, uint16_t *samples, size_t count);
@@ -142,7 +181,8 @@ struct OutputPlan {
     uint32_t compare = 0;
     TimerPlan timer;
     WideRational actualHz;
-    static bool calculate(const Settings &settings, uint32_t timerClockHz, OutputPlan &output);
+    // `points`: the loaded Arbitrary waveform's (ArbitraryLimits), only for that shape.
+    static bool calculate(const Settings &settings, uint32_t timerClockHz, OutputPlan &output, unsigned points = 0);
 };
 // Why the output stopped by itself (Output::service, a start after a clock change): Underrun DAC2
 // DMAUDR1, Transfer a BDMA2 transfer error, Limit the setting has no plan at the clock that runs.
@@ -163,5 +203,11 @@ struct Snapshot {
     uint32_t timerHz = 0;  // The DAC timer clock the limits are computed at (0: no DAC, the ZT706S module).
     uint32_t faults = 0;   // Stops the output made by itself so far (each one reported once).
     OutputFault fault = OutputFault::None; // The last of them.
+    // The loaded Arbitrary waveform (ZT703S): its points (0: none), where it came from, and a count
+    // that moves with every waveform loaded (SOUR:ARB:DATA? reads stop when it moves).
+    uint16_t arbitraryPoints = 0;
+    ArbitrarySource arbitrarySource = ArbitrarySource::None;
+    uint32_t arbitraryRevision = 0;
+    const uint16_t *arbitrarySamples = nullptr; // Its codes (never written while they are the loaded ones).
 };
 } // namespace openosc::generator

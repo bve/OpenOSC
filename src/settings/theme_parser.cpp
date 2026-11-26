@@ -100,14 +100,27 @@ bool ThemeParser::parse(const char* json, size_t bytes, Theme& output) {
     if(root.containsKey("plot")&&(!root["plot"].is<JsonObjectConst>()||!PlotJson::parse(root["plot"],candidate.plot)))return false;
     const auto colors = root["colors"];
     if (!colors.isNull() && !colors.is<JsonObjectConst>()) return false;
-    if (!color(colors["background"], candidate.background) || !color(colors["foreground"], candidate.foreground)
-        || !color(colors["accent"], candidate.accent) || !color(colors["grid"], candidate.grid)
-        || !color(colors["channel1"], candidate.channel1) || !color(colors["channel2"], candidate.channel2)) return false;
-    if (!color(colors["panel"], candidate.panel) || !color(colors["muted"], candidate.muted)
-        || !color(colors["generator"], candidate.generator)) return false;
-    // Apply palette defaults before per-element overrides.
-    candidate.math=candidate.accent;candidate.cursor=candidate.foreground;
-    if(!color(colors["math"],candidate.math)||!color(colors["reference"],candidate.reference)||!color(colors["cursor"],candidate.cursor))return false;
+    // Old generated files wrote all twelve palette entries, including the stock MATH in CH2's sky (#184).
+    // Match that complete palette so an explicit MATH colour in a custom file keeps its meaning.
+    bool legacyStock = !root.containsKey("palette_revision") && colors.size() == 12;
+    const auto paletteColor = [&](const char *name, uint32_t &value) {
+        const uint32_t stock = value;
+        const auto entry = colors[name];
+        if (!color(entry, value)) return false;
+        legacyStock &= !entry.isNull() && value == stock;
+        return true;
+    };
+    if (!paletteColor("background", candidate.background) || !paletteColor("foreground", candidate.foreground)
+        || !paletteColor("accent", candidate.accent) || !paletteColor("grid", candidate.grid)
+        || !paletteColor("channel1", candidate.channel1) || !paletteColor("channel2", candidate.channel2)
+        || !paletteColor("panel", candidate.panel) || !paletteColor("muted", candidate.muted)
+        || !paletteColor("generator", candidate.generator) || !paletteColor("reference", candidate.reference)) return false;
+    candidate.math = candidate.accent == candidate.channel1 || candidate.accent == candidate.channel2
+                     ? Theme::StockMath : candidate.accent;
+    candidate.cursor = candidate.foreground;
+    const auto math = colors["math"];
+    if (!paletteColor("cursor", candidate.cursor) || !color(math, candidate.math)) return false;
+    if (legacyStock && !math.isNull() && candidate.math == 0x38bdf8) candidate.math = Theme::StockMath;
     for (auto& screen : candidate.elements) for (auto& e : screen)
         e.color = e.color == 0x38bdf8 ? candidate.accent
                   : e.color == 0xfacc15 ? candidate.channel1

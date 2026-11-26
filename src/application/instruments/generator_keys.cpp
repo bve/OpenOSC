@@ -13,18 +13,24 @@ void ApplicationController::generatorKeys(uint32_t keys, uint32_t now) {
     if (keys & (Keypad::F4 | Keypad::HoldSave)) view_.focusParameter(3);
     if (keys & (Keypad::F2 | Keypad::Menu)) { openFrequencyEditor(); return; }
     if (keys & (Keypad::HoldSave | Keypad::F4)) {
-        if (!requestGeneratorOutput(!output.enabled(), now) && !output.enabled()) view_.notify(Tooltip::Critical, "Cannot enable output", now);
+        if (!requestGeneratorOutput(!output.enabled(), now) && !output.enabled()) // After a restart an AWG has nothing loaded.
+            view_.notify(Tooltip::Critical, output.settings().arbitrary() && !output.snapshot().arbitraryPoints ? "No AWG waveform loaded" : "Cannot enable output", now);
     }
     auto settings = output.settings();
-    uint64_t frequency = prefs_.generatorMillihertz;
     const uint32_t timerHz = output.snapshot().timerHz; // The DAC limits at the clock that runs.
-    const uint64_t maximum = Caps::maximumMillihertz(settings.shape, settings.level, timerHz);
     // The decade grid (GitHub #38): reversible steps, 1 kHz -> 2 kHz -> 1 kHz; exact values in FREQUENCY.
+    // Arbitrary: its sample rate on the same grid (Tuning).
     using Steps = generator::FrequencySteps;
-    if (keys & Keypad::Right) frequency = Steps::up(frequency, Caps::MinimumMillihertz, maximum);
-    if (keys & Keypad::Left) frequency = Steps::down(frequency, Caps::MinimumMillihertz, maximum);
-    settings.frequencyHz = generator::Frequency::rational(frequency);
-    if (Caps::duty(settings.shape)) {
+    using Tuning = generator::Tuning;
+    const uint64_t minimum = Tuning::minimum(settings), maximum = Tuning::maximum(settings, timerHz);
+    uint64_t tuned = settings.arbitrary() ? Tuning::value(settings) : prefs_.generatorMillihertz;
+    if (keys & Keypad::Right) tuned = Steps::up(tuned, minimum, maximum);
+    if (keys & Keypad::Left) tuned = Steps::down(tuned, minimum, maximum);
+    Tuning::set(settings, tuned);
+    const uint64_t frequency = generator::Frequency::millihertz(settings.frequencyHz);
+    if (settings.arbitrary()) {
+        // Its codes are the waveform's: Up/Down have no duty, level or amplitude to change.
+    } else if (Caps::duty(settings.shape)) {
         const int duty = int(settings.dutyPermille) + ((keys & Keypad::Up) ? 50 : (keys & Keypad::Down) ? -50 : 0);
         settings.dutyPermille = uint16_t(std::clamp<int>(duty, Caps::MinimumDutyPermille, Caps::MaximumDutyPermille));
     } else if (keys & (Keypad::Up | Keypad::Down)) {

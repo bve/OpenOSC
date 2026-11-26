@@ -20,6 +20,9 @@ struct Layout {
     static constexpr const char *Decode = "/openosc/DECODE";
     // Frequency response runs (CSV, BodeCsvFile): made by the application on its first save, as Decode.
     static constexpr const char *Fra = "/openosc/FRA";
+    // Arbitrary waveforms (CSV of DAC codes, docs/AWG.md): read by the ZT703S generator, which creates
+    // the directory when its file list first opens; files come from a computer over Recovery's USB disk.
+    static constexpr const char *Awg = "/openosc/AWG";
     // Parents before children: the order prepare() creates them in.
     static constexpr const char *Directories[] = {Root, Update, Backup, Settings, SettingsCopyDirectory, Ui, Calibration, Screenshots, Captures, Logs};
     // Empty directories the factory startup creates in the root after every reset. Not OpenOSC data:

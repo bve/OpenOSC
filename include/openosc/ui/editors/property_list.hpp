@@ -15,6 +15,8 @@ public:
     virtual const char *title() const = 0;
     virtual const char *notice() const { return nullptr; }
     virtual const generator::Settings *preview() const { return nullptr; }
+    // With an Arbitrary preview: the loaded waveform's codes (null: none), their count and revision.
+    virtual const uint16_t *previewSamples(unsigned &points, uint32_t &revision) const { points = 0; revision = 0; return nullptr; }
     virtual unsigned count() const = 0;
     virtual PropertyKind kind(unsigned row) const = 0;
     virtual void name(unsigned row, char *output, size_t capacity) const = 0;

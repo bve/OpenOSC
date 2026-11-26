@@ -17,23 +17,26 @@ void ApplicationController::generatorPanelKeys(uint32_t keys, uint32_t now) {
     if (key == FieldKey::Action && generatorEditor_.row(navigator_.row()) == ui::GeneratorEditor::Row::Layout) {
         openGeneratorLayout(false); return;
     }
+    if (key == FieldKey::Action && generatorEditor_.row(navigator_.row()) == ui::GeneratorEditor::Row::File) {
+        openAwgFiles(now); return;
+    }
     if (key != FieldKey::Committed) return;
     if (!applyGenerator(generatorEditor_.settings(), now)) view_.notify(Tooltip::Unavailable, "Unsupported waveform/frequency/duty", now);
-    generatorEditor_.begin(data_.generator().settings(), generatorEditor_.wave(), data_.generator().snapshot().timerHz);
+    beginGeneratorEditor(generatorEditor_.wave());
     view_.properties(generatorEditor_, navigator_);
 }
 void ApplicationController::openGeneratorEditor(bool wave) {
     view_.focusParameter(wave ? 0 : 2);
-    generatorEditor_.begin(data_.generator().settings(), wave, data_.generator().snapshot().timerHz);
+    beginGeneratorEditor(wave);
     openPanel(Panel::Generator, generatorEditor_);
     refreshSoftKeys();
 }
 void ApplicationController::openFrequencyEditor() {
-    using Caps = generator::Capabilities;
     const auto &settings = data_.generator().settings();
     view_.focusParameter(1);
-    frequencyEditor_.begin(generator::Frequency::millihertz(settings.frequencyHz), Caps::maximumMillihertz(settings.shape, settings.level, data_.generator().snapshot().timerHz),
-                           Caps::MinimumMillihertz);
+    using Tuning = generator::Tuning;
+    frequencyEditor_.begin(Tuning::value(settings), Tuning::maximum(settings, data_.generator().snapshot().timerHz), Tuning::minimum(settings),
+                           settings.arbitrary());
     panel_ = Panel::Frequency;
     view_.frequencyEditor(frequencyEditor_);
     refreshSoftKeys();
@@ -44,11 +47,11 @@ void ApplicationController::openFrequencyEditor() {
 bool ApplicationController::finishGeneratorField(uint32_t now) {
     if (panel_ == Panel::Frequency) {
         auto settings = data_.generator().settings();
-        const auto frequency = generator::Frequency::rational(frequencyEditor_.value());
-        if (generator::Frequency::millihertz(frequency) == generator::Frequency::millihertz(settings.frequencyHz)) return true;
-        settings.frequencyHz = frequency;
+        const auto before = settings;
+        generator::Tuning::set(settings, frequencyEditor_.value());
+        if (settings.same(before)) return true;
         if (applyGenerator(settings, now)) return true;
-        view_.notify(Tooltip::Unavailable, "Not applied: unsupported output frequency", now);
+        view_.notify(Tooltip::Unavailable, settings.arbitrary() ? "Not applied: unsupported sample rate" : "Not applied: unsupported output frequency", now);
         view_.frequencyEditor(frequencyEditor_);
         return false;
     }

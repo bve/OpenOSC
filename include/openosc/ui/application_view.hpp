@@ -121,6 +121,7 @@ public:
     // its file, drawn by `view` (the caller's, outside this object). Built once (rebuild, or after
     // another menu) and then only redrawn; sessionsClosed() deletes its object before `view` goes.
     void sessions(const ui::ImageList &list);
+    void awgFiles(const ui::ImageList &list); // GEN > Waveform > AWG file (docs/AWG.md).
     void sessionTrend(const char *name, ui::SessionTrendView &view, const ui::SessionTrendData &data, bool rebuild = false);
     void sessionsClosed();
     const ui::SessionTrendView *sessionTrendView() const { return sessionTrendLive_ ? sessionTrend_ : nullptr; } // Tests.

@@ -54,6 +54,7 @@ void InstrumentState::capture(const generator::Settings &actual, Preferences &pr
     prefs_.generatorMillihertz = generator::Frequency::millihertz(actual.frequencyHz);
     prefs_.generatorDutyPermille = actual.dutyPermille;
     prefs_.generatorAmplitudeMillivolts = actual.amplitudeMillivolts;
+    prefs_.generatorArbitraryRate = actual.arbitrarySamplesPerSecond;
 }
 generator::Settings InstrumentState::generator(const Preferences &p) {
     generator::Settings result;
@@ -65,6 +66,7 @@ generator::Settings InstrumentState::generator(const Preferences &p) {
     result.frequencyHz = generator::Frequency::rational(p.generatorMillihertz);
     result.dutyPermille = p.generatorDutyPermille;
     result.amplitudeMillivolts = uint16_t(p.generatorAmplitudeMillivolts);
+    result.arbitrarySamplesPerSecond = p.generatorArbitraryRate;
     return result;
 }
 } // namespace openosc

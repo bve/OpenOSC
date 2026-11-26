@@ -40,7 +40,7 @@ void ApplicationController::generatorLayoutKeys(uint32_t keys, uint32_t now) {
         showSettings();
         return;
     }
-    generatorEditor_.begin(data_.generator().settings(), false, data_.generator().snapshot().timerHz); // Back to its row in PARAMETERS.
+    beginGeneratorEditor(false); // Back to its row in PARAMETERS.
     openPanel(Panel::Generator, generatorEditor_);
     for (unsigned i = 0; i < generatorEditor_.count(); ++i)
         if (generatorEditor_.row(i) == ui::GeneratorEditor::Row::Layout) navigator_.reset(i);

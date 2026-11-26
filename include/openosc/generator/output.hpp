@@ -1,5 +1,5 @@
 #pragma once
-#include "openosc/generator/waveform.hpp"
+#include "openosc/generator/arbitrary.hpp"
 #include "openosc/platform/resources.hpp"
 
 namespace openosc::generator {
@@ -13,7 +13,7 @@ protected:
 };
 class Output {
 public:
-    explicit Output(PeripheralResources &resources) : resources_(resources) {}
+    explicit Output(PeripheralResources &resources);
     ~Output() { disable(); }
     void attach(BusClient &client) { client_ = &client; }
     bool configure(const Settings &settings);
@@ -53,11 +53,28 @@ public:
     const OutputPlan &plan() const { return plan_; }
     // `timerHz`: the APB1 timer clock TIM6 runs at, which the DAC limits follow (DacCapabilities). Read
     // at the boundaries (configure, enable, retime, the reference's start), not by each snapshot.
-    Snapshot snapshot() const { return {settings_, plan_, status_, enabled_, timerHz_, faults_, fault_}; }
+    Snapshot snapshot() const {
+        return {settings_, plan_, status_, enabled_, timerHz_, faults_, fault_, banks_.points(), banks_.source(), banks_.revision(), banks_.samples()};
+    }
     uint32_t timerHz() const { return timerHz_; }
+    // The Arbitrary waveform (GitHub #175, docs/AWG.md). One owner at a time stages a new waveform
+    // (beginArbitrary, putArbitrary) in a bank nothing plays from; commitArbitrary makes it the loaded
+    // one and, while Arbitrary plays, plays it at once (a start that fails brings the previous waveform
+    // and plan back). A setting of another shape that needs the stage's bank takes it: that commit
+    // fails. Samples live in RAM only: after a reset nothing is loaded and an Arbitrary output stays
+    // off (enable() refuses, NoData) until a waveform is committed.
+    ArbitraryBanks::Stage beginArbitrary(const void *owner);
+    bool putArbitrary(const void *owner, unsigned index, uint16_t code) { return banks_.put(owner, index, code); }
+    enum class Commit : uint8_t { Done, Lost, Refused };
+    Commit commitArbitrary(const void *owner, unsigned points, ArbitrarySource source);
+    void abortArbitrary(const void *owner) { banks_.abort(owner); }
+    bool holdsArbitrary(const void *owner) const { return banks_.holds(owner); }
+    const uint16_t *arbitrarySamples() const { return banks_.samples(); } // points() codes; null: none.
 
 private:
     bool readClock();
+    bool replan(const Settings &settings); // configure() without its same-settings shortcut.
+    unsigned playing() const { return enabled_ && !plan_.pwm ? activeBank_ : ArbitraryBanks::None; }
     bool apply();
     bool halt();
     void releaseStopped();
@@ -70,6 +87,7 @@ private:
     Settings settings_;
     OutputPlan plan_;
     unsigned activeBank_ = 0;
+    ArbitraryBanks banks_;
     bool configured_ = false, enabled_ = false;
     PeripheralLease referenceLease_; // The jack alone, while the reference drives it.
     bool referenceOn_ = false;

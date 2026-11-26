@@ -3,7 +3,8 @@
 #include <cstdio>
 
 namespace openosc::ui {
-void FrequencyEditor::begin(uint64_t millihertz, uint64_t maximum, uint64_t minimum) {
+void FrequencyEditor::begin(uint64_t millihertz, uint64_t maximum, uint64_t minimum, bool samples) {
+    samples_ = samples;
     maximum_ = std::clamp<uint64_t>(maximum, 1, 10000000000ULL);
     minimum_ = std::clamp<uint64_t>(minimum, 1, maximum_);
     value_ = std::clamp<uint64_t>(millihertz, minimum_, maximum_);
@@ -17,7 +18,7 @@ uint64_t FrequencyEditor::step() const {
 }
 void FrequencyEditor::move(int direction) {
     if (!direction) return;
-    power_ = unsigned(std::clamp<int>(int(power_) + (direction < 0 ? 1 : -1), 0, int(digits()) - 1));
+    power_ = unsigned(std::clamp<int>(int(power_) + (direction < 0 ? 1 : -1), samples_ ? 3 : 0, int(digits()) - 1));
 }
 void FrequencyEditor::adjust(int direction) {
     if (!direction) return;

@@ -6,7 +6,8 @@ namespace openosc::ui {
 class GeneratorPreview {
 public:
     lv_obj_t *create(lv_obj_t *parent);
-    void update(const generator::Settings &settings, uint32_t color);
+    // An Arbitrary setting draws `samples` (its `points` codes, `revision` the loaded one's); none: no curve.
+    void update(const generator::Settings &settings, uint32_t color, const uint16_t *samples = nullptr, unsigned points = 0, uint32_t revision = 0);
 
 private:
     static void draw(lv_event_t *event);
@@ -15,6 +16,7 @@ private:
     char level_[48] = ""; // generator::LevelText::describe(): the footer line.
     generator::Shape shape_ = generator::Shape::Sine;
     uint16_t duty_ = 0;
+    uint32_t revision_ = 0;
     uint32_t color_ = 0;
     bool valid_ = false;
 };

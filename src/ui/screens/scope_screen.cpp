@@ -63,7 +63,7 @@ void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalve
     const int room = width - (plot::PlotFrame::Right + 30) - plot::PlotFrame::Left - 4;
     for (unsigned detail = 3; detail-- > 0;) { // GEN as it is, without ", ADC max /2", without the shape.
         if (!gen) break;
-        std::snprintf(text + view, sizeof text - view, "%sGEN %s%s%s%s", view ? "  " : "", detail < 1 ? "" : shape < 6 ? generator::ShapeNames[shape] : "?",
+        std::snprintf(text + view, sizeof text - view, "%sGEN %s%s%s%s", view ? "  " : "", detail < 1 ? "" : shape < generator::ShapeCount ? generator::ShapeNames[shape] : "?",
                       detail >= 1 ? " " : "", frequency, detail >= 2 && captureHalved ? ", ADC max /2" : "");
         if (!view || Elements::textWidth(text, 12) <= room) break;
     }

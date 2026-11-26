@@ -34,7 +34,9 @@ void ApplicationView::properties(const ui::PropertyList &properties, const ui::P
         if (!draftPreviewObject_) draftPreviewObject_=draftPreview_.create(menu_);
         lv_obj_set_pos(draftPreviewObject_,10,130); lv_obj_set_size(draftPreviewObject_,284,36);
         lv_obj_set_hidden(draftPreviewObject_,false);
-        draftPreview_.update(*draft,shown().generator);
+        unsigned points; uint32_t revision;
+        const uint16_t *samples=properties.previewSamples(points,revision);
+        draftPreview_.update(*draft,shown().generator,samples,points,revision);
     }
     choice(properties, navigator, 24);
 }
@@ -44,7 +46,7 @@ void ApplicationView::choice(const ui::PropertyList &list, const ui::PropertyNav
     else choicePopup_.hide();
 }
 void ApplicationView::frequencyEditor(const ui::FrequencyEditor &editor) {
-    menuFrame("FREQUENCY", true);
+    menuFrame(editor.samples() ? "SAMPLE RATE" : "FREQUENCY", true);
     host_.parameters().select(1);
     char number[24], step[32], text[64];
     editor.text(number, sizeof number);
@@ -64,10 +66,10 @@ void ApplicationView::frequencyEditor(const ui::FrequencyEditor &editor) {
     lv_obj_set_style_text_font(unit, font(24), 0);
     lv_obj_set_size(unit, 60, 32);
     lv_obj_set_style_text_align(unit, LV_TEXT_ALIGN_RIGHT, 0);
-    plot::Format::quantity(editor.step() / 1000.0, "Hz", step, sizeof step);
+    plot::Format::quantity(editor.step() / 1000.0, editor.baseUnit(), step, sizeof step);
     ui::MenuRow(menu_, 87, 25, "Unit", editor.unit(), false, menuPalette_);
     ui::MenuRow(menu_, 113, 25, "Step", step, true, menuPalette_);
-    plot::Format::quantity(editor.value() / 1000.0, "Hz", text, sizeof text);
+    plot::Format::quantity(editor.value() / 1000.0, editor.baseUnit(), text, sizeof text);
     ui::MenuRow(menu_, 139, 25, "Draft", text, false, menuPalette_);
 }
 } // namespace openosc

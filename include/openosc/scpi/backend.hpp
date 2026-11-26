@@ -88,6 +88,18 @@ public:
     virtual generator::Snapshot generator() const = 0;
     virtual bool configureGenerator(const generator::Settings &) = 0;
     virtual bool output(bool enabled) = 0;
+    // SOURce:ARBitrary (ZT703S AWG, docs/AWG.md): a session's definite block of int16 DAC codes, staged
+    // as it comes (`owner`: the session; one stage at a time on the instrument). begin: 0, BlockSink::
+    // Wait (this session's earlier block is not taken yet) or the error (-200 another session's or
+    // the CSV loader's stage, -221 no free bank or another operation owns the output, -241 no AWG);
+    // byte: each data byte; commit: 0 or the error, the stage ends either way; abort: it ends.
+    // read: the loaded waveform's bytes (little-endian int16) from `offset`, 0 once `revision` (the
+    // generator::Snapshot's) is no longer loaded.
+    virtual int16_t arbitraryBegin(const void *, uint32_t) { return -241; }
+    virtual void arbitraryByte(const void *, uint8_t) {}
+    virtual int16_t arbitraryCommit(const void *) { return -241; }
+    virtual void arbitraryAbort(const void *) {}
+    virtual size_t arbitraryRead(uint32_t, uint32_t, uint8_t *, size_t) { return 0; }
     // Startup output (GeneratorStartup): true restores the last confirmed output at boot, false off.
     virtual bool generatorStartup() const = 0;
     virtual bool generatorStartup(bool restore) = 0;

@@ -55,9 +55,16 @@ bool updateRate(const Rational &frequency, unsigned count, Rational &rate) {
 }
 }
 bool Settings::valid() const {
-    return static_cast<unsigned>(shape) <= static_cast<unsigned>(Shape::Sawtooth) && frequencyHz.valid() &&
+    return static_cast<unsigned>(shape) < ShapeCount && frequencyHz.valid() &&
+           ArbitraryLimits::rate(arbitrarySamplesPerSecond) &&
            unsigned(level) <= unsigned(Level::Custom) && unsigned(squareDrive) <= unsigned(SquareDrive::Pwm) &&
            minimumCode <= maximumCode && maximumCode <= 4095 && dutyPermille <= 1000 && amplitudeMillivolts <= 5000;
+}
+bool DacCapabilities::accepts(const Settings &s, uint32_t timerHz) {
+    if (!s.valid()) return false;
+    if (s.arbitrary()) return ArbitraryLimits::rate(s.arbitrarySamplesPerSecond, timerHz); // The codes are the waveform's.
+    const double millihertz = s.frequencyHz.value() * 1000;
+    return millihertz >= MinimumMillihertz && millihertz <= double(maximumMillihertz(s.shape, s.level, timerHz));
 }
 CodeRange Levels::codes(const Settings &s) {
     if (s.level == Level::Custom) return {s.minimumCode,s.maximumCode};
@@ -78,8 +85,8 @@ void Levels::describe(const Settings &s, char *output, size_t capacity) {
     else std::snprintf(output, capacity, "DAC %u-%u, factory label %sV", range.minimum, range.maximum, caption);
 }
 bool WaveTable::build(const Settings &settings, uint16_t *samples, size_t count) {
-    if (!settings.valid() || !samples || count < 2 || count > 4096)
-        return false;
+    if (!settings.valid() || settings.arbitrary() || !samples || count < 2 || count > 4096)
+        return false; // Arbitrary samples are loaded (ArbitraryBanks), never built.
     const auto codes=Levels::codes(settings);
     const double span = codes.maximum - codes.minimum;
     constexpr double pi = 3.1415926535897932384626433832795;
@@ -105,6 +112,7 @@ bool WaveTable::build(const Settings &settings, uint16_t *samples, size_t count)
         case Shape::Sawtooth:
             normalized = phase;
             break;
+        case Shape::Arbitrary: break; // Refused above.
         }
         const long value = std::lround(codes.minimum + span * normalized);
         samples[i] = value < codes.minimum   ? codes.minimum
@@ -113,10 +121,22 @@ bool WaveTable::build(const Settings &settings, uint16_t *samples, size_t count)
     }
     return true;
 }
-bool OutputPlan::calculate(const Settings &settings, uint32_t clock, OutputPlan &output) {
-    if (!clock || !settings.valid() || settings.frequencyHz.value()*1000>DacCapabilities::maximumMillihertz(settings.shape,settings.level,clock))
-        return false;
+bool OutputPlan::calculate(const Settings &settings, uint32_t clock, OutputPlan &output, unsigned points) {
+    if (!clock || !settings.valid()) return false;
     OutputPlan candidate;
+    if (settings.arbitrary()) { // One DAC update a sample, at the waveform's own rate: no table to fit.
+        if (!ArbitraryLimits::points(points) || !ArbitraryLimits::rate(settings.arbitrarySamplesPerSecond, clock) ||
+            !TimerPlan::calculate(clock, {settings.arbitrarySamplesPerSecond, 1}, candidate.timer, Dac::minimumDivider(clock)))
+            return false;
+        candidate.count = uint16_t(points);
+        uint64_t numerator = candidate.timer.actualHz.numerator, denominator = uint64_t(candidate.timer.actualHz.denominator) * points;
+        const uint64_t reduced = std::gcd(numerator, denominator);
+        candidate.actualHz = {numerator / reduced, denominator / reduced};
+        output = candidate;
+        return true;
+    }
+    if (settings.frequencyHz.value()*1000>DacCapabilities::maximumMillihertz(settings.shape,settings.level,clock))
+        return false;
     candidate.pwm = Levels::pwm(settings);
     if (candidate.pwm) {
         if (!TimerPlan::calculate(clock, settings.frequencyHz, candidate.timer, 2))

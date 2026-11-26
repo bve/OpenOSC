@@ -162,6 +162,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         pauseHiddenCapture(now, usb.enumerating(now));
         serviceImages(now);
         serviceMeterLog(now);
+        serviceAwgFiles(now);
         if (uiReady_ && !shots_.busy()) {
             const uint32_t start = DWT->CYCCNT;
             displayData(now);

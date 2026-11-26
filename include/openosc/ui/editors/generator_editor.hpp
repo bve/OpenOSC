@@ -7,7 +7,16 @@ namespace openosc::ui {
 // (generator::Capabilities): ZT703S levels and DAC codes, ZT706S module amplitude in volts.
 class GeneratorEditor final : public PropertyList {
 public:
-    enum class Row : uint8_t { Shape, Duty, Level, Amplitude, MinimumCode, MaximumCode, Preset, Frequency, Drive, Layout };
+    // File: the ZT703S AWG file list (MENU opens it, docs/AWG.md).
+    enum class Row : uint8_t { Shape, Duty, Level, Amplitude, MinimumCode, MaximumCode, Preset, Frequency, Drive, Layout, File };
+    // The loaded Arbitrary waveform as the panel shows it (generator::Snapshot) and the file it came
+    // from (empty: none, or not a file).
+    struct Arbitrary {
+        const uint16_t *samples = nullptr;
+        unsigned points = 0;
+        uint32_t revision = 0;
+        const char *file = "";
+    };
     // ZT703S presets: main OUTPUT's frequencies, then its reference (TIM13 1 kHz square, 50 %).
     static constexpr uint32_t Presets[] = {10, 50, 100, 500, 1000, 2000, 5000};
     static constexpr unsigned PresetCount = sizeof Presets / sizeof *Presets, Reference = PresetCount;
@@ -15,6 +24,10 @@ public:
     // 0: the highest of any run mode).
     void begin(const generator::Settings &settings, bool wave, uint32_t timerHz = 0) {
         draft_ = {settings, false, false}; wave_ = wave; timerHz_ = timerHz;
+    }
+    void arbitrary(const Arbitrary &loaded) { arbitrary_ = loaded; }
+    const uint16_t *previewSamples(unsigned &points, uint32_t &revision) const override {
+        points = arbitrary_.points; revision = arbitrary_.revision; return arbitrary_.samples;
     }
     const generator::Settings &settings() const { return draft_.settings; }
     bool wave() const { return wave_; }
@@ -49,5 +62,6 @@ private:
     Draft draft_, checkpoint_;
     bool wave_ = true;
     uint32_t timerHz_ = 0;
+    Arbitrary arbitrary_;
 };
 } // namespace openosc::ui

@@ -50,18 +50,37 @@ bool Output::readClock() {
     timerHz_ = hz;
     return moved;
 }
+Output::Output(PeripheralResources &resources) : resources_(resources), banks_(tables) {}
 bool Output::configure(const Settings &settings) {
     if (readClock()) configured_ = false; // Planned at another clock: not the same any more.
     if (configured_ && settings.valid() && settings_.same(settings)) return true;
+    return replan(settings);
+}
+bool Output::replan(const Settings &settings) {
+    const bool arbitrary = settings.arbitrary();
+    if (arbitrary && !banks_.loaded()) {
+        // Selected with no waveform (after a reset): kept as asked, off until one is committed. Not
+        // while the output is on: what plays stays.
+        if (enabled_ || !settings.valid()) return false;
+        settings_ = settings; plan_ = {}; configured_ = false; status_ = DataStatus::NoData;
+        return true;
+    }
     OutputPlan plan;
-    if (!OutputPlan::calculate(settings, timerHz_, plan))
+    if (!OutputPlan::calculate(settings, timerHz_, plan, banks_.points()))
         return false;
-    const unsigned next = activeBank_ ^ 1;
-    if (!plan.pwm && !WaveTable::build(settings, tables[next], plan.count))
+    // A built table never goes into the loaded waveform's bank; when that leaves it only the bank that
+    // plays, the table is built there after the halt (and the previous one again if the start fails).
+    const unsigned playingBank = playing();
+    const bool table = !arbitrary && !plan.pwm;
+    const unsigned next = arbitrary ? banks_.bank() : banks_.tableBank(activeBank_, playingBank);
+    const bool inPlace = table && next == playingBank;
+    if (table) banks_.claim(next);
+    if (table && !inPlace && !WaveTable::build(settings, tables[next], plan.count))
         return false;
     const bool wasEnabled = enabled_;
     if (wasEnabled && !halt())
         return false;
+    if (inPlace) WaveTable::build(settings, tables[next], plan.count);
     const auto previousSettings = settings_;
     const auto previousPlan = plan_;
     const auto previousBank = activeBank_;
@@ -75,6 +94,7 @@ bool Output::configure(const Settings &settings) {
         const auto failure = status_;
         if (!halt()) return false;
         settings_ = previousSettings; plan_ = previousPlan; activeBank_ = previousBank; configured_ = wasConfigured;
+        if (inPlace && wasConfigured) WaveTable::build(previousSettings, tables[previousBank], previousPlan.count);
         if (wasConfigured && apply()) status_ = failure;
         else status_ = DataStatus::HardwareError;
         releaseStopped();
@@ -156,11 +176,12 @@ bool Output::enable() {
     if (readClock()) configured_ = false;
     // A refused ON (Unsupported, Busy, a failed start) keeps the jack quiet until an explicit OFF.
     referenceHeld_ = true;
+    if (settings_.arbitrary() && !banks_.loaded()) { status_ = DataStatus::NoData; return false; } // Nothing to play.
     if (!configured_ && !configure(settings_)) {
         // Only a setting kept from another clock (a run-mode change, the boot's restore) gets here:
         // configure() refuses a new one before it is kept.
         OutputPlan probe;
-        if (settings_.valid() && !OutputPlan::calculate(settings_, timerHz_, probe)) {
+        if (settings_.valid() && !OutputPlan::calculate(settings_, timerHz_, probe, banks_.points())) {
             status_ = DataStatus::Unsupported;
             stopped(OutputFault::Limit);
         }
@@ -173,6 +194,29 @@ bool Output::enable() {
     if (apply()) { referenceHeld_ = false; return true; }
     releaseStopped();
     return false;
+}
+ArbitraryBanks::Stage Output::beginArbitrary(const void *owner) {
+    const auto stage = banks_.begin(owner, activeBank_, playing());
+    // The table kept for a later ON of another shape may be the stage's bank: built again then.
+    if (stage == ArbitraryBanks::Stage::Ready && banks_.staged() == activeBank_) configured_ = false;
+    return stage;
+}
+Output::Commit Output::commitArbitrary(const void *owner, unsigned points, ArbitrarySource source) {
+    if (banks_.lost(owner)) { banks_.abort(owner); return Commit::Lost; }
+    ArbitraryBanks::Undo undo;
+    if (!banks_.commit(owner, points, source, undo)) { banks_.abort(owner); return Commit::Refused; }
+    if (!settings_.arbitrary()) return Commit::Done; // Kept for when Arbitrary is selected.
+    readClock();
+    const bool wasEnabled = enabled_;
+    if (replan(settings_)) return Commit::Done; // Planned for the new points, and playing if it was on.
+    if (!wasEnabled) { // Off: kept, planned again at ON (its rate may not play at this clock).
+        configured_ = false; plan_ = {};
+        return Commit::Done;
+    }
+    // On and refused or failed to start: the previous waveform (its bank untouched) plays again with
+    // its plan (replan() restarted it).
+    banks_.rollback(undo);
+    return Commit::Refused;
 }
 // After a start that did not go through: once this output's own DAC stream is confirmed stopped,
 // the jack and its DMA go back (the DMM serial output may take them). A halt whose BDMA would not

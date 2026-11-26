@@ -12,6 +12,7 @@
 #include "openosc/usb/auto_policy.hpp"
 #include "openosc/screenshot/writer.hpp"
 #include "openosc/screenshot/catalog.hpp"
+#include "openosc/application/awg_files.hpp"
 #include "openosc/screenshot/reader.hpp"
 #include "openosc/settings/preferences_file.hpp"
 #include "openosc/settings/theme_store.hpp"
@@ -289,6 +290,10 @@ private:
     bool markTriggerEditor();
     bool centerChannels(uint32_t now); // Analyze -> Center channels, and the F2 hold's Home view.
     bool applyGenerator(const generator::Settings &settings, uint32_t now);
+    // A staged Arbitrary waveform taken (SOUR:ARB:DATA, the CSV loader: docs/AWG.md): true when it is the
+    // loaded one now (playing at once while Arbitrary is on), false when the stage was lost or the
+    // start refused (the previous waveform stays).
+    bool commitArbitrary(const void *owner, unsigned points, generator::ArbitrarySource source, uint32_t now);
     void dataKeys(uint32_t keys, uint32_t now, bool fine);
     void displayData(uint32_t now);
     void plotKeys(uint32_t keys, uint32_t now, bool fine);
@@ -332,6 +337,19 @@ private:
     ui::SoftKeys sessionSoftKeys() const;
     SessionBrowser *sessions_ = nullptr;
     bool sessionWatched_ = false, confirmationSessions_ = false;
+    // GEN > Waveform > AWG file (ZT703S, docs/AWG.md): the /openosc/AWG list and its file's load in
+    // slices (awg_keys.cpp). The browser exists only while its list is open (LVGL heap).
+    void beginGeneratorEditor(bool wave); // The panel's draft and the loaded waveform it shows.
+    void openAwgFiles(uint32_t now);
+    void closeAwgFiles(bool toPanel);     // toPanel: back to WAVEFORM on its AWG file row.
+    void showAwgFiles();
+    void awgFileKeys(uint32_t keys, uint32_t now);
+    void loadAwgFile(uint32_t now);
+    [[gnu::noinline]] void serviceAwgFiles(uint32_t now);
+    ui::SoftKeys awgSoftKeys() const;
+    AwgFiles *awgFiles_ = nullptr;
+    char awgFile_[AwgFiles::NameBytes]{}; // The file loaded last, while awgRevision_ is the loaded waveform's.
+    uint32_t awgRevision_ = 0;
     uint32_t logShownAt_ = 0;
     void serviceMcuTemperature(uint32_t now);
     // The HOLD key in the DMM by the mode (docs/DMM_AUTO_HOLD.md): a manual or the DMM's own HOLD
@@ -410,7 +428,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLog, Sessions, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch, GainMatch, Bode };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLog, Sessions, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, AwgFiles, Confirmation, Images, Zero, InterleaveMatch, GainMatch, Bode };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;
