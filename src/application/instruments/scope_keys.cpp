@@ -34,10 +34,12 @@ void ApplicationController::setScopeFocus(plot::Focus focus) {
     view_.scopeMeter(meterCard());
 }
 void ApplicationController::selectNext() {
+    // In screen order (Swap CH1/CH2): the input on the left slot, the one on the right, then the DMM.
+    const unsigned left = view_.channelView().input(0), right = view_.channelView().input(1);
     if (meterSelected_) { // Kept while no channel is shown.
-        if (channelShown(0)) { selectedChannel_ = 0; meterSelected_ = false; }
-        else if (channelShown(1)) { selectedChannel_ = 1; meterSelected_ = false; }
-    } else if (selectedChannel_ == 0 && channelShown(1)) selectedChannel_ = 1;
+        if (channelShown(left)) { selectedChannel_ = left; meterSelected_ = false; }
+        else if (channelShown(right)) { selectedChannel_ = right; meterSelected_ = false; }
+    } else if (selectedChannel_ == left && channelShown(right)) selectedChannel_ = right;
     else if (view_.waveform().options().meter.shown) meterSelected_ = true;
     else if (channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
 }
