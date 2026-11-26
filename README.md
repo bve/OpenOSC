@@ -376,17 +376,20 @@ changed, as long as it keeps the upper-case `.ZTK` extension.
 > **If Recovery does not install** (the file disappears from the drive, but the stock application
 > still starts), rename the file to `ZOYI-703S-FW-V143.ZTK` and copy it again. Some ZT703S units
 > (Boot v1.0.15) install only files with this kind of name
-> ([#16](https://github.com/bve/OpenOSC/issues/16)).
+> ([#16](https://github.com/bve/OpenOSC/issues/16)). Units with later boot versions install it too,
+> so you can also use this name from the start if you do not know your unit's boot version.
 >
 > If a large `.ZTK` does not fit on the drive ("not enough free space"), free up the device's storage
 > or format it from the stock application: **Scope → MENU → Apps → Image Viewer → F1 → Format (F3)**.
 
 Install it the same way as an official firmware update:
 
-1. Put the device into the factory USB update mode and connect it to a computer.
-2. Copy the `.ZTK` file for your model into the `firmware` folder on the drive that appears.
-3. Wait until the bootloader finishes. It installs the file and deletes it from the drive.
-4. The device restarts into OpenOSC Recovery; restart it manually if it does not.
+1. Put the device into the factory USB update mode: switch it off, hold **F1** and switch it on.
+   Release **F1** when the screen shows **USB: Disk Driver**. These keys were checked on the ZT703S.
+2. Connect the device to a computer. A USB drive appears (on the ZT703S it is named `FLASH`).
+3. Copy the `.ZTK` file for your model into the `firmware` folder on that drive.
+4. Wait until the bootloader finishes. It installs the file and deletes it from the drive.
+5. The device restarts into OpenOSC Recovery; restart it manually if it does not.
    The stock application has been replaced, so Recovery opens its menu.
 
 ### Optional: back up the factory block
@@ -406,7 +409,10 @@ one:
    and verifies the copy:
    - `/openosc/BACKUP/FACTORY_BOOT_08000000.bin`: the backup itself;
    - `/openosc/BACKUP/FACTORY_BOOT_08000000.txt`: its address, size and CRC32.
-3. Copy both files from the USB drive to your computer and keep them somewhere safe.
+3. Press **MENU** to return to the Recovery menu. The USB drive appears on the computer again
+   in the menu.
+4. Copy both files from the `openosc/BACKUP/` folder on the drive to your computer and keep them
+   somewhere safe.
 
 The block contains the factory bootloader and **this unit's own calibration and settings**.
 Keep a separate backup for each device and never write one device's backup to another.
@@ -428,7 +434,8 @@ Recovery controls: **MENU** = OK, **F4** = back/cancel, arrow keys = navigation.
 In a confirmation, **F3** confirms and **F2** cancels at once. It starts on **CANCEL** (except the
 offer to start after an update): left/right select **CONFIRM**, **MENU** presses the selected one.
 If the computer still has the USB drive mounted, Recovery first asks **DISCONNECT USB DISK?**.
-Confirm it and Recovery detaches the drive itself; the cable can stay connected.
+Confirm it and Recovery detaches the drive itself; the cable can stay connected. The drive
+reconnects when you return to the Recovery menu.
 
 Recovery checks the board model, CRC and vector table of the image before erasing anything.
 An image for another model is rejected. Later updates of the main firmware use step 2 only.
@@ -442,7 +449,8 @@ switched on.
 1. Get the official firmware update (`.ZTK`) for your model from the manufacturer. It is a good idea
    to download it before you install OpenOSC.
 2. Install it exactly like [step 1](#step-1-install-the-recovery-bootloader-standard-update):
-   put the device into the factory USB update mode and copy the file into the `firmware` folder.
+   put the device into the factory USB update mode (hold **F1** while switching it on) and copy the
+   file into the `firmware` folder.
 3. The factory bootloader replaces OpenOSC Recovery and the OpenOSC firmware with the stock
    application.
 
