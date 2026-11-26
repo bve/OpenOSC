@@ -212,25 +212,25 @@ bool DataAccess::acquireScopeWait(scope::FrameLease &lease,uint32_t timeoutMs) {
 bool DataAccess::sendDmmGroup(dmm::CommandGroup group) {
     if (unsigned(group) >= 5 || !active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() ||
         !dmm_.pressGroup(group, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
-    meter_.typeK(false, timeUs_);
+    meter_.thermocouple(false, timeUs_);
     meter_.reselect(); // No function is awaited: the packets show which one the key gave.
     return true;
 }
 bool DataAccess::selectDmmFunction(dmm::Function function) { // Also while off: it waits for packets.
     // Held off (dmm::LinkWatchdog::OffMs): its deadline runs from the power-on.
     const uint32_t waitMs = dmmActivatedAtUs_ > timeUs_ ? uint32_t(std::min<uint64_t>((dmmActivatedAtUs_ - timeUs_) / 1000, dmm::FunctionSelector::PowerOnWaitMs)) : 0;
-    const bool typeK = function == dmm::Function::Temperature;
-    const auto physical = typeK ? dmm::Function::MillivoltsDc : function;
+    const bool thermocouple = function == dmm::Function::Temperature;
+    const auto physical = thermocouple ? dmm::Function::MillivoltsDc : function;
     if (!active_ || measurement_ != MeasurementMode::Multimeter ||
-        (typeK && !meter_.temperatureSettings().configured()) ||
+        (thermocouple && !meter_.temperatureSettings().configured()) ||
         !dmm_.selectFunction(physical, meter_.latest(), Board::milliseconds() + waitMs, dmmActivatedAtUs_)) return false;
-    meter_.typeK(typeK, timeUs_);
+    meter_.thermocouple(thermocouple, timeUs_);
     // Accepted (a refusal above changes nothing): the statistics period starts with this function.
     meter_.restart(function, timeUs_ + (uint64_t(dmm::FunctionSelector::DeadlineMs) + waitMs) * 1000);
     return true;
 }
 bool DataAccess::pressDmmRange() {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() || meter_.typeK() ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() || meter_.thermocouple() ||
         !dmm_.pressRange(meter_.latest(), Board::milliseconds(), timeUs_, dmmActivatedAtUs_)) return false;
     meter_.rangeCommand();
     return true;
@@ -246,7 +246,7 @@ bool DataAccess::requestDmmKey(dmm::KeyCommand::Action action) {
     return true;
 }
 bool DataAccess::setDmmAuto(bool automatic) {
-    return !meter_.typeK() && requestDmmKey(automatic ? dmm::KeyCommand::Action::Auto : dmm::KeyCommand::Action::Manual);
+    return !meter_.thermocouple() && requestDmmKey(automatic ? dmm::KeyCommand::Action::Auto : dmm::KeyCommand::Action::Manual);
 }
 bool DataAccess::holdMeter(bool held) {
     if (!active_ || measurement_ != MeasurementMode::Multimeter) return false;
@@ -268,7 +268,7 @@ bool DataAccess::relativeMeter(bool enabled) {
     return meter_.relative(enabled);
 }
 bool DataAccess::setDmmRange(unsigned index) {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() || meter_.typeK() ||
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || watchdog_.off() || meter_.thermocouple() ||
         !dmm_.setRange(index, meter_.latest(), Board::milliseconds(), dmmActivatedAtUs_)) return false;
     meter_.rangeCommand(); // A new scale: a hold mode's window starts again.
     return true;
@@ -318,12 +318,15 @@ void DataAccess::beginShutdown() {
     session_.stop(timeUs_, dmm::LogEnd::Shutdown);
 }
 dmm::Function DataAccess::meterFunction() const {
-    return meter_.typeK() ? dmm::Function::Temperature : dmm::Functions::identify(meter_.latest());
+    return meter_.thermocouple() ? dmm::Function::Temperature : dmm::Functions::identify(meter_.latest());
 }
 bool DataAccess::startMeterSession(const dmm::LogSettings &settings) {
     if (!active_ || stopping_ || measurement_ != MeasurementMode::Multimeter) return false;
     const auto &reading = meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest();
-    return session_.begin(settings, reading, meterFunction(), timeUs_, board::Current::Name);
+    return session_.begin(settings, reading, meterFunction(), thermocoupleType(), timeUs_, board::Current::Name);
+}
+dmm::ThermocoupleType DataAccess::thermocoupleType() const {
+    return meter_.thermocouple() ? meter_.temperatureSettings().type : dmm::ThermocoupleType::Count;
 }
 void DataAccess::serviceDmmClose(uint32_t now) {
     dmm_.service(uart_, meter_.latest(), now);

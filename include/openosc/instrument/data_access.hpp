@@ -141,7 +141,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool selectDmmFunction(dmm::Function function);
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
-    bool dmmRanged() const { return !meter_.typeK() && dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
+    bool dmmRanged() const { return !meter_.thermocouple() && dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
     // The physical AUTO/RANGE key as the factory's KEY5 (dmm::RangeStroke, one held state): its
     // qualified press sends 20 20 and opens the stroke (a NextRange command, refused while busy);
     // releaseDmmRange(true), let go within the factory's 500 ms window, ends it with 21 21; (false), let go
@@ -488,7 +488,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
 #else
     DmmSessionRecorder session_;
 #endif
-    dmm::Function meterFunction() const; // The function a reading is of (Type K: Temperature).
+    dmm::Function meterFunction() const; // The function a reading is of (thermocouple: Temperature).
+    dmm::ThermocoupleType thermocoupleType() const; // The curve of a thermocouple reading; Count otherwise.
     scope::FrameLease heldFrame_;
     scope::HeldTrigger heldTrigger_;
     scope::InterleaveTracker interleave_; // ZT706S: CH1's frequency, range correction and gain (InterleaveTracker).

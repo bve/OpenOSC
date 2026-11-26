@@ -247,7 +247,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
         const unsigned decimals = dmm::Resolution::decimals(result);
         const double measured = (mean ? statistics->average() : result.primary.si) - reference;
         const double value = result.primary.quantity == Quantity::Temperature
-            ? dmm::TypeK::display(measured, result.unit, relative || result.peerRelative) : measured / factor;
+            ? dmm::TemperatureUnits::display(measured, result.unit, relative || result.peerRelative) : measured / factor;
         if (!Decimal::fixed(value, decimals, text, sizeof text)) Decimal::number(value, text, sizeof text, 6);
     }
     const auto function = context.selecting != dmm::Function::Unknown ? context.selecting : dmm::Functions::identify(result);

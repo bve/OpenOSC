@@ -33,7 +33,7 @@ private:
                 low * CountsPerDegree, labelStep * CountsPerDegree / MinorTicksPerLabel};
     }
     static CountScale band(double degrees) {
-        static constexpr int endpoints[] = {0, 100, 300, 600, 1000, 1500, 2000, 2500, 3000};
+        static constexpr int endpoints[] = {0, 100, 300, 600, 1000, 1500, 2000, 2500, 3000, 3500};
         const double magnitude = std::fabs(degrees);
         unsigned upper = 1;
         while (upper + 1 < sizeof endpoints / sizeof *endpoints && magnitude > endpoints[upper]) ++upper;

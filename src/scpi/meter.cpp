@@ -121,6 +121,20 @@ bool Engine::meterCommand(const Command &c) {
         } else error(-224);
         return true;
     }
+    if (match("SYSTem:DMM:TEMPerature:TYPE")) {
+        auto settings = backend_.meterTemperature();
+        if (c.query) reply("%s", dmm::Thermocouple::letter(settings.type));
+        else {
+            unsigned index = 0;
+            while (index < unsigned(dmm::ThermocoupleType::Count) && !Header::word(c.argument, dmm::Thermocouple::letter(dmm::ThermocoupleType(index)))) ++index;
+            if (index == unsigned(dmm::ThermocoupleType::Count)) error(-224);
+            else {
+                settings.type = dmm::ThermocoupleType(index);
+                if (!backend_.meterTemperature(settings)) error(-221);
+            }
+        }
+        return true;
+    }
     if (match("SYSTem:DMM:PACKet")) { // The newest raw packet in hex, for decoding annunciators.
         const uint8_t *data = nullptr;
         const size_t bytes = backend_.meterPacket(data);
