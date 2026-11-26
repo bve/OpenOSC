@@ -11,6 +11,7 @@ namespace openosc::ui {
 namespace {
 struct Step { unsigned precision; bool coarse; };
 constexpr Step Steps[] = {{3, false}, {2, false}, {1, false}, {2, true}, {1, true}};
+constexpr unsigned TimedDigits[] = {6, 5, 3, 4, 1}; // Timed FC falls back to fewer digits as the cell fills.
 // The short tags, where a channel's three readouts need the room (Measurements::Tags order).
 constexpr const char *ShortTags[] = {"f", "pp", "R", "T", "Av", "Mn", "Mx", "AC", "D", "n", "", "F", "Am", "Tp", "Bt"}; // FC: F, its mark kept ("Ff?").
 static_assert(sizeof ShortTags / sizeof *ShortTags == scope::Measurements::Count);
@@ -81,7 +82,9 @@ bool ReadoutText::form(unsigned kind, bool valid, double value, const char *mark
     } else if (valid) {
         const auto step = Steps[shape.step];
         // Bounded: significant digits at most `limit` (a coarse form's fixed decimals are checked below).
-        const unsigned precision = limit && !step.coarse ? std::min(step.precision, limit) : step.precision;
+        const bool timed = kind == unsigned(scope::Measurement::CounterFrequency) && limit > scope::Measurements::MaximumDigits;
+        const unsigned offered = timed ? TimedDigits[shape.step] : step.precision;
+        const unsigned precision = limit && !step.coarse ? std::min(offered, limit) : offered;
         if (!plot::Format::quantity(value, scope::Measurements::Units[kind], output.value, sizeof output.value, precision, step.coarse,
                                     prefer.index, &output.prefix))
             return false;

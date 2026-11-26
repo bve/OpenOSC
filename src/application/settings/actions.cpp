@@ -88,6 +88,7 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         break;
     case ui::SettingsAction::UsbRemote:
         if (!prefs_.usbController) view_.notify(Tooltip::Unavailable, "Enable USB controller first", now); // No link to be remote over.
+        else if (usbAutoOff()) view_.notify(Tooltip::Unavailable, "USB Auto: no computer found", now); // No attempt from here.
         else if (!setRemote(true)) view_.notify(Tooltip::Unavailable, "Finish active operations first",now);
         else view_.notify(Tooltip::Critical, "USB Remote: hold MENU to exit",now);
         break;

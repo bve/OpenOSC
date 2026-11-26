@@ -35,6 +35,8 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     spectrum["remove_dc"]=o.spectrum.removeDc;
     auto counter=root.createNestedObject("counter");
     counter["source"]=o.counter.source; counter["average"]=o.counter.average; counter["ppm"]=o.counter.ppm;
+    if (o.counter.estimate) counter["estimate"]=o.counter.estimate; // #172, #173: written only when on.
+    if (o.counter.timed) counter["timed"]=o.counter.timed;
     auto channels = root.createNestedArray("channels");
     for (const auto &c : o.channels) {
         auto item = channels.createNestedObject();

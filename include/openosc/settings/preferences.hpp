@@ -35,8 +35,10 @@ struct Preferences {
     static constexpr uint32_t HoldTimes[] = {1000, 1500, 2000};
     uint32_t holdMs() const { return HoldTimes[holdTime < 3 ? holdTime : 2]; }
     // Settings > Files & USB > USB controller: 1 enabled (USB data where the clock allows it, 200 MHz),
-    // 0 disabled (the OTG controller stays off; Recovery's USB disk is not affected). Older files: enabled.
-    uint8_t usbController = 1;
+    // 0 disabled (the OTG controller stays off; Recovery's USB disk is not affected), 2 Auto (GitHub
+    // #170: on while a computer is there, usb::AutoPolicy). Older files: enabled.
+    static constexpr uint8_t UsbDisabled = 0, UsbEnabled = 1, UsbAuto = 2, UsbControllerCount = 3;
+    uint8_t usbController = UsbEnabled;
     BodePreferences bode; // Analyze > Bode setup (GitHub #124), in the file's scope object.
     uint32_t generatorShape = 0, generatorDutyPermille = 500;
     bool menuLeftStep = false; // Settings > Display > Left key in menus. Uses the padding before generatorMillihertz.
@@ -60,7 +62,7 @@ struct Preferences {
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
-               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && unsigned(menuContrast) < MenuContrastCount && holdTime < 3 && usbController <= 1 && bode.valid() &&
+               useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && unsigned(menuContrast) < MenuContrastCount && holdTime < 3 && usbController < UsbControllerCount && bode.valid() &&
                generatorShape < 6 &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&

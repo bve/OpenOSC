@@ -12,6 +12,11 @@ struct ReadoutSelection {
     static constexpr unsigned PerChannel=4;
     uint32_t values[2][PerChannel]={{0,1,2,8},{0,1,2,8}};
     ReadoutBasis basis=ReadoutBasis::Screen;
+    // Analyze > Measurements > Short window f/T (GitHub #171): From the counter (true), f and T that
+    // the window cannot resolve from the settled hardware count (CounterFallback); Off (false, older
+    // files) as before. In the padding after basis: ReadoutSelection keeps its 36 bytes.
+    bool shortWindowCounter=false;
+    bool counterTrace[2]{}; // Transient edge readout requested by the counter display.
     bool valid() const {
         if (unsigned(basis)>1) return false;
         for (const auto &channel : values) for (auto value : channel)
@@ -20,11 +25,13 @@ struct ReadoutSelection {
     }
     // A value is shown for the channel (other than Off and the hardware counter, kept apart).
     bool needs(unsigned channel) const {
+        if (counterTrace[channel]) return true;
         for (auto v : values[channel]) if (v!=unsigned(Measurement::Off) && v!=unsigned(Measurement::CounterFrequency)) return true;
         return false;
     }
     // Frequency, period, duty or pulses: the edge pass is needed.
     bool needsEdges(unsigned channel) const {
+        if (counterTrace[channel]) return true;
         for (auto v : values[channel])
             if (v==unsigned(Measurement::Frequency) || v==unsigned(Measurement::Period) ||
                 v==unsigned(Measurement::Duty) || v==unsigned(Measurement::PulseCount)) return true;
@@ -39,9 +46,11 @@ struct ReadoutSelection {
     }
     bool same(const ReadoutSelection &b) const {
         for (unsigned c=0;c<2;++c) for (unsigned i=0;i<PerChannel;++i) if (values[c][i]!=b.values[c][i]) return false;
-        return basis==b.basis;
+        return basis==b.basis && shortWindowCounter==b.shortWindowCounter &&
+               counterTrace[0]==b.counterTrace[0] && counterTrace[1]==b.counterTrace[1];
     }
 };
+static_assert(sizeof(ReadoutSelection)==36, "ReadoutSelection keeps its size (GitHub #171's flag in its padding)");
 // Computed readouts with where they come from: the record (sequence), the record points they
 // cover, the basis and when they were finished, so a result is never taken for another frame's.
 struct ReadoutResult {
@@ -50,7 +59,9 @@ struct ReadoutResult {
     ReadoutBasis basis=ReadoutBasis::Screen;
     uint64_t timestampUs=0; // The record's (FrameMetadata::timestampUs): when its points were captured.
     uint32_t sequence=0, first=0, points=0, finishedAt=0;
+    uint32_t sampleRateHz=0; // The original record's ADC rate, rounded down to whole Hz.
     bool valid=false;
+    void captureRate(const Rational &rate) { sampleRateHz = rate.valid() ? rate.numerator / rate.denominator : 0; }
 };
 // The Record basis without a long monolithic scan, over one record that the caller keeps leased
 // and unchanged between start() and the step that finishes. Every channel that shows a value goes

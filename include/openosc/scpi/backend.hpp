@@ -134,6 +134,8 @@ public:
     virtual uint32_t coreMhz() const { return 0; }
     virtual int coreMhz(uint32_t) { return -241; }
     virtual bool counter(unsigned,scope::CounterReading &) const { return false; }
+    // Analyze > Measurements > Short window f/T (GitHub #171): WAV:MEAS? applies it as the readouts do.
+    virtual bool shortWindowCounter() const { return false; }
     // SYST:POW:TIM, SYST:DISP:TIM/DIM: the Settings menu's idle choices, saved as it saves them (0 or the error).
     virtual bool idleSettings(IdleSettings &) const { return false; }
     virtual int setIdle(const IdleSettings &) { return -241; }

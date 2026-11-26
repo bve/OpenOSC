@@ -34,6 +34,7 @@ public:
     }
     bool enabled() const { return enabled_; }
     bool allowed() const { return enabled_ && clocked_; }
+    bool clockAllows() const { return clocked_; } // The running clock allows the link (followClock).
     // The capture that must be quiet while a host enumerates (QuietAttach); set before start().
     void quietWith(usb::QuietClient *client) { attach_.client(client); }
     // Initializes the device (USBD) and asks for its attach. True when it is attached or its attach
@@ -56,6 +57,7 @@ public:
     }
     void profileChanged(uint32_t now) { stop(); reattach(now); }
     bool attached() const { return active_ || reattach_.pending() || attach_.pending(); } // Or an attach pending.
+    bool onBus() const { return active_; } // Started on the bus (D+ pulled up): an attach no longer pending.
     bool connected() const;
     // A host proven by its SOFs is enumerating (usb::EnumerationQuiet's window, as the last poll left
     // it): the one policy the capture is held for, also by ApplicationController::pauseHiddenCapture.
@@ -64,6 +66,8 @@ public:
     // True while a host is enumerating or using the device: power-hungry bursts (saves) wait. A host
     // counts only as proven by its SOFs (HostPresence, whose grace spans a bus reset).
     bool hostActive(uint32_t now) const;
+    // Only a host's SOFs as the last poll() found them (HostPresence): USB Auto's proof of a computer.
+    bool hostPresent() const { return hostPresent_; }
 private:
     // A host unproven this long is gone (pulled cable, suspended PC): the watchdog's episode ends with
     // it, and a later host starts a new one. Longer than HostPresence::GraceMs (a bus reset).

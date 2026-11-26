@@ -68,7 +68,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
     BootTiming::mark(BootTiming::Display);
     // Settings > Files & USB > USB controller, before the first clock change (headless Remote). An
     // explicit Disabled holds also without a display; Recovery restores the setting independently.
-    usb.enable(prefs_.usbController != 0, Board::milliseconds());
+    applyUsbController(Board::milliseconds());
     Watchdog::progress();
     // While a refresh waits on DMA2D: the watchdog, queued USB transfers and the acquisition
     // streams go on (no LVGL, FAT or UI state there; see RenderIdle).
@@ -133,10 +133,12 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         Board::service();
         const uint32_t now = Board::milliseconds();
         serviceMcuTemperature(now);
+        data_.timeScopeCounter(view_.waveform().options().counter.timed != 0); // GitHub #173, any theme or menu change.
         data_.poll(now);
         serviceShutdown(now);
         serviceBootGuard(now);
         usb.poll(now);
+        serviceUsbAuto(now); // USB controller Auto (GitHub #170): after the poll's host evidence.
 #ifdef OPENOSC_DIAG_MAILBOX
         local.poll(now);
 #endif
@@ -166,7 +168,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
             performance_.ui(DWT->CYCCNT-start);
         }
         const bool activity=InputService::activity();
-        const bool wake=servicePower(InputService::keys() || activity,now);
+        const bool wake=servicePower(InputService::keys() || activity,now,measurementActivity());
         if (wake) {
             InputService::wake();
             autoKey_.cancel();
@@ -253,7 +255,7 @@ void ApplicationController::applyPreferences() {
     for (unsigned c = 0; c < 2; ++c) state_.scope.millivoltsPerDivision[c] = prefs_.millivolts[c];
     state_.meter.function = prefs_.meterFunction;
     configureDecoder();
-    if (usb_) usb_->enable(prefs_.usbController != 0, Board::milliseconds()); // Reload settings JSON.
+    applyUsbController(Board::milliseconds()); // Reload settings JSON: only a changed mode.
     // Only the hold mode and its parameters: a cycle or snapshot never comes back by itself.
     if (data_.meter().holdCycle().settings() != prefs_.meter.hold) data_.configureMeterHold(prefs_.meter.hold);
     idle_.configure(prefs_.idle,Board::milliseconds());

@@ -135,6 +135,13 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // Armed (followTriggerWait). Auto: never. HOLD and a finished Single read STOP (scopeHeld).
     bool scopeWaiting() const { return triggerWaiting_; }
     bool scopeTriggered() const { return acceptedTriggered_; } // The last accepted frame held its trigger edge.
+    // Records of a real trigger since start (GitHub #169, Wake on measurement): a serial that steps
+    // once for each fresh live record serviceScopeFrames accepts with its trigger edge (Auto, Normal
+    // or a Single that triggered), never for an Auto timeout, a forced record, Roll, an internal
+    // capture (AutoSetup trials, zero calibration, the interleave offset measurement) or a record
+    // from before the latest arm, entry, setting change, HOLD or RUN (triggerFloor_). Modular: the
+    // reader keeps its last value and compares. Apart from scopeTriggered (TRIG:STAT?), unchanged.
+    uint32_t scopeTriggerEvents() const { return triggerEvents_; }
     // A physical F1-F4: one group key (dmm::MeterCommands::pressGroup), the statistics restart; what the
     // controller does is read from its packets. SCPI and the restore select a function instead.
     bool sendDmmGroup(dmm::CommandGroup group);
@@ -199,6 +206,11 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     FrameHosts &frameHosts() { return frameHosts_; }
     scope::CaptureProgress scopeProgress() const { return capture_.progress(); }
     scope::CounterSnapshot scopeCounters() const;
+    // Analyze > Display > Frequency counter, CH1 below 5 kHz (GitHub #173): false (Gate) keeps TIM2
+    // on its ETR count with no interrupt; true times a slow CH1 by its edges (PulseCounters). Cheap
+    // to repeat. A counter stop (calibration, clock change, another view) returns CH1 to its gate; the
+    // choice stays. HOLD leaves the counters running.
+    void timeScopeCounter(bool timed) { counters_.timed(timed); }
     // hardware: the offset PWM itself (scope_pwm.json), else the software zero (scope_zero.json).
     bool calibrateZero(uint32_t now,bool hardware=false);
     // The gain of one channel and range against `referenceVolts` at its probe tip (scope_gain.json).
@@ -396,6 +408,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void applyForce(); // forceScope() on the running capture, once it is one that can take it.
     // A record the trigger mode lets through: in Auto any, in Normal/Single a trigger or a forced capture.
     bool triggerAccepts(const scope::FrameMetadata &frame, bool found) const;
+    void countTriggerEvent(bool accepted, const scope::FrameMetadata &frame); // scopeTriggerEvents.
     void serviceStreams(uint32_t now);
     // The ZT703S calibration reference's policy (GitHub #32), each pass: as the factory main firmware,
     // in Scope only (its DMM start never runs the output); never while stopping, across a clock change,
@@ -466,6 +479,11 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool staged_ = false;
     uint32_t forcedSequence_ = 0; // The capture forced last, until its record is adopted (0: none).
     uint32_t acceptedSequence_ = 0; // scopeFrameSequence().
+    uint32_t triggerEvents_ = 0;    // scopeTriggerEvents().
+    // The newest capture sequence that cannot step it: the last counted, or the last started at an
+    // arm (its record is from before; restartTriggerEvents).
+    uint32_t triggerFloor_ = 0;
+    void restartTriggerEvents() { triggerFloor_ = sequence_; }
     uint32_t acceptedAt_ = 0;       // When it was accepted (FrameHosts::HoldMs).
     FrameHosts frameHosts_;
     bool hostOwed(uint32_t now) const; // The record on show is accepted and still owed to a USB host.

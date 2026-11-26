@@ -19,12 +19,19 @@ struct CounterReading {
     uint32_t startMs=0;        // When the first of them began: [startMs, endMs] spans the count.
     CounterQuality quality=CounterQuality::Clean;
     uint8_t filter=0;          // The ETR filter level (ETF) of the stated count, 0: unfiltered.
+    // A reciprocal count of CH1 (ReciprocalPolicy): `edges` periods between the first and the last
+    // captured rising edge over `gateUs`, through the input capture filter (filter 3: N = 8).
+    bool timed=false;
     // A count to act on (AUTO): clean, filtered or unverified by bandwidth; not uncertain or changing.
     bool settled() const { return valid && quality!=CounterQuality::Uncertain && quality!=CounterQuality::Changing; }
 };
+static_assert(sizeof(CounterReading)==32,"`timed` stays in the padding");
+// `sequence` changes with any channel's reading, `updates[c]` with channel c's: a timed CH1 renews
+// its reading apart from CH2's gate cycles.
 struct CounterSnapshot {
     CounterReading channels[2];
     uint32_t sequence=0;
+    uint32_t updates[2]{};
     uint8_t enabled=3;
 };
 // One window's count of one channel at one filter level.
@@ -77,7 +84,7 @@ public:
     // A window longer than this (polls held up) starts the cycle over without a reading.
     static constexpr uint32_t StaleUs=2*MaximumUs;
     void begin(const uint32_t (&counts)[2],uint32_t cycles,uint32_t now,uint32_t clock,uint32_t kernelHz=0) {
-        clock_=clock; kernelHz_=kernelHz; step_=0;
+        clock_=clock; kernelHz_=kernelHz; step_=0; rebased_=0;
         restart(counts,cycles,now);
         const uint32_t next=snapshot_.sequence+1;
         snapshot_={}; snapshot_.sequence=next;
@@ -86,6 +93,9 @@ public:
         cycles_=cycles; at_=now;
         for (unsigned c=0;c<2;++c) counts_[c]=counts[c];
     }
+    // Channel c's count continues from another counter (CH1 between its gate and its edge capture):
+    // the other channel's windows go on, and the cycle under way states no reading of channel c.
+    void rebase(unsigned channel,uint32_t count) { counts_[channel]=count; rebased_|=uint8_t(1U<<channel); }
     // True when a window ended (or a stall started the cycle over): set filter(), then restart().
     bool observe(const uint32_t (&counts)[2],uint32_t cycles,uint32_t now);
     uint8_t filter() const { return CounterLadder::Filters[step_]; }
@@ -100,5 +110,6 @@ private:
     CounterSample windows_[2][CounterLadder::Steps];
     uint32_t counts_[2]{},clock_=0,kernelHz_=0,cycles_=0,at_=0;
     unsigned step_=0;
+    uint8_t rebased_=0; // Channels whose cycle under way spans a rebase().
 };
 } // namespace openosc::scope

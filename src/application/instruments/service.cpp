@@ -83,18 +83,29 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         if (visible) refreshMeterPanel();
     }
 }
-// Analyze -> Save RAW / Save CSV, the waveform (never the decoder's CSV): the file, or why there is none.
-// No space: what the record needs (ScopeRecorder::required: RAW exact, CSV counted row by row) with the
-// volume's headroom, and what is free, in KiB rounded up and down so they never look equal while one does not fit.
+// Plain exports can report an exact size. For gzip the size is known once compression finishes.
 void ApplicationController::recordResult(DataStatus status, char *text, size_t capacity) {
     const auto &recorder = data_.scopeRecorder();
-    const bool csv = recorder.format() == ScopeRecorder::Format::Csv;
+    const bool csv = !ScopeRecorder::raw(recorder.format());
     if (status == DataStatus::Ok) { std::snprintf(text, capacity, "%s", recorder.path()); return; }
+    if (ScopeRecorder::compressed(recorder.format())) {
+        const char *label = csv ? "CSV.gz" : "RAW.gz";
+        if (status == DataStatus::NoSpace) {
+            fs_.refreshFree(); // The temporary file's space is available again.
+            std::snprintf(text, capacity, "Not enough free space for %s\n%s", label,
+                          csv ? "Try RAW.gz or a shorter record." : "Try a shorter record.");
+            return;
+        }
+        if (status == DataStatus::Busy) {
+            std::snprintf(text, capacity, "Waveform %s workspace busy", label);
+            return;
+        }
+    }
     if (status == DataStatus::NoSpace && recorder.required()) {
         const auto needed = static_cast<unsigned long>((recorder.required() + FatDataFile::FreeHeadroom + 1023) / 1024);
         const auto free = static_cast<unsigned long>(fs_.freeBytes() / 1024);
         std::snprintf(text, capacity, "Waveform %s needs %lu KiB, %lu KiB free%s",
-                      csv ? "CSV" : "RAW", needed, free, csv ? "\nTry RAW or a shorter record." : "");
+                      csv ? "CSV" : "RAW", needed, free, csv ? "\nTry CSV.gz or RAW.gz." : "\nTry a shorter record.");
         return;
     }
     std::snprintf(text, capacity, "%s", status == DataStatus::NoSpace ? "Not enough free space for this waveform"

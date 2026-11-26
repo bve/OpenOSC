@@ -74,7 +74,36 @@ const char *Measurements::clipMark(Measurement kind) const {
     default: return nullptr;
     }
 }
-bool Measurements::approximate(Measurement kind) const { return supported(kind) < int(MinimumDigits); }
+bool Measurements::approximate(Measurement kind) const {
+    if ((kind == Measurement::Frequency || kind == Measurement::Period) && source_ == FrequencySource::CounterApproximate) return true;
+    return supported(kind) < int(MinimumDigits);
+}
+bool Measurements::fromCounter(double hertz, bool approximate) {
+    if ((valid_ & (1U << unsigned(Measurement::Frequency))) || !std::isfinite(hertz) || !(hertz > 0)) return false;
+    values_[unsigned(Measurement::Frequency)] = hertz;
+    values_[unsigned(Measurement::Period)] = 1 / hertz;
+    valid_ |= (1U << unsigned(Measurement::Frequency)) | (1U << unsigned(Measurement::Period));
+    bounds_[unsigned(Measurement::Frequency)] = bounds_[unsigned(Measurement::Period)] = 0;
+    source_ = approximate ? FrequencySource::CounterApproximate : FrequencySource::Counter;
+    span_ = 0; // No record samples behind it.
+    return true;
+}
+CounterFallback::Use CounterFallback::judge(const CounterReading &counter, uint64_t recordTimestampUs, double windowSeconds) {
+    if (!counter.settled() || !std::isfinite(counter.hertz) || !(counter.hertz > 0) || !(windowSeconds > 0) ||
+        counter.hertz * windowSeconds >= MinimumPeriods)
+        return Use::None;
+    const uint32_t recordMs = uint32_t(recordTimestampUs / 1000);
+    if (int32_t(counter.startMs - recordMs) > int32_t(CounterCheck::SlackMs)) return Use::None; // A later moment.
+    const int32_t age = int32_t(recordMs - counter.endMs);
+    if (age > int32_t(LatestMs)) return Use::None;
+    return age > int32_t(FreshMs) || counter.quality != CounterQuality::Clean ? Use::Approximate : Use::Clean;
+}
+bool CounterFallback::apply(Measurements &values, const CounterReading &counter, uint64_t recordTimestampUs, double windowSeconds) {
+    double hertz = 0;
+    if (values.value(Measurement::Frequency, hertz)) return false; // The record's own f wins.
+    const auto use = judge(counter, recordTimestampUs, windowSeconds);
+    return use != Use::None && values.fromCounter(counter.hertz, use == Use::Approximate);
+}
 bool CounterCheck::suspect(const CounterReading &counter, const Measurements &record, uint64_t recordTimestampUs) {
     double hertz = 0;
     if (!counter.valid || !counter.gateUs || record.frequencySource() != FrequencySource::Edges || !(record.frequencySpan() > 0) ||

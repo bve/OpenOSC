@@ -8,6 +8,18 @@ struct IdleSettings {
     // powerOffMinutes: Off (0, default) or OffChoices; files before them may hold 1/10/120
     // (LegacyOff), read as they are and kept until the next change (nextPowerOff).
     uint32_t backlightSeconds=0,powerOffMinutes=0,dimPercent=0;
+    // Settings > Power > Wake on measurement (GitHub #169): which instrument's own events count as
+    // activity, as a key does for the timers (the backlight back to its working level, the idle
+    // power-off restarted): a DMM reading that moved (dmm::ActivityDetector) and a Scope record of
+    // a real trigger (DataAccess::scopeTriggerEvents). Off (older files): keys only. In the tail
+    // padding: Preferences keeps its size.
+    enum class Wake : uint8_t { Off, Meter, Scope, Both };
+    static constexpr unsigned WakeCount=4;
+    static constexpr const char *WakeKeys[WakeCount]={"off","dmm","scope","both"};
+    static constexpr const char *WakeNames[WakeCount]={"Off","DMM","Scope","Both"};
+    Wake wake=Wake::Off;
+    bool meterWakes() const { return wake==Wake::Meter || wake==Wake::Both; }
+    bool scopeWakes() const { return wake==Wake::Scope || wake==Wake::Both; }
     static constexpr uint32_t DimLevels[]={0,5,10,15,20,25};
     static constexpr uint32_t OffChoices[]={0,15,30,60}, LegacyOff[]={1,10,120};
     static bool legacyOff(uint32_t minutes) { for (uint32_t m : LegacyOff) if (m==minutes) return true; return false; }
@@ -24,7 +36,7 @@ struct IdleSettings {
         bool dim=false,off=legacyOff(powerOffMinutes);
         for (uint32_t level : DimLevels) dim=dim || dimPercent==level;
         for (uint32_t m : OffChoices) off=off || powerOffMinutes==m;
-        return dim && off && (backlightSeconds==0 || backlightSeconds==30 || backlightSeconds==60 || backlightSeconds==120);
+        return dim && off && unsigned(wake)<WakeCount && (backlightSeconds==0 || backlightSeconds==30 || backlightSeconds==60 || backlightSeconds==120);
     }
     uint32_t dimmedBrightness(uint32_t brightness) const { return dimPercent<brightness ? dimPercent : brightness; }
     // Whether the key that ends the sleep only wakes (InputService::wake takes its stroke): only when
@@ -36,8 +48,11 @@ class IdlePolicy {
 public:
     struct State { bool dimmed,warning,powerOff; };
     void configure(const IdleSettings &settings,uint32_t now) { settings_=settings; activity(now); }
-    void activity(uint32_t now) { activityAt_=offAt_=now; dimmed_=warned_=offSent_=false; }
-    uint32_t quietMs(uint32_t now) const { return now-activityAt_; } // Since the last key.
+    void activity(uint32_t now) { keyAt_=now; restart(now); } // A key (or a Remote session's end).
+    // A measured event (Wake on measurement): the backlight and power-off timers only. quietMs stays
+    // key-only, so continuous triggers never starve the block cache's quiet service (store()).
+    void measured(uint32_t now) { restart(now); }
+    uint32_t quietMs(uint32_t now) const { return now-keyAt_; } // Since the last key.
     State poll(uint32_t now,bool inhibitPowerOff) {
         State state{};
         if (inhibitPowerOff) { offAt_=now; warned_=offSent_=false; }
@@ -53,8 +68,9 @@ public:
         return state;
     }
 private:
+    void restart(uint32_t now) { activityAt_=offAt_=now; dimmed_=warned_=offSent_=false; }
     IdleSettings settings_;
-    uint32_t activityAt_=0,offAt_=0,retryAt_=0;
+    uint32_t keyAt_=0,activityAt_=0,offAt_=0,retryAt_=0;
     bool dimmed_=false,warned_=false,offSent_=false;
 };
 } // namespace openosc

@@ -18,8 +18,10 @@ constexpr const char *generatorDrives[] = {"factory","pwm"};
 // Startup output (GeneratorStartup); absent in older files: off.
 constexpr const char *generatorStartups[] = {"off","restore"};
 constexpr const char *batteryDisplays[] = {"icon","volts","percent"};
-// usb.controller (Preferences::usbController, the index); absent in older files: enabled.
-constexpr const char *usbControllers[] = {"disabled","enabled"};
+// usb.controller (Preferences::usbController, the index); absent in older files: enabled. "auto"
+// (GitHub #170) is unknown to firmware before it, which then refuses the whole file.
+constexpr const char *usbControllers[] = {"disabled","enabled","auto"};
+static_assert(sizeof usbControllers / sizeof *usbControllers == Preferences::UsbControllerCount);
 template<class T> bool number(JsonObjectConst object, const char *key, T &value) {
     if (!object.containsKey(key))
         return true;
@@ -85,6 +87,14 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (index == MenuContrastCount) return false;
         candidate.menuContrast = MenuContrast(index);
     }
+    // power.wake (GitHub #169): absent in older files, or a value this firmware does not know: off.
+    if (root["power"].as<JsonObjectConst>().containsKey("wake")) {
+        const auto value = root["power"]["wake"];
+        const char *name = value.is<const char *>() ? value.as<const char *>() : "";
+        unsigned index = 0;
+        while (index < IdleSettings::WakeCount && std::strcmp(name, IdleSettings::WakeKeys[index])) ++index;
+        candidate.idle.wake = index < IdleSettings::WakeCount ? IdleSettings::Wake(index) : IdleSettings::Wake::Off;
+    }
     if (root.containsKey("hold_ms")) {
         if (!root["hold_ms"].is<unsigned>()) return false;
         const unsigned ms = root["hold_ms"].as<unsigned>();
@@ -111,8 +121,8 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
     if (usb.containsKey("controller")) {
         const char *name = usb["controller"].is<const char *>() ? usb["controller"].as<const char *>() : "";
         unsigned index = 0;
-        while (index < 2 && std::strcmp(name, usbControllers[index])) ++index;
-        if (index == 2) return false;
+        while (index < Preferences::UsbControllerCount && std::strcmp(name, usbControllers[index])) ++index;
+        if (index == Preferences::UsbControllerCount) return false;
         candidate.usbController = index;
     }
     const auto timing = root["scope"].as<JsonObjectConst>();
@@ -245,6 +255,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
     document["power"]["battery_gain_permille"] = int(values.batteryGainPermille);
     document["power"]["battery_offset_mv"] = int(values.batteryOffsetMv);
+    if (values.idle.wake != IdleSettings::Wake::Off) document["power"]["wake"] = IdleSettings::WakeKeys[unsigned(values.idle.wake)];
     document["usb"]["controller"] = usbControllers[values.usbController];
     document["scope"]["timebase_ns"] = values.timebaseNs;
     auto channels = document["scope"].createNestedArray("millivolts_per_division");

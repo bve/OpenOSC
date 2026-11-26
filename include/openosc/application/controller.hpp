@@ -8,6 +8,8 @@
 #include "openosc/application/preferences_result.hpp"
 #include "openosc/input/gestures.hpp"
 #include "openosc/instrument/data_access.hpp"
+#include "openosc/application/measurement_wake.hpp"
+#include "openosc/usb/auto_policy.hpp"
 #include "openosc/screenshot/writer.hpp"
 #include "openosc/screenshot/catalog.hpp"
 #include "openosc/screenshot/reader.hpp"
@@ -173,7 +175,21 @@ private:
     void confirmationKeys(uint32_t keys, uint32_t now);
     void requestShutdown(uint32_t now);
     void serviceShutdown(uint32_t now);
-    bool servicePower(uint32_t keys,uint32_t now);
+    // `measured`: an instrument's own event (measurementActivity) counts as activity as a key does,
+    // without waking a key (wakeTakesKey) and never against a low-battery or other shutdown.
+    bool servicePower(uint32_t keys,uint32_t now,bool measured=false);
+    // Settings > Files & USB > USB controller (usb_auto.cpp, GitHub #170): applyUsbController puts the
+    // chosen mode in force once (boot, reload, Settings); serviceUsbAuto runs Auto's policy each pass.
+    void applyUsbController(uint32_t now);
+    void serviceUsbAuto(uint32_t now);
+    bool usbAutoOff() const; // Auto with the controller off: no computer found (Remote is refused).
+    usb::AutoPolicy usbAuto_;
+    uint8_t usbApplied_ = 0xff; // The mode in force (none before the boot applies it).
+    // GitHub #169, Settings > Power > Wake on measurement: once a pass, whether the instrument on show
+    // had an event of its own (MeasurementWake: a DMM reading that moved, a Scope record of a real
+    // trigger). AUTO, a calibration, a Bode sweep or a shutdown: none.
+    bool measurementActivity();
+    MeasurementWake measurementWake_;
     IdlePolicy idle_;
     BatteryMonitor &battery_;
     McuTemperature &mcuTemperature_;

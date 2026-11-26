@@ -59,13 +59,15 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case CounterSource: std::snprintf(text, capacity, "Counter"); break;
     case CounterAverage: std::snprintf(text, capacity, "Readings averaged"); break;
     case CounterPpm: std::snprintf(text, capacity, "Clock correction"); break;
+    case CounterEstimate: std::snprintf(text, capacity, "No edges counted"); break;
+    case CounterTimed: std::snprintf(text, capacity, "CH%u below 5 kHz", view.number(0)); break; // CH1's input (TIM2).
     default: if (capacity) text[0] = 0; break;
     }
 }
 unsigned Controls::choices(unsigned row) const {
     switch (row) {
     case Section: return unsigned(Group::Count);
-    case Channel: case FftSource: case FftScale: return 2;
+    case Channel: case FftSource: case FftScale: case CounterEstimate: case CounterTimed: return 2;
     case View: case GridStyle: case Average: case FftWindow: return 4;
     case TraceStyle: case MathTrace: case TraceInterpolation: case SampleReduction: case CounterSource: case CounterAverage: return 3;
     case Persistence: return sizeof Persistences / sizeof *Persistences;
@@ -102,6 +104,8 @@ unsigned Controls::choice(unsigned row) const {
     case FftDc: return o.spectrum.removeDc;
     case CounterSource: return o.counter.source;
     case CounterAverage: return o.counter.average == 1 ? 0 : o.counter.average == 3 ? 1 : 2;
+    case CounterEstimate: return o.counter.estimate;
+    case CounterTimed: return o.counter.timed;
     default: return 0;
     }
 }
@@ -109,7 +113,8 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
     static constexpr const char *views[] = {"Y-T", "X-Y", "FFT", "Y-T+FFT"}, *styles[] = {"Vectors", "Points", "Envelope"},
         *grids[] = {"Full", "Major", "Axes", "None"}, *reductions[] = {"Peak", "HD mean", "Auto (HD/Peak)"},
         *interpolations[] = {"Linear", "Sinc", "Spline"}, *windows[] = {"Rectangular", "Hann", "Hamming", "Blackman"},
-        *scales[] = {"Linear", "dBFS"}, *averaged[] = {"1", "3", "10"};
+        *scales[] = {"Linear", "dBFS"}, *averaged[] = {"1", "3", "10"}, *estimates[] = {"No signal", "Trace f (~)"},
+        *timings[] = {"Gate", "Timed edges"};
     const auto pick = [&](const char *const *names, unsigned n) { std::snprintf(text, capacity, "%s", i < n ? names[i] : ""); };
     switch (row) {
     case Section: std::snprintf(text, capacity, "%s", groupName(i)); break;
@@ -130,6 +135,8 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
     case FftWindow: pick(windows, 4); break;
     case FftScale: pick(scales, 2); break;
     case CounterAverage: pick(averaged, 3); break;
+    case CounterEstimate: pick(estimates, 2); break;
+    case CounterTimed: pick(timings, 2); break;
     case Persistence:
         if (i < choices(row) && Persistences[i] == InfinitePersistence) std::snprintf(text, capacity, "Infinite");
         // A graded channel (GitHub #85) keeps its density for the persistence, or this with none.

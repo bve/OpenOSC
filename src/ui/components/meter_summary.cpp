@@ -105,9 +105,21 @@ void spaced(double value, Quantity quantity, char *output, size_t capacity) {
     std::snprintf(output, capacity, "%.*s %s%s", int(n), text, prefix, units[unsigned(quantity)]);
 }
 } // namespace
-// In the reading's display units (MeterText::unit: kΩ, µF), as the reading's own unit label.
-void MeterSummary::statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative) const {
+// In the reading's display units (MeterText::unit: kΩ, µF), as the reading's own unit label. A
+// resistance or capacitance in the prefix of its own magnitude at the quantum of its readings
+// (dmm::DisplayPrefix, Statistics' exponents; GitHub #168), as the main digits are.
+void MeterSummary::statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative,
+                                 int8_t exponent) const {
     static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
+    if (prefix_.valid() && prefix_.quantity() == quantity) {
+        const auto prefix = exponent != dmm::DisplayPrefix::Unknown ? prefix_.at(exponent) : prefix_;
+        char number[24];
+        const char *unit = nullptr;
+        if (prefix.format(value, number, sizeof number, unit)) {
+            const int written = std::snprintf(output, capacity, "%s%s", number, MeterText::unit(unit));
+            if (written > 0 && size_t(written) < capacity) return;
+        }
+    }
     if (resolution_.valid() && resolution_.quantity() == quantity &&
         resolution_.format(value, MeterText::unit(resolution_.unit()), output, capacity, relative)) return;
     if (quantity == Quantity::Temperature) { std::snprintf(output, capacity, "----"); return; }
@@ -165,7 +177,10 @@ void MeterSummary::visible(bool value) { lv_obj_set_hidden(root_, !value); }
 void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
                           double reference, bool relative, bool peerRelative, const char *charge) {
     const double offset = relative ? reference : 0;
-    if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) resolution_ = resolution;
+    if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) {
+        resolution_ = resolution;
+        prefix_ = dmm::DisplayPrefix::of(result);
+    }
     const bool temperature = result.primary.quantity == Quantity::Temperature;
     bool changed = Elements::setText(secondary_, result.secondary.valid() ? result.secondaryText : charge ? charge : "");
     if (relative) {
@@ -193,7 +208,9 @@ void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *stat
         for (auto &text : texts) std::snprintf(text, sizeof text, "--");
     if (view.valid) {
         const double numbers[Columns] = {view.minimum, view.maximum, view.average};
-        for (unsigned c = 0; c < Columns; ++c) statisticText(numbers[c], view.quantity, texts[c], sizeof texts[c], relative || peerRelative);
+        const int8_t exponents[Columns] = {view.minimumExponent, view.maximumExponent, view.averageExponent};
+        for (unsigned c = 0; c < Columns; ++c)
+            statisticText(numbers[c], view.quantity, texts[c], sizeof texts[c], relative || peerRelative, exponents[c]);
     }
     // One size for the three, each in its own typeface: the largest (ValueFont, then 12; compact:
     // 12 beside the names) in which all three fit their columns, so they share a baseline.

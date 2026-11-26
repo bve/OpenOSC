@@ -8,6 +8,7 @@ void RecordReadouts::start(const FrameView &frame, const ReadoutSelection &selec
     result_ = {};
     result_.basis = ReadoutBasis::Record;
     result_.timestampUs = m.timestampUs;
+    result_.captureRate(m.samplesPerSecond);
     result_.sequence = sequence_ = m.sequence;
     result_.points = samples_ = m.samples;
     metadata_ = m; split_ = frame.split();

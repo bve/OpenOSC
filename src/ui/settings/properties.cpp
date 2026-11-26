@@ -20,7 +20,8 @@ constexpr unsigned OffCount = sizeof IdleSettings::OffChoices / sizeof *IdleSett
 constexpr const char *Batteries[] = {"Icon", "Volts", "Percent"};
 constexpr int32_t BatteryOffsetStepMv = 5;
 // Preferences::usbController (the index). The data link only runs on ClockPolicy's profile.
-constexpr const char *UsbControllers[] = {"Disabled", "Enabled"};
+constexpr const char *UsbControllers[] = {"Disabled", "Enabled", "Auto"};
+static_assert(sizeof UsbControllers / sizeof *UsbControllers == Preferences::UsbControllerCount);
 // Settings > Display > Scope shortcuts (ScopeKeys), in the order of their enums.
 constexpr const char *AutoKeys[] = {"Quick: tap setup", "Classic: hold setup"};
 constexpr const char *ResetHolds[] = {"Home view", "Reset zoom & pan"};
@@ -67,7 +68,7 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     case Action::SwapChannels: return PropertyKind::Toggle;
     case Action::ShowFps: case Action::ClockIndicator: case Action::PanDirection: case Action::MenuLeftKey: case Action::MenuContrast: case Action::HoldTime:
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
-    case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
+    case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout: case Action::MeasurementWake:
     case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave:
     case Action::AutoKey: case Action::ResetHold: case Action::ShortcutHold: return PropertyKind::Choice;
     case Action::TooltipCritical: return PropertyKind::Info; // Always on: nothing to choose.
@@ -91,7 +92,9 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::BacklightTimeout: return BacklightCount;
     case Action::BacklightIdleLevel: return DimCount;
     case Action::PowerOffTimeout: return OffCount;
-    case Action::GeneratorStartup: case Action::UsbController: return 2;
+    case Action::MeasurementWake: return IdleSettings::WakeCount;
+    case Action::GeneratorStartup: return 2;
+    case Action::UsbController: return Preferences::UsbControllerCount; // Disabled, Enabled, Auto (GitHub #170).
     case Action::Interleave: return board::Current::Features.interleaveControl() ? 3 : 2; // Off, On, Auto.
     case Action::AutoKey: return unsigned(ScopeKeys::Auto::Count);
     case Action::ResetHold: return unsigned(ScopeKeys::Reset::Count);
@@ -115,6 +118,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::BacklightTimeout: return indexOf(prefs_.idle.backlightSeconds, Backlight);
     case Action::BacklightIdleLevel: return indexOf(prefs_.idle.dimPercent, IdleSettings::DimLevels);
     case Action::PowerOffTimeout: return indexOf(prefs_.idle.powerOffMinutes, IdleSettings::OffChoices); // An old value: none.
+    case Action::MeasurementWake: return unsigned(prefs_.idle.wake);
     case Action::GeneratorStartup: return prefs_.generatorStartup;
     case Action::UsbController: return prefs_.usbController;
     case Action::Interleave: return prefs_.scope.interleave;
@@ -153,6 +157,7 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
         else std::snprintf(output, capacity, "Off");
         break;
     case Action::PowerOffTimeout: seconds(IdleSettings::OffChoices[index % OffCount], "min", output, capacity); break;
+    case Action::MeasurementWake: std::snprintf(output, capacity, "%s", IdleSettings::WakeNames[index % IdleSettings::WakeCount]); break;
     case Action::GeneratorStartup: std::snprintf(output, capacity, "%s", index ? "Restore last" : "Off"); break;
     case Action::Interleave: // On says when it runs.
         // Auto: the ZT706S factory's rule, the ZT703S's as MKR firmware (CH1 alone at 10/25 ns, 200/280 MHz).
@@ -166,8 +171,9 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
         std::snprintf(output, capacity, "%s", shortcut < ScopeKeys::Shortcut::Count ? Shortcuts[unsigned(shortcut)] : "");
         break;
     }
-    case Action::UsbController: // Enabled says where it runs.
-        if (index) std::snprintf(output, capacity, "Enabled (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
+    case Action::UsbController: // Enabled and Auto say where they run; Auto, that it needs a computer.
+        if (index == Preferences::UsbAuto) std::snprintf(output, capacity, "Auto (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
+        else if (index) std::snprintf(output, capacity, "Enabled (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
         else std::snprintf(output, capacity, "Disabled");
         break;
     default: PropertyList::optionName(row, index, output, capacity); break;
@@ -220,13 +226,15 @@ void SettingsProperties::value(unsigned row, char *output, size_t capacity) cons
             std::snprintf(output, capacity, "%c%d.%d codes", tenths < 0 ? '-' : '+', std::abs(tenths) / 10, std::abs(tenths) % 10);
         }
         break;
-    case Action::UsbController: // The choice, and with Enabled whether the clock that runs allows it.
+    case Action::UsbController: { // The choice, and with Enabled or Auto whether the clock that runs allows it.
+        const char *mode = prefs_.usbController == Preferences::UsbAuto ? "Auto" : "Enabled";
         if (!prefs_.usbController) std::snprintf(output, capacity, "Disabled");
-        else if (usb::ClockPolicy::allows(activeRunMode_)) std::snprintf(output, capacity, "Enabled");
+        else if (usb::ClockPolicy::allows(activeRunMode_)) std::snprintf(output, capacity, "%s", mode);
         else if (activeRunMode_ < RunModeCount)
-            std::snprintf(output, capacity, "Enabled, off at %lu", megahertz(activeRunMode_));
-        else std::snprintf(output, capacity, "Enabled, off on HSI");
+            std::snprintf(output, capacity, "%s, off at %lu", mode, megahertz(activeRunMode_));
+        else std::snprintf(output, capacity, "%s, off on HSI", mode);
         break;
+    }
     case Action::BufferSize: case Action::BacklightTimeout: case Action::BacklightIdleLevel:
         if (option(row) < options(row)) optionName(row, option(row), output, capacity);
         else if (action(row) == Action::BufferSize) {
@@ -255,6 +263,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::BacklightTimeout: prefs_.idle.backlightSeconds = Backlight[index]; break;
     case Action::BacklightIdleLevel: prefs_.idle.dimPercent = IdleSettings::DimLevels[index]; break;
     case Action::PowerOffTimeout: prefs_.idle.powerOffMinutes = IdleSettings::OffChoices[index]; break;
+    case Action::MeasurementWake: prefs_.idle.wake = IdleSettings::Wake(index); break;
     case Action::GeneratorStartup: prefs_.generatorStartup = index; break;
     case Action::UsbController: prefs_.usbController = index; break;
     case Action::Interleave: prefs_.scope.interleave = index; break;

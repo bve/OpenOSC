@@ -135,6 +135,7 @@ bool DataAccess::activate(MeasurementMode view) {
         status_ = DataStatus::NoData;
         return true;
     }
+    restartTriggerEvents(); // A record captured before this entry is no trigger of it.
     return activateScope();
 }
 bool DataAccess::generatorLoadsBus() const {
@@ -285,7 +286,7 @@ bool DataAccess::stepDmmRange(int direction) {
 bool DataAccess::recordScope(ScopeRecorder::Format format) {
     revokeBackground(); // Revoked first: nothing waits for a background reader.
     if (zeroBusy()) return false;
-    if (format != ScopeRecorder::Format::Raw && format != ScopeRecorder::Format::Csv)
+    if (!ScopeRecorder::supported(format))
         return false;
     if (recordPending_ || recorder_.busy() || (!scopeHeld_ && measurement_ != MeasurementMode::Oscilloscope))
         return false;

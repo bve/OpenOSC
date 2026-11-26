@@ -1,29 +1,46 @@
 #pragma once
 #include "openosc/acquisition/mailbox.hpp"
 #include "openosc/data/fat_file.hpp"
+#include "openosc/data/gzip_stream.hpp"
 #include "openosc/data/raw_capture.hpp"
 #include "openosc/data/session_log.hpp"
 #include "openosc/measurement/dmm/result.hpp"
 
 namespace openosc {
+// Waveform exports into /openosc/CAPTURES. CSV.gz and RAW.gz (GitHub #166) wrap the original
+// export bytes in a gzip member using the Trial area. Each write checks the remaining space.
+// A failed or cancelled gzip export discards its temporary file. The Trial area is released
+// once compression ends or the save is cancelled.
 class ScopeRecorder {
 public:
-    enum class Format { Raw, Csv };
+    enum class Format { Raw, Csv, CsvGz, RawGz };
+    static constexpr bool raw(Format format) { return format == Format::Raw || format == Format::RawGz; }
+    static constexpr bool compressed(Format format) { return format == Format::CsvGz || format == Format::RawGz; }
+    static constexpr bool supported(Format format) { return raw(format) || format == Format::Csv || format == Format::CsvGz; }
     explicit ScopeRecorder(Filesystem &fs) : file_(fs) {}
-    bool begin(scope::FrameLease &&lease, Format format);
+    bool begin(scope::FrameLease &&lease, Format format, scope::AcquisitionArena *arena = nullptr);
     void service();
     void cancel(bool keep = false);
     bool busy() const { return busy_; }
     DataStatus status() const { return status_; }
     const char *path() const { return file_.path(); }
     // The reservation in bytes. When the CSV's upper bound did not fit, this is the exact byte count.
+    // Streaming gzip exports report 0 here.
     uint64_t required() const { return required_; }
     Format format() const { return format_; } // The last begin()'s, also when it was refused.
 
 private:
     bool writeCsvHeader(size_t bytes);
     void measureCsv();
+    bool beginGzip(scope::FrameLease &&lease, scope::AcquisitionArena *arena);
+    size_t csvRows(uint8_t *out, size_t capacity); // Rows from offset_ while 180 bytes are left.
+    size_t rawBytes(uint8_t *out, size_t capacity);
+    void serviceGzip();
+    bool flushGzip(); // buffer_'s compressed bytes to the file.
+    void failGzip(DataStatus status);
     FatDataFile file_;
+    GzipStream gzip_;
+    size_t pending_ = 0, consumed_ = 0, out_ = 0; // Gzip input in the Trial area and output in buffer_.
     scope::FrameLease lease_;
     RawCaptureStream stream_;
     Format format_ = Format::Raw;

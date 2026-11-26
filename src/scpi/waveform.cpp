@@ -101,7 +101,9 @@ bool Engine::measured(const scope::Measurements &values, bool clipped, unsigned 
         if (k < 0 || size_t(k) >= size - used) return false;
         used += size_t(k);
     }
-    static constexpr const char *Sources[] = {"NONE", "EDGE", "SPEC", "CNT"};
+    // CNT, CNT?: GitHub #171's count for a window too short (CounterFallback; CNT? approximate).
+    static constexpr const char *Sources[] = {"NONE", "EDGE", "SPEC", "CNT", "CNT?"};
+    static_assert(sizeof Sources / sizeof *Sources == unsigned(scope::FrequencySource::CounterApproximate) + 1);
     const int k = std::snprintf(out + used, size - used, "%u,%s", clipped ? 1U : 0U, Sources[unsigned(values.frequencySource())]);
     return k > 0 && size_t(k) < size - used;
 }
@@ -194,9 +196,11 @@ void Engine::stepMeasure() {
         const bool done = recordJob->step(*f, MeasureSlice, now_);
         if (recordJob->running()) return;
         const auto &r = recordJob->result();
+        auto values = r.computed[c] ? r.values[c] : scope::Measurements{}; // Before endMeasure drops the job.
         endMeasure();
+        counterFallback(values, f->metadata(), f->metadata().samples);
         // Clip here: the signal's band at a rail (Measurements::clipMark), not a lone point as on the Screen basis.
-        if (!done || !r.computed[c] || !measured(r.values[c], r.values[c].clipMark(scope::Measurement::PeakToPeak) != nullptr, c, text, sizeof text)) error(-230, true);
+        if (!done || !r.computed[c] || !measured(values, values.clipMark(scope::Measurement::PeakToPeak) != nullptr, c, text, sizeof text)) error(-230, true);
         else reply("%s", text);
         return;
     }
@@ -207,9 +211,17 @@ void Engine::stepMeasure() {
     if (failed) { error(-230, true); return; }
     job.series.valid[c] = job.series.count[c] > 0;
     job.series.band[c] = job.band.band();
-    const auto result = plot::ScreenReadouts::calculate(job.series, f->metadata(), selection(c, scope::ReadoutBasis::Screen), now_);
+    auto result = plot::ScreenReadouts::calculate(job.series, f->metadata(), selection(c, scope::ReadoutBasis::Screen), now_);
+    if (result.computed[c]) counterFallback(result.values[c], f->metadata(), job.end - job.first);
     if (!result.computed[c] || !measured(result.values[c], job.clipped, c, text, sizeof text)) error(-230, true);
     else reply("%s", text);
+}
+// GitHub #171: the leased record's f/T its window (`points` of it) cannot resolve, from the count of
+// its moment (CounterFallback), when the setting asks for it: Off, the reply is as before.
+void Engine::counterFallback(scope::Measurements &values, const scope::FrameMetadata &m, uint32_t points) const {
+    scope::CounterReading counter;
+    if (!backend_.shortWindowCounter() || !m.samplesPerSecond.valid() || !backend_.counter(waveChannel_, counter)) return;
+    scope::CounterFallback::apply(values, counter, m.timestampUs, points / m.samplesPerSecond.value());
 }
 void Engine::endMeasure() {
     if (measureOwner == this) dropJob();

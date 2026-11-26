@@ -12,9 +12,13 @@ FatDataFile::~FatDataFile() { cancel(); }
 void FatDataFile::cancel(bool keep) {
     if (open_ || verifying_) {
         f_close(&file_);
-        if (!keep) f_unlink(temporary_);
+        if (!keep && f_unlink(temporary_) == FR_OK) staged_ = false;
     }
     open_ = verifying_ = false;
+}
+void FatDataFile::discard() {
+    cancel(true);
+    if (staged_ && f_unlink(temporary_) == FR_OK) staged_ = false;
 }
 bool FatDataFile::sync() {
     if (!open_) return false;
@@ -29,6 +33,7 @@ bool FatDataFile::fail(DataStatus status) {
 bool FatDataFile::begin(const char *directory, const char *prefix, const char *extension, uint64_t reserve) {
     if (open_ || verifying_)
         return false;
+    staged_ = false; // Ownership is per attempt, including if a previous attempt kept its temporary file.
     if (!directory || !prefix || !extension || std::strlen(directory) > 40 || std::strlen(prefix) > 12 ||
         std::strlen(extension) > 8)
         return fail(DataStatus::InvalidArgument);
@@ -52,7 +57,7 @@ bool FatDataFile::begin(const char *directory, const char *prefix, const char *e
             continue;
         if (opened != FR_OK)
             return fail(DataStatus::IoError);
-        open_ = true;
+        open_ = staged_ = true;
         bytes_ = 0;
         crc_ = Crc32{};
         status_ = DataStatus::Ok;
@@ -64,11 +69,31 @@ bool FatDataFile::write(const void *data, size_t bytes) {
     if (!open_ || (!data && bytes) || bytes > UINT_MAX)
         return fail(DataStatus::InvalidArgument);
     UINT count = 0;
-    if (f_write(&file_, data, bytes, &count) != FR_OK || count != bytes)
+    if (f_write(&file_, data, bytes, &count) != FR_OK)
         return fail(DataStatus::IoError);
+    if (count != bytes) // FatFs found no free cluster.
+        return fail(DataStatus::NoSpace);
     crc_.update(data, bytes);
     bytes_ += bytes;
     return true;
+}
+bool FatDataFile::writeWithinHeadroom(const void *data, size_t bytes) {
+    if (!open_) return fail(DataStatus::InvalidArgument);
+    if (bytes > UINT_MAX) return fail(DataStatus::InvalidArgument);
+    if (!fs_.refreshFree()) return fail(DataStatus::IoError); // FatFs keeps the count: no FAT scan after the first.
+    const FATFS *fs = file_.obj.fs;
+#if FF_MAX_SS != FF_MIN_SS
+    const uint64_t cluster = uint64_t(fs->csize) * fs->ssize;
+#else
+    const uint64_t cluster = uint64_t(fs->csize) * FF_MAX_SS;
+#endif
+    const uint64_t free = fs_.freeBytes();
+    if (!cluster) return fail(DataStatus::IoError);
+    const uint64_t tail = bytes_ % cluster;
+    const uint64_t added = (tail + bytes + cluster - 1) / cluster - (tail != 0);
+    // FAT may need another directory cluster to publish the long name.
+    if (free < FreeHeadroom || (added + 1) * cluster > free - FreeHeadroom) return fail(DataStatus::NoSpace);
+    return write(data, bytes);
 }
 DataStatus FatDataFile::commitStep() {
     if (open_) {
@@ -112,6 +137,7 @@ DataStatus FatDataFile::commitStep() {
         fail(DataStatus::IoError);
         return status_;
     }
+    staged_ = false;
     status_ = DataStatus::Ok;
     return status_;
 }

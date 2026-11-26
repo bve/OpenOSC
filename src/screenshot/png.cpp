@@ -56,29 +56,11 @@ namespace {
 constexpr int WindowBits=11; // 2 KiB, enough to match one RGB scanline back.
 }
 
-voidpf PngStream::allocate(voidpf context, unsigned count, unsigned size) {
-    if (!size || count>scope::AcquisitionArena::TrialBytes/size) return nullptr;
-    return static_cast<PngStream *>(context)->allocate(size_t(count)*size);
-}
-
-uint8_t *PngStream::allocate(size_t bytes) {
-    constexpr size_t Alignment=alignof(std::max_align_t);
-    const size_t offset=(used_+Alignment-1)&~(Alignment-1);
-    if (offset>scope::AcquisitionArena::TrialBytes || bytes>scope::AcquisitionArena::TrialBytes-offset)
-        return nullptr;
-    used_=offset+bytes;
-    return reinterpret_cast<uint8_t *>(scope::AcquisitionArena::trialMemory())+offset;
-}
-
 bool PngStream::begin(scope::AcquisitionArena &arena, bool encode) {
-    if (!arena.claim(scope::AcquisitionArena::Trial)) return false;
-    arena_=&arena;
-    used_=0;
+    if (!memory_.claim(arena)) return false;
     encode_=encode;
     io_={};
-    io_.opaque=this;
-    io_.zalloc=&allocate;
-    io_.zfree=&free;
+    memory_.attach(io_);
     scanline_=allocate(png::ScanlineBytes);
     const int result=encode ? deflateInit2(&io_,Z_BEST_SPEED,Z_DEFLATED,WindowBits,1,Z_DEFAULT_STRATEGY)
                             : inflateInit2(&io_,WindowBits);
@@ -88,10 +70,9 @@ bool PngStream::begin(scope::AcquisitionArena &arena, bool encode) {
 }
 
 void PngStream::end() {
-    if (!arena_) return;
+    if (!memory_.claimed()) return;
     if (encode_) deflateEnd(&io_);
     else inflateEnd(&io_);
-    arena_->release(scope::AcquisitionArena::Trial);
-    arena_=nullptr;
+    memory_.release();
 }
 }

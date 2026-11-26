@@ -49,8 +49,17 @@ rising_edges,reserved,counter_Hz,amplitude_V,top_V,bottom_V,clipped,frequency_so
 ```
 
 Unavailable numeric values, including the reserved field, are `NAN`.
-`clipped` is 0 or 1. `frequency_source` is `NONE`, `EDGE`, `SPEC` or `CNT`.
+`clipped` is 0 or 1. `frequency_source` is `NONE`, `EDGE`, `SPEC`, `CNT` or `CNT?`.
 `counter_Hz` is the latest settled hardware counter value.
+
+`CNT` and `CNT?` appear only with **Analyze → Measurements → Short window f/T** set to
+**From the counter**. With it, a measurement window that holds fewer than four periods of the
+settled count takes `frequency_Hz` and `period_s` from that count, when the record has no
+frequency of its own. The count must be of the record's moment: it may end up to 3 s before the
+record and must not begin more than 0.5 s after it, so a held record of an earlier moment stays
+`NAN`. `CNT?` marks a count that is not Clean (Filtered or Unverified) or that ended more than
+0.5 s before the record. `duty_pct` never comes from the count. With the setting Off, the reply
+never contains `CNT`.
 
 ## Files
 
@@ -69,6 +78,10 @@ Supported folders are `SCREENSHOTS`, `LOGS`, `CAPTURES`, `DECODE` and
 `FRA` under `/openosc`. Files still being written are hidden until the
 writer commits them. File transfers hold a reader until the transfer ends
 or is canceled. Deletion while a file is in use returns `-221`.
+
+Compressed waveform exports use `CAPnnnnn.CSV.GZ` and `CAPnnnnn.RAW.GZ`. Take the filename
+from `MMEM:CAT? "CAPTURES"` and download the gzip bytes with `MMEM:DATA?`. Decompress them on
+the host to recover the original CSV or RAW file.
 
 The instrument saves screenshots as PNG. Use the filename from
 `MMEM:CAT? "SCREENSHOTS"` to download a stored PNG or an earlier BMP.

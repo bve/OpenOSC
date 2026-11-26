@@ -100,10 +100,11 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
         request.recordPoints = chosen.scope.recordPoints;
         if (!applyEdited(request, now)) view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
     }
-    if (chosen.usbController != prefs_.usbController) { // At once: off stops the controller, on attaches it.
+    if (chosen.usbController != prefs_.usbController) { // At once: off stops the controller, on attaches it, Auto attempts.
         prefs_.usbController = chosen.usbController;
-        if (usb_) usb_->enable(prefs_.usbController != 0, now);
-        view_.notify(Tooltip::Done, prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
+        applyUsbController(now);
+        view_.notify(Tooltip::Done, prefs_.usbController == Preferences::UsbAuto ? "USB controller Auto"
+                                  : prefs_.usbController ? "USB controller enabled" : "USB controller off", now);
     }
     if (chosen.scope.interleave != prefs_.scope.interleave) selectInterleave(scope::InterleaveMode(chosen.scope.interleave), now);
     if (chosen.showFps != prefs_.showFps) counterStale_ = true; // Redrawn on the next display pass.

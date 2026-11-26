@@ -24,14 +24,14 @@ bool DataAccess::resumeScope(const ScopeRequest &request) {
 
     const auto configuration = configuration_;
     const auto trigger = heldTrigger_;
-    const auto configuredAt = configuredAt_, armSequence = armSequence_;
+    const auto configuredAt = configuredAt_, armSequence = armSequence_, triggerFloor = triggerFloor_;
     const bool singleDone = singleDone_, failed = captureFailed_, owed = captureRestartOwed_, waiting = triggerWaiting_, staged = staged_;
     const auto reject = [&] {
         const auto failure = status_;
         stopCapture(false); // configureScopeCore may have restarted the previous acquisition.
         request_ = previous;
         configuration_ = configuration;
-        configuredAt_ = configuredAt; armSequence_ = armSequence;
+        configuredAt_ = configuredAt; armSequence_ = armSequence; triggerFloor_ = triggerFloor;
         singleDone_ = singleDone; captureFailed_ = failed; captureRestartOwed_ = owed; triggerWaiting_ = waiting; staged_ = staged;
         heldTrigger_ = trigger;
         scopeHeld_ = true;
@@ -56,6 +56,10 @@ bool DataAccess::resumeScope(const ScopeRequest &request) {
     };
     scopeHeld_ = false; singleDone_ = false; captureFailed_ = false; holdPending_ = false;
     if (request.trigger.mode == scope::TriggerMode::Single) armSequence_ = sequence_ + 1;
+    // The trigger event floor before any start: configureScopeCore may start the first capture of
+    // this RUN at once (++sequence_), and a floor taken after it would drop that record's trigger.
+    // A change takes the same floor again before its start; same() starts nothing here.
+    restartTriggerEvents();
     // Settings staged in HOLD are already request_: same() would keep a capture still running the old
     // plan (holdPending_) or skip the restart, so a staged request is applied as a change.
     if (!configureScopeCore(request, failed || owed || staged, true)) { putBack(); return reject(); }

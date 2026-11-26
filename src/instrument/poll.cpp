@@ -105,7 +105,7 @@ void DataAccess::poll(uint32_t now) {
         scope::FrameLease lease;
         if (timeUs_ >= recordDeadlineUs_) { recordStatus_ = DataStatus::Timeout; recordPending_ = false; }
         else if (acquireScope(lease)) {
-            if (!recorder_.begin(std::move(lease), recordFormat_))
+            if (!recorder_.begin(std::move(lease), recordFormat_, &arena_))
                 recordStatus_ = recorder_.status();
             recordPending_ = false;
         }

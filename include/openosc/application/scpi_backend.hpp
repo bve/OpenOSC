@@ -77,6 +77,7 @@ public:
     uint32_t coreMhz() const override;
     int coreMhz(uint32_t mhz) override;
     bool counter(unsigned channel,scope::CounterReading &reading) const override;
+    bool shortWindowCounter() const override;
     bool idleSettings(IdleSettings &) const override;
     int setIdle(const IdleSettings &) override;
     int fileList(const char *folder, uint32_t start, char *out, size_t size, uint32_t &count, uint32_t &total) override;

@@ -97,7 +97,11 @@ private:
 // Where a stated frequency comes from. Edges: the periods of the edge pass (EdgeScanner), at four
 // points per cycle or more. Spectrum: the dominant tone (ToneEstimate) of a signal faster than
 // that, where the edges miss cycles: its period is 1/f, its duty and pulse count are unknown.
-enum class FrequencySource : uint8_t { None, Edges, Spectrum };
+// Counter, CounterApproximate (GitHub #171, CounterFallback): a window too short for its own f, the
+// settled hardware count instead; Approximate when that count is not Clean or over FreshMs older
+// than the record. Never Edges: nothing that checks or estimates from the record's edges
+// (CounterCheck, the footer's counter estimate) ever takes the counter for the record's own f.
+enum class FrequencySource : uint8_t { None, Edges, Spectrum, Counter, CounterApproximate };
 struct SignalSummary {
     int16_t minimum = 0, maximum = 0;
     int16_t robustMinimum = 0, robustMaximum = 0; // The band (BandEstimate) when hasRobust.

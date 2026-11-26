@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/ui/components/elements.hpp"
 #include "openosc/measurement/dmm/session.hpp"
+#include "openosc/measurement/dmm/display_prefix.hpp"
 #include "openosc/measurement/dmm/resolution.hpp"
 #include "openosc/ui/components/meter_bar.hpp"
 
@@ -10,6 +11,7 @@ namespace openosc::ui {
 // largest of 14 and 12 in which all three fit their column with the sign column reserved). The three
 // values use the shown reading's unit and resolution (dmm::Resolution: AVG never has more decimals
 // than the readings); one from another range that does not fit there keeps the display's five digits.
+// A resistance or capacitance takes the prefix of its own magnitude (dmm::DisplayPrefix, GitHub #168).
 class MeterSummary {
 public:
     static constexpr int Width = 296, Columns = 3, ColumnGap = 4, ColumnWidth = (Width - (Columns - 1) * ColumnGap) / Columns;
@@ -60,8 +62,10 @@ private:
     void arrange();
     void centre(unsigned column);
     void flowMeta(); // The meta row's three texts at their widths (digital and compact).
-    // A statistic at the last valid reading's resolution, else at the display's digits.
-    void statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative = false) const;
+    // A statistic at the last valid reading's resolution, else at the display's digits; a resistance or
+    // capacitance in its magnitude's prefix at `exponent` (Statistics' quantum; Unknown: the reading's).
+    void statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative = false,
+                       int8_t exponent = dmm::DisplayPrefix::Unknown) const;
     static int textWidth(lv_obj_t *label); // Its text in its own font (the role's typeface).
     MeterLook look_{};
     bool compact_ = false, statisticsRows_ = true;
@@ -71,5 +75,6 @@ private:
     MeterBar bar_;
     lv_obj_t *reference_ = nullptr;
     dmm::Resolution resolution_; // Of the last valid reading: an overload keeps the period's format.
+    dmm::DisplayPrefix prefix_; // The same reading's (invalid: not a resistance or capacitance).
 };
 } // namespace openosc::ui

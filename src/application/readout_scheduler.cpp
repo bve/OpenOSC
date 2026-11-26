@@ -13,6 +13,13 @@ void ReadoutScheduler::reset(DataAccess &data) {
     suspend(data);
     shown_ = {}; configured_ = painted_ = false; percent_ = 255; projection_ = 0;
 }
+void ReadoutScheduler::counterFallback(DataAccess &data, const Rational &samplesPerSecond) {
+    if (!selection_.shortWindowCounter || !shown_.valid || !samplesPerSecond.valid()) return;
+    const auto counters = data.scopeCounters();
+    const double window = shown_.points / samplesPerSecond.value();
+    for (unsigned c = 0; c < 2; ++c)
+        if (shown_.computed[c]) scope::CounterFallback::apply(shown_.values[c], counters.channels[c], shown_.timestampUs, window);
+}
 void ReadoutScheduler::publish(ApplicationView &view, uint32_t now) {
     ui::ReadoutState state;
     state.running = record_.running();
@@ -37,6 +44,7 @@ void ReadoutScheduler::service(DataAccess &data, ApplicationView &view, const sc
         const auto &screen = model.screen();
         if (changed || (screen.projection != projection_ && due)) {
             shown_ = plot::ScreenReadouts::calculate(screen, model.metadata(), selection, now);
+            counterFallback(data, model.metadata().samplesPerSecond);
             projection_ = screen.projection; computedAt_ = now; ++screenRuns_;
             publish(view, now);
         } else if (!painted_ || published_ != displayed_) publish(view, now); // Cached, or pending for a newer record.
@@ -54,8 +62,9 @@ void ReadoutScheduler::record(DataAccess &data, ApplicationView &view, const sco
         }
         const bool done = record_.step(*frame, SlicePoints, now);
         if (!record_.running()) {
+            const auto rate = frame->metadata().samplesPerSecond; // The record's, before its lease goes.
             data.releaseReadout();
-            if (done) { shown_ = record_.result(); computedAt_ = now; ++recordRuns_; }
+            if (done) { shown_ = record_.result(); counterFallback(data, rate); computedAt_ = now; ++recordRuns_; }
             publish(view, now);
         } else if (record_.percent() != percent_ && uint32_t(now - publishedAt_) >= ProgressMs) publish(view, now);
         return;

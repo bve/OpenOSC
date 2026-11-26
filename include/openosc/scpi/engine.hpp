@@ -96,6 +96,7 @@ private:
     // envelope: WAV:ENV?'s buckets over the whole record (type 1), not START/STOP/POIN.
     bool preamble(const scope::FrameMetadata &m, unsigned channel, bool exact, char *out, size_t size, uint32_t envelope = 0) const;
     bool measured(const scope::Measurements &values, bool clipped, unsigned channel, char *out, size_t size); // WAV:MEAS?'s reply.
+    void counterFallback(scope::Measurements &values, const scope::FrameMetadata &metadata, uint32_t points) const; // GitHub #171.
     // WAV:MEAS?: one shared job (SCReen or RECord, any session) on the leased record, in bounded
     // slices a poll; endMeasure lets it go.
     static constexpr uint32_t MeasureMs = 10000; // A job's bound (then -230); another session waits to its bound + 1 s.

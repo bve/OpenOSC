@@ -28,6 +28,10 @@ public:
     // samples their span covers (SignalSummary::frequencySpan).
     FrequencySource frequencySource() const { return source_; }
     double frequencySpan() const { return span_; }
+    // GitHub #171 (CounterFallback): Frequency and Period from a hardware count, only where the
+    // record has no frequency of its own (an edge or spectrum f stays); duty and pulses stay unknown.
+    // False when the record has one or `hertz` is no frequency.
+    bool fromCounter(double hertz, bool approximate);
     // A value its basis resolves only to `uncertainty` (absolute, its unit): ScreenReadouts bounds
     // frequency, period and duty by its column sampling. digits(): the significant digits the
     // value then supports, its last digit no finer than the uncertainty's leading one, between
@@ -50,6 +54,24 @@ private:
     unsigned valid_ = 0;
     bool clipLow_ = false, clipHigh_ = false;
     FrequencySource source_ = FrequencySource::None;
+};
+// GitHub #171, Analyze > Measurements > Short window f/T > From the counter: the f and T a window
+// too short to resolve them (fewer than MinimumPeriods periods of the count) takes from the settled
+// hardware count (CounterReading::settled, above zero) of the same moment as the record, in
+// CounterCheck's clock (the record's timestampUs in ms against the count's [startMs, endMs],
+// modular): none from a count that began more than CounterCheck::SlackMs after the record (a later
+// moment: a HOLD or STOP record of the past, whatever counts now) or ended more than LatestMs
+// before it (the longest gap between two counts); a count that ended over FreshMs before it, or is
+// not Clean (Filtered, Unverified), is approximate ("~", CNT?). `windowSeconds`: the samples the
+// basis covers (the visible window, or the whole record) at the record's rate.
+class CounterFallback {
+public:
+    static constexpr double MinimumPeriods = 4;
+    static constexpr uint32_t FreshMs = 500, LatestMs = 3000;
+    enum class Use : uint8_t { None, Clean, Approximate };
+    static Use judge(const CounterReading &counter, uint64_t recordTimestampUs, double windowSeconds);
+    // Fills a missing f/T of `values` (Measurements::fromCounter); true when it did.
+    static bool apply(Measurements &values, const CounterReading &counter, uint64_t recordTimestampUs, double windowSeconds);
 };
 // The hardware counter beside a record of the same signal: FCNT is suspect ("FC?") when it
 // disagrees with the frequency the record's edges resolve, and only then. The record must be

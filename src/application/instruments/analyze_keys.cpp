@@ -80,12 +80,18 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
     }
     case Actions::SaveRaw:
     case Actions::SaveCsv:
-        if (!data_.recordScope(row == Actions::SaveRaw ? ScopeRecorder::Format::Raw : ScopeRecorder::Format::Csv)) {
+    case Actions::SaveCsvGz:
+    case Actions::SaveRawGz: {
+        using Format = ScopeRecorder::Format;
+        static constexpr Format formats[] = {Format::Raw, Format::Csv, Format::CsvGz, Format::RawGz};
+        static_assert(Actions::SaveRawGz - Actions::SaveRaw + 1 == sizeof formats / sizeof *formats);
+        if (!data_.recordScope(formats[row - Actions::SaveRaw])) {
             view_.notify(Tooltip::Critical, "Cannot start waveform save", now); return;
         }
         view_.notify(Tooltip::Progress, "Saving waveform...", now);
         recordWatched_ = true;
         break;
+    }
     default: return;
     }
     closePanel();

@@ -10,11 +10,15 @@ public:
     explicit FatDataFile(Filesystem &fs) : fs_(fs) {}
     ~FatDataFile();
     bool begin(const char *directory, const char *prefix, const char *extension, uint64_t reserveBytes);
-    bool write(const void *data, size_t bytes);
+    bool write(const void *data, size_t bytes); // A short write (the volume full) is NoSpace.
+    // A file of unknown final size (the waveform CSV.gz): written only while the bytes, and a cluster
+    // they may start, leave FreeHeadroom of the volume free (the physical count), else NoSpace.
+    bool writeWithinHeadroom(const void *data, size_t bytes);
     bool sync(); // The size so far reaches the directory: a power cut keeps the .TMP's data.
     bool commit();
     DataStatus commitStep();
     void cancel(bool keep = false); // keep: the .TMP stays (written data survives); else it is deleted.
+    void discard(); // Also a .TMP a failure or cancel(true) kept: deleted, nothing of it stays.
     const char *path() const { return final_; }
     DataStatus status() const { return status_; }
 
@@ -22,7 +26,7 @@ private:
     bool fail(DataStatus status);
     Filesystem &fs_;
     FIL file_{};
-    bool open_ = false, verifying_ = false;
+    bool open_ = false, verifying_ = false, staged_ = false; // staged_: the .TMP exists (until renamed or deleted).
     uint64_t bytes_ = 0, verifiedBytes_ = 0;
     Crc32 crc_, verified_;
     char final_[96]{}, temporary_[96]{};

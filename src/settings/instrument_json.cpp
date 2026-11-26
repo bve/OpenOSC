@@ -428,6 +428,10 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         else if (!std::strcmp(basis,"record")) s.measurements.basis=scope::ReadoutBasis::Record;
         else return false;
     }
+    if (scope.containsKey("measure_short_window_counter")) { // GitHub #171; absent (older files): Off.
+        if (!scope["measure_short_window_counter"].is<bool>()) return false;
+        s.measurements.shortWindowCounter=scope["measure_short_window_counter"].as<bool>();
+    }
     if (legacy) s.recordPoints = scope::RecordBudget::covering(legacySamples, scope::RecordBudget::channels(s.enabled[0], s.enabled[1]));
     return s.valid() && output.meter.valid();
 }
@@ -462,6 +466,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
         for (auto value : channel) row.add(value);
     }
     scope["measure_basis"] = s.measurements.basis==scope::ReadoutBasis::Record ? "record" : "screen";
+    if (s.measurements.shortWindowCounter) scope["measure_short_window_counter"] = true; // Only On.
     arrangement(scope, "arrangement", s.arrangement);
     ScopeAppearanceJson::encode(scope, s.appearance);
     encodeDecoder(scope, s.decoder);

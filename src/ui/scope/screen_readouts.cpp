@@ -44,6 +44,7 @@ scope::ReadoutResult ScreenReadouts::calculate(const ScreenSeries &series, const
     scope::ReadoutResult result;
     result.basis = scope::ReadoutBasis::Screen;
     result.timestampUs = metadata.timestampUs;
+    result.captureRate(metadata.samplesPerSecond);
     result.sequence = series.sequence;
     result.first = series.first; result.points = series.last - series.first;
     result.finishedAt = now;

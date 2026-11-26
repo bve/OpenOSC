@@ -308,6 +308,7 @@ bool InstrumentBackend::counter(unsigned channel,scope::CounterReading &reading)
     reading=application_.data_.scopeCounters().channels[channel];
     return reading.valid;
 }
+bool InstrumentBackend::shortWindowCounter() const { return application_.prefs_.scope.measurements.shortWindowCounter; }
 scope::CaptureProgress InstrumentBackend::captureProgress() const {
     const auto &data=application_.data_;
     return data.measurementMode()==MeasurementMode::Oscilloscope && !data.zeroBusy() ? data.scopeProgress() : scope::CaptureProgress{};

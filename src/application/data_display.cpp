@@ -239,8 +239,11 @@ void ApplicationController::displayData(uint32_t now) {
             char text[40];
             // A new clock profile or Scope entry (counterEpoch_) starts the mean again (S13). The profile as
             // read above on its last change (clockMode_), not an RCC read every pass.
-            counterText_.update(data_.scopeCounters(), options.counter, text, sizeof text, clockMode_ | counterEpoch_ << 8);
+            const auto counters = data_.scopeCounters();
             const unsigned source = options.counter.source ? options.counter.source - 1U : 0;
+            const auto estimate = options.counter.estimate && view_.waveform().model().hasFrame()
+                ? plot::CounterEstimate::of(counters.channels[source], readouts_.shown(), source) : plot::CounterEstimate::Value{};
+            counterText_.update(counters, options.counter, text, sizeof text, clockMode_ | counterEpoch_ << 8, estimate);
             const bool room = options.mode == plot::Mode::Time; // X-Y and FFT label that corner.
             view_.waveform().counter(room ? text : "", view_.waveform().palette().channel(source));
         }
@@ -277,7 +280,7 @@ void ApplicationController::displayData(uint32_t now) {
             lastScopeStatus_ = data_.status();
         }
         showDecoder(now); // After the trace took its record: the annotations and the table are of it.
-        readouts_.service(data_, view_, state_.scope.measurements, now);
+        readouts_.service(data_, view_, plot::CounterEstimate::selection(state_.scope.measurements, view_.waveform().options().counter), now);
     } else if (state_.mode == MeasurementMode::Multimeter) {
         dataAt_ = now;
         const auto &meter = data_.meter();

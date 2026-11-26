@@ -81,7 +81,8 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
     if (object.containsKey("counter")) {
         if (!object["counter"].is<JsonObjectConst>()) return false;
         const auto input=object["counter"].as<JsonObjectConst>();
-        if (!integer(input,"source",o.counter.source) || !integer(input,"average",o.counter.average) || !integer(input,"ppm",o.counter.ppm)) return false;
+        if (!integer(input,"source",o.counter.source) || !integer(input,"average",o.counter.average) || !integer(input,"ppm",o.counter.ppm) ||
+            !integer(input,"estimate",o.counter.estimate) || !integer(input,"timed",o.counter.timed)) return false; // #172, #173: absent reads 0.
     }
     if (object.containsKey("channels")) {
         auto channels = object["channels"].as<JsonArrayConst>();

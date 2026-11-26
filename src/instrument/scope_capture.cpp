@@ -88,6 +88,7 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     configuredAt_ = configuredAt;
     armSequence_ = sequence_ + 1;
     triggerWaiting_ = r.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
+    restartTriggerEvents();
     captureFailed_ = false;
     if (retain) store_.consume(store_.sequence()); // Seen: never a reason for the capture to wait.
     if (active_ && measurement_ == MeasurementMode::Oscilloscope && !burst && !startCapture() && !captureWaiting_) {
@@ -626,6 +627,14 @@ void DataAccess::applyForce() {
     // A Single capture started before the arm cannot complete it: the next capture is forced too.
     forcePending_ = request_.trigger.mode == scope::TriggerMode::Single && int32_t(forcedSequence_ - armSequence_) < 0;
 }
+// scopeTriggerEvents: once per record, newer than the floor (sequences modular), of the live acquisition.
+void DataAccess::countTriggerEvent(bool accepted, const scope::FrameMetadata &frame) {
+    if (!accepted || !frame.triggered || frame.forced || frame.rolling || internalCapture() || interleaveMeasure_.active() ||
+        int32_t(frame.sequence - triggerFloor_) <= 0)
+        return;
+    triggerFloor_ = frame.sequence;
+    ++triggerEvents_;
+}
 bool DataAccess::triggerAccepts(const scope::FrameMetadata &frame, bool found) const {
     return found || frame.forced || request_.trigger.mode == scope::TriggerMode::Auto;
 }
@@ -649,6 +658,7 @@ void DataAccess::holdScopeCore(bool hold) {
     holdPending_ = false;
     if (!hold) captureFailed_ = false;
     triggerWaiting_ = !hold && request_.trigger.mode != scope::TriggerMode::Auto; acceptedTriggered_ = false;
+    restartTriggerEvents();
     if (!hold) {
         heldFrame_.release();
         return;
@@ -683,6 +693,7 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
         triggerWaiting_ = !accepted;
         if (accepted) { acceptedSequence_ = inspected_.view().metadata().sequence; acceptedAt_ = now; // What a reader is now given.
             acceptedTriggered_ = inspected_.view().metadata().triggered && !inspected_.view().metadata().forced; }
+        countTriggerEvent(accepted, inspected_.view().metadata());
         observeInterleave(inspected_.view());
         // The measurement is a reader of the record it takes (the scope view may be hidden by Settings):
         // it consumes it, so a one-slot capture memory is free for the next record.

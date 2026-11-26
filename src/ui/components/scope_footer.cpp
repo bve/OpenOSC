@@ -1,4 +1,5 @@
 #include "openosc/ui/components/scope_footer.hpp"
+#include "openosc/ui/scope/counter_estimate.hpp"
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include <cstdio>
@@ -149,11 +150,18 @@ void ScopeFooter::readoutPanel(unsigned p) {
             if (!countersValid_) continue;
             const auto &reading = counters_.channels[c];
             item.valid = reading.valid && (counters_.enabled & (1U << c));
-            item.value = reading.hertz;
-            // f: an explicitly filtered count; ?: unverified, uncertain, changing, or apart from the record.
-            const bool doubtful = reading.quality != scope::CounterQuality::Clean && reading.quality != scope::CounterQuality::Filtered;
-            const bool suspect = doubtful || (computed && scope::CounterCheck::suspect(reading, result_.values[c], result_.timestampUs));
-            if (item.valid) item.mark = reading.quality == scope::CounterQuality::Filtered ? (suspect ? "f?" : "f") : suspect ? "?" : "";
+            // No edges counted > Trace f (~): the record's own f, its digits, no correction.
+            const auto estimate = computed && model_ && model_->options().counter.estimate
+                ? plot::CounterEstimate::of(reading, result_, c) : plot::CounterEstimate::Value{};
+            if (item.valid && estimate.valid()) { item.value = estimate.hertz; item.mark = "~"; item.limit = estimate.digits; }
+            else {
+                item.value = reading.hertz;
+                // f: an explicitly filtered count; ?: unverified, uncertain, changing, or apart from the record.
+                const bool doubtful = reading.quality != scope::CounterQuality::Clean && reading.quality != scope::CounterQuality::Filtered;
+                const bool suspect = doubtful || (computed && scope::CounterCheck::suspect(reading, result_.values[c], result_.timestampUs));
+                if (item.valid) item.mark = reading.quality == scope::CounterQuality::Filtered ? (suspect ? "f?" : "f") : suspect ? "?" : "";
+                if (reading.timed && !suspect) item.limit = 6;
+            }
         } else {
             if (!model_) continue;
             const auto measurement = scope::Measurement(kind);

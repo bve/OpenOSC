@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/measurement/dmm/charge.hpp"
+#include "openosc/measurement/dmm/display_prefix.hpp"
 #include "openosc/measurement/dmm/hold.hpp"
 #include "openosc/measurement/dmm/result.hpp"
 #include "openosc/measurement/dmm/relative.hpp"
@@ -13,24 +14,34 @@ enum class Function : unsigned; // function.hpp
 // Running statistics of the factory firmware: min, max and sum/count over every valid reading
 // since the last reset, no time window and no cap (the trend's 260 slots are separate). Values
 // are SI, so a range change alone keeps them. docs/DMM_STATISTICS.md has the reset matrix.
+// Each value also keeps the quantum it is known to (GitHub #168: DisplayPrefix::exponent of the
+// readings' Resolution): MIN and MAX their own reading's, AVG the coarsest of the period's (Unknown
+// when any reading had none), so the screen never shows them finer than the readings across a range
+// change. The sums stay exact.
 class Statistics {
 public:
-    bool push(const NumericValue &value);
+    bool push(const NumericValue &value, int8_t exponent = DisplayPrefix::Unknown);
     void reset() {
         count_ = 0;
         min_ = max_ = sum_ = correction_ = 0;
         quantity_ = Quantity::Unknown;
+        minimumExponent_ = maximumExponent_ = averageExponent_ = DisplayPrefix::Unknown;
     }
     uint64_t count() const { return count_; }
     double minimum() const { return min_; }
     double maximum() const { return max_; }
     double average() const { return count_ ? sum_ / count_ : 0; }
     Quantity quantity() const { return quantity_; }
+    int8_t minimumExponent() const { return minimumExponent_; }
+    int8_t maximumExponent() const { return maximumExponent_; }
+    int8_t averageExponent() const { return averageExponent_; }
 
 private:
     uint64_t count_ = 0;
     double min_ = 0, max_ = 0, sum_ = 0, correction_ = 0;
     Quantity quantity_ = Quantity::Unknown;
+    int8_t minimumExponent_ = DisplayPrefix::Unknown, maximumExponent_ = DisplayPrefix::Unknown,
+           averageExponent_ = DisplayPrefix::Unknown;
 };
 // MIN/MAX/AVG as the DMM screen shows them: the period's values when they are of the shown
 // reading's quantity (else none), less the local REL offset (RelativeReading::offset; a controller
@@ -40,6 +51,8 @@ struct StatisticsView {
     uint64_t count = 0;
     double minimum = 0, maximum = 0, average = 0;
     Quantity quantity = Quantity::Unknown;
+    int8_t minimumExponent = DisplayPrefix::Unknown, maximumExponent = DisplayPrefix::Unknown,
+           averageExponent = DisplayPrefix::Unknown; // Statistics' quanta.
     static StatisticsView of(const Statistics &statistics, Quantity shown, double offset);
 };
 class History {

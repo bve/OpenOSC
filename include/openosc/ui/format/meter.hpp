@@ -1,4 +1,5 @@
 #pragma once
+#include "openosc/measurement/dmm/display_prefix.hpp"
 #include "openosc/measurement/dmm/result.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -63,6 +64,20 @@ struct MeterText {
             std::memmove(output + sign, output + keep, std::strlen(output + keep) + 1);
         }
         return true;
+    }
+    // The digits and the display unit of a reading as the DMM screen shows them (main digits, the
+    // active card): a resistance or capacitance value in the prefix of its magnitude
+    // (dmm::DisplayPrefix, GitHub #168: 0.6700 MOhm -> "670.0" kΩ); anything else, an overload and a
+    // blank as displayReading with the packet's unit (OL in its range's unit).
+    static bool shown(const dmm::Result &result, char *output, size_t capacity, const char *&shownUnit) {
+        shownUnit = unit(result.unit);
+        const char *prefixed = nullptr;
+        if (state(result) == DataStatus::Ok &&
+            dmm::DisplayPrefix::of(result).format(result.primary.si, output, capacity, prefixed)) {
+            shownUnit = unit(prefixed);
+            return true;
+        }
+        return displayReading(result, output, capacity);
     }
     static const char *unit(const char *unit) {
         if (!std::strcmp(unit, "Ohm")) return "Ω";

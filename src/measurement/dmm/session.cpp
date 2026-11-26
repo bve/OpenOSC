@@ -151,7 +151,7 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     if (placeholder(candidate) || candidate.primary.status == DataStatus::Overload) { stats_.reset(); return true; }
     if (awaiting_ || !candidate.primary.valid()) return true; // Unparsed or non-finite: neither counted nor a reset.
     if (trendQuantity_ != candidate.primary.quantity) { history_.reset(); trendQuantity_ = candidate.primary.quantity; }
-    if (stats_.push(candidate.primary))
+    if (stats_.push(candidate.primary, DisplayPrefix::exponent(Resolution::of(candidate).quantum())))
         history_.push(candidate.primary.si);
     return true;
 }

@@ -42,6 +42,8 @@ public:
         CounterAverage,
         CounterPpm,
         GridBrightness,
+        CounterEstimate, // No edges counted: No signal, Trace f (~) (GitHub #172).
+        CounterTimed,    // CH1 below 5 kHz: Gate, Timed edges (GitHub #173).
         Section,
         Count
     };

@@ -34,9 +34,9 @@ class Painter {
 public:
     // frame: the whole waveform object; the plot is frame less the PlotFrame margins.
     Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette,
-            bool inlineScales = true, TriggerMark trigger = {})
+            bool inlineScales = true, TriggerMark trigger = {}, int counterHeight = 0)
         : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), inlineScales_(inlineScales),
-          trigger_(trigger) {}
+          trigger_(trigger), counterHeight_(counterHeight) {}
     void draw();
     static lv_area_t plotArea(const lv_area_t &frame) {
         return {frame.x1 + PlotFrame::Left, frame.y1 + PlotFrame::Top, frame.x2 - PlotFrame::Right, frame.y2 - PlotFrame::Bottom};
@@ -76,6 +76,7 @@ private:
     const Palette &palette_;
     bool inlineScales_;
     TriggerMark trigger_;
+    int counterHeight_;
 };
 class Path {
 public:

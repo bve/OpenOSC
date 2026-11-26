@@ -184,7 +184,11 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - **Settings → Display → Swap CH1/CH2** exchanges the on-screen channel labels, colors and
   measurement columns. It defaults to Off. The Channel and Trigger menus show both numbers when swapped.
   Capture, SCPI, calibration and decoder wiring use the physical input numbers.
-- Hardware frequency counter with an averaged on-screen overlay
+- Hardware frequency counter with an averaged on-screen overlay. Under **Analyze → Display →
+  Frequency counter**, **Timed edges** improves the resolution of slow CH1 signals and
+  **Trace f (~)** can show an estimate from the waveform when the comparator counts zero edges.
+  Under **Analyze → Measurements**, **Short window f/T** can use a recent hardware count when the
+  measurement window is too short to resolve frequency and period. These options are off by default.
 - XY, MATH and reference waveforms; sin(x)/x and spline interpolation, fading or infinite persistence, Glow
 - Per-channel waveform density (**Channel → Density**) in Y-T and Y-T+FFT. Choose **Colors** to show
   rare paths in cooler colors and frequent paths in warmer colors, or **Mono** with a selectable color.
@@ -224,8 +228,10 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   Its Auto mode follows the MKR rule: CH1 alone at 10 or 25 ns/div on the 200 and 280 MHz profiles,
   except in Roll or while the generator streams from the DAC. On interleaves CH1 alone at every timebase
   and profile. The ZT703S defaults to Off and the ZT706S to Auto (the stock rule)
-- Save waveforms to `/openosc/CAPTURES` with **Analyze → Save waveform RAW** or **Save waveform CSV**. If the CSV
-  size estimate exceeds the free space, OpenOSC counts the actual formatted rows before rejecting the save.
+- Save waveforms to `/openosc/CAPTURES` from **Analyze**. Choose **Save waveform CSV.gz** or
+  **Save waveform RAW.gz** for streaming gzip compression. Decompress the file on a computer
+  to get the same CSV or RAW data as the corresponding plain export. OpenOSC checks available
+  space as it writes and removes the temporary file if a compressed save runs out of space.
 
 **Multimeter**
 
@@ -235,6 +241,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - HOLD modes (**MENU → Measurement → Hold**): Manual, Delayed (after a countdown), Stable (waits
   for a stable reading) and Auto (holds every new stable reading)
 - Statistics, trend chart and CSV logging
+- Resistance and capacitance use Ω, kΩ, MΩ and pF, nF, µF on the display, including for REL,
+  MEAN and MIN/MAX/AVG. The displayed precision follows the meter resolution. For example,
+  0.6700 MΩ appears as 670.0 kΩ, 0.090 nF as 90 pF, and 22.00 mF as 22000 µF.
 - Session logging without a PC (**MENU → Measurement → Session log**): interval rows (count, min, max
   and average of the readings in each interval) or event records (a new record whenever the reading
   leaves a percentage band), stopped manually, at a set duration or when you leave the multimeter.
@@ -284,6 +293,17 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - USB Remote mode: the PC controls the device while the screen keeps showing live data
 - USB data works only in the 200/100 performance profile. Connect directly to a PC port:
   disconnects are known, especially through USB hubs.
+- **Settings → Files & USB → USB controller** offers Enabled (default), Disabled and Auto.
+  Auto tries at startup or when the USB power signal rises. Without a computer, it turns the
+  controller off after 5 s on the bus. An attach that needs to pause acquisition can wait up to
+  30 s. While the power signal stays high, Auto retries after 30 s, 60 s and then every 2 min.
+  Choosing Auto with the controller already off starts that schedule at 30 s. A detected
+  computer keeps the controller on while the power signal is high, including during suspend.
+  The controller turns off when both the power signal and host have been absent for 5 s.
+  USB Remote is available while the controller is attached and keeps it on during the session.
+- Firmware released before USB Auto treats `"controller": "auto"` as invalid and loads defaults
+  or an earlier settings copy. To keep settings when downgrading, select Enabled or Disabled
+  and save with a normal restart before installing the older firmware.
 
 **Interface and files**
 
@@ -308,6 +328,11 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   holds only the firmware. You can edit the files from a computer; a damaged settings file is
   restored from its previous version or from a copy in `/openosc/SETCOPY/`.
 - Hold-to-power-off with a progress bar
+- **Settings → Device → Power → Wake on measurement** offers Off (default), DMM, Scope and Both.
+  A qualifying event restores the backlight and restarts the idle power-off timer. The DMM
+  responds to a change of at least 10% of full scale within the same range. A range change sets a
+  new reference, and dedicated millivolt modes are excluded. The scope responds to a new live
+  record with a genuine trigger in Auto, Normal or Single.
 - Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
 
 **Recovery bootloader**

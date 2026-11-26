@@ -60,10 +60,16 @@ struct CursorOptions {
 // Cursor positions are thousandths of the plot, so they survive a change of its size.
 inline int cursorPixel(unsigned permille, int span) { return int((int64_t(permille) * span + 500) / 1000); }
 // The frequency counter overlay: its source (0 off, 1 CH1, 2 CH2), readings averaged, correction.
+// estimate (GitHub #172): 1 shows the record's own edge frequency, marked "~", for a Clean count of
+// no edges (CounterEstimate); 0 says "no signal". timed (GitHub #173): 1 times CH1's edges below
+// 5 kHz (a reciprocal count), 0 keeps the gate count. Both 0 by default, absent from older themes.
 struct CounterOptions {
     uint8_t source = 0, average = 1;
     int16_t ppm = 0;
-    bool valid() const { return source <= 2 && (average == 1 || average == 3 || average == 10) && ppm >= -1000 && ppm <= 1000; }
+    uint8_t estimate = 0, timed = 0;
+    bool valid() const {
+        return source <= 2 && (average == 1 || average == 3 || average == 10) && ppm >= -1000 && ppm <= 1000 && estimate <= 1 && timed <= 1;
+    }
 };
 struct Options {
     Mode mode = Mode::Time;
@@ -75,7 +81,6 @@ struct Options {
     ChannelOptions channels[2];
     CursorOptions cursors;
     scope::SpectrumOptions spectrum;
-    CounterOptions counter;
     uint16_t zoom = 1, persistenceMs = 0;
     int32_t panPpb = 0; // Parts per billion of the record (PanFull: all of it).
     static constexpr int32_t PanFull = 1000000000;
@@ -90,6 +95,7 @@ struct Options {
     // held view shows what RUN will use. 0: the record's own. View only, never the record's metadata.
     uint64_t heldTimebaseNs = 0;
     bool centerHeldTrigger = false; // View-only override of a held record's original pretrigger.
+    CounterOptions counter; // In the tail padding: Options keeps its size.
     // A density plane's history (GitHub #85): the persistence's, or DensityHistoryMs with none.
     static constexpr uint16_t DensityHistoryMs = 1000;
     uint16_t densityHistoryMs() const { return persistenceMs ? persistenceMs : DensityHistoryMs; }

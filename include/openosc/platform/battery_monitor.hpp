@@ -10,6 +10,7 @@ public:
     bool initialize();
     void poll(uint32_t now);
     const power::BatteryState &state() const { return gauge_.state(); }
+    bool externalKnown() const { return gauge_.externalKnown(); } // BatteryGauge::externalKnown.
     void trim(int gainPermille, int offsetMv) { gauge_.trim(gainPermille, offsetMv); } // Display only (BatteryGauge::trim).
 private:
     ADC_HandleTypeDef adc_{};

@@ -37,6 +37,8 @@ public:
     }
 
     const BatteryState &state() const { return state_; }
+    // PC9 has completed its first debounce: state().external is an observation from then on.
+    bool externalKnown() const { return known_; }
     // A new trim shows at once on a measured level (no deadband, no new window); out of bounds: none.
     void trim(int gainPermille, int offsetMv) {
         if (!trimValid(gainPermille, offsetMv)) gainPermille = offsetMv = 0;
@@ -49,6 +51,7 @@ public:
         if (bits!=candidate_) { candidate_=bits; stable_=1; }
         else if (stable_<11) ++stable_;
         if (stable_==11) {
+            known_=true;
             if (state_.external!=external) { sum_=0; averaged_=0; }
             state_.external=external; state_.full=external && chargeStatusHigh;
             if (external) state_.low=false;
@@ -120,7 +123,7 @@ private:
     uint32_t sum_=0;
     int32_t filtered_=0;
     uint8_t lowRun_=0,clearRun_=0;
-    bool low_=false;
+    bool low_=false,known_=false;
 };
 
 class LowBatteryPolicy {

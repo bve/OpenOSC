@@ -1,11 +1,10 @@
 #pragma once
+#include "openosc/data/zlib_arena.hpp"
 #include "openosc/screenshot/bitmap_layout.hpp"
 #include "openosc/update/crc32.hpp"
 #include "ff.h"
 #include <zlib.h>
 #undef FAR // zlib's 16-bit pointer qualifier collides with the STM32 RAMECC register.
-
-namespace openosc::scope { class AcquisitionArena; }
 
 namespace openosc::screenshot {
 namespace png {
@@ -22,22 +21,19 @@ void sealChunk(uint8_t *chunk, uint32_t type, size_t payload);
 }
 
 // Screenshot encoding and viewing borrow the same 16 KiB arena as acquisition
-// trials. The foreground claim excludes DMA and any displayed trial frame.
+// trials (ZlibArena). The foreground claim excludes DMA and any displayed trial frame.
 class PngStream {
 public:
     bool begin(scope::AcquisitionArena &arena, bool encode);
     void end();
     z_stream &io() { return io_; }
     uint8_t *scanline() const { return scanline_; }
-    uint8_t *allocate(size_t bytes);
+    uint8_t *allocate(size_t bytes) { return memory_.allocate(bytes); }
 
 private:
-    static voidpf allocate(voidpf context, unsigned count, unsigned size);
-    static void free(voidpf, voidpf) {} // The arena is returned as a whole.
     z_stream io_{};
-    scope::AcquisitionArena *arena_=nullptr;
+    ZlibArena memory_;
     uint8_t *scanline_=nullptr;
-    size_t used_=0;
     bool encode_=false;
 };
 

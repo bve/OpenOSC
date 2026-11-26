@@ -235,21 +235,32 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     feed(result, status, context.relative);
     const double reference = relative ? context.relative->reference().si : 0;
     const auto *statistics = context.statistics;
+    // The digits and their unit (MeterText::shown: a resistance or capacitance in the prefix of its
+    // magnitude, GitHub #168), the same for the digital and analog faces, a held reading, REL and MEAN.
     char text[128];
-    if (!MeterText::displayReading(result, text, sizeof text)) std::snprintf(text, sizeof text, "----.--");
-    elements.text(ElementId::Unit, MeterText::unit(result.unit));
+    const char *shownUnit = nullptr;
+    if (!MeterText::shown(result, text, sizeof text, shownUnit)) std::snprintf(text, sizeof text, "----.--");
     const bool mean = context.display == 1 && statistics && statistics->count() &&
                       statistics->quantity() == result.primary.quantity;
     if ((relative || mean) && result.primary.valid()) {
-        NumericValue unit;
-        const double factor = UnitParser::parse("1", result.unit, unit) ? unit.si : 1;
-        std::snprintf(text, sizeof text, "--");
-        const unsigned decimals = dmm::Resolution::decimals(result);
         const double measured = (mean ? statistics->average() : result.primary.si) - reference;
-        const double value = result.primary.quantity == Quantity::Temperature
-            ? dmm::TypeK::display(measured, result.unit, relative || result.peerRelative) : measured / factor;
-        if (!Decimal::fixed(value, decimals, text, sizeof text)) Decimal::number(value, text, sizeof text, 6);
+        // The prefixed form at the reading's quantum, MEAN at the coarsest of its period's (Statistics).
+        auto prefix = dmm::DisplayPrefix::of(result);
+        if (mean && statistics->averageExponent() != dmm::DisplayPrefix::Unknown) prefix = prefix.at(statistics->averageExponent());
+        const char *prefixed = nullptr;
+        if (prefix.format(measured, text, sizeof text, prefixed)) shownUnit = MeterText::unit(prefixed);
+        else {
+            NumericValue unit;
+            const double factor = UnitParser::parse("1", result.unit, unit) ? unit.si : 1;
+            std::snprintf(text, sizeof text, "--");
+            const unsigned decimals = dmm::Resolution::decimals(result);
+            const double value = result.primary.quantity == Quantity::Temperature
+                ? dmm::TypeK::display(measured, result.unit, relative || result.peerRelative) : measured / factor;
+            if (!Decimal::fixed(value, decimals, text, sizeof text)) Decimal::number(value, text, sizeof text, 6);
+            shownUnit = MeterText::unit(result.unit);
+        }
     }
+    elements.text(ElementId::Unit, shownUnit);
     const auto function = context.selecting != dmm::Function::Unknown ? context.selecting : dmm::Functions::identify(result);
     const char *terminals = dmm::Terminals::forFunction(function);
     // The function as its sign; the row says only what the sign cannot: MEAN, RMS, the jacks.
@@ -275,7 +286,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     const unsigned focus = function == dmm::Function::Unknown || unsigned(group) >= sizeof groups / sizeof *groups
                                ? ParameterBar::Count : groups[unsigned(group)];
     char value[24];
-    std::snprintf(value, sizeof value, "%s%s", MeterText::unit(result.unit), vfc ? " VFC" : "");
+    std::snprintf(value, sizeof value, "%s%s", shownUnit, vfc ? " VFC" : "");
     cards(function, result.kind == dmm::Kind::DiodeWithBeeper, result.currentInput, focus, value);
     elements.text(ElementId::Measurements, "");
     host_.meterSummary().visible(true);

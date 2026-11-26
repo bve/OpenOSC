@@ -2,12 +2,13 @@
 #include "openosc/measurement/dmm/charge.hpp"
 #include "openosc/measurement/dmm/function.hpp"
 #include "openosc/data/decimal.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
 
 namespace openosc::dmm {
-bool Statistics::push(const NumericValue &value) {
+bool Statistics::push(const NumericValue &value, int8_t exponent) {
     if (!value.valid() || !std::isfinite(value.si))
         return false;
     if (quantity_ != value.quantity)
@@ -18,12 +19,19 @@ bool Statistics::push(const NumericValue &value) {
     if (!std::isfinite(adjusted) || !std::isfinite(next))
         return false;
     quantity_ = value.quantity;
-    if (!count_)
+    if (!count_) {
         min_ = max_ = value.si;
-    if (value.si < min_)
+        minimumExponent_ = maximumExponent_ = averageExponent_ = exponent;
+    } else if (averageExponent_ != DisplayPrefix::Unknown)
+        averageExponent_ = exponent == DisplayPrefix::Unknown ? exponent : std::max(averageExponent_, exponent);
+    if (value.si < min_) {
         min_ = value.si;
-    if (value.si > max_)
+        minimumExponent_ = exponent;
+    }
+    if (value.si > max_) {
         max_ = value.si;
+        maximumExponent_ = exponent;
+    }
     correction_ = (next - sum_) - adjusted;
     sum_ = next;
     ++count_;
@@ -34,6 +42,7 @@ StatisticsView StatisticsView::of(const Statistics &s, Quantity shown, double of
     if (!s.count() || s.quantity() != shown) return view;
     view.valid = true; view.count = s.count(); view.quantity = s.quantity();
     view.minimum = s.minimum() - offset; view.maximum = s.maximum() - offset; view.average = s.average() - offset;
+    view.minimumExponent = s.minimumExponent(); view.maximumExponent = s.maximumExponent(); view.averageExponent = s.averageExponent();
     return view;
 }
 bool ChargeCounter::counts(Function function) { return function == Function::CurrentDc || function == Function::MilliampsDc; }

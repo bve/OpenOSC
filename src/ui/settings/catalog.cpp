@@ -84,6 +84,7 @@ constexpr SettingsEntry power[] = {
     {"Backlight timeout",Action::BacklightTimeout},
     {"Idle backlight",Action::BacklightIdleLevel},
     {"Auto power off",Action::PowerOffTimeout},
+    {"Wake on measurement",Action::MeasurementWake}, // GitHub #169: DMM changes, Scope triggers.
     {"Power-off hold",Action::HoldTime},
     {"Generator at startup",Action::GeneratorStartup},
     {"Battery gain",Action::BatteryGain},     // The battery display trim (GitHub #107).

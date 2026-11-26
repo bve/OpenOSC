@@ -131,7 +131,13 @@ void WaveformWidget::note(const char *text, uint32_t color) {
     }
     overlayLabel(note_, text, color, palette_.background);
 }
-void WaveformWidget::counter(const char *text, uint32_t color) { overlayLabel(counter_, text, color, palette_.background); }
+void WaveformWidget::counter(const char *text, uint32_t color) {
+    if (!counter_) return;
+    const bool wasVisible = !lv_obj_is_hidden(counter_);
+    overlayLabel(counter_, text, color, palette_.background);
+    // The Math label moves when the counter appears or disappears, including on a held trace.
+    if (wasVisible != bool(*text) && model_.options().math != plot::Math::Off) lv_obj_invalidate(object_);
+}
 void WaveformWidget::setFrame(const scope::FrameView &frame) {
     if (!object_)
         return;
@@ -184,7 +190,10 @@ void WaveformWidget::draw(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     lv_area_t area;
     lv_obj_get_coords(self.object_, &area);
-    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_).draw();
+    int counterHeight = 0;
+    if (self.model_.options().math != plot::Math::Off && self.counter_ && !lv_obj_is_hidden(self.counter_))
+        counterHeight = lv_obj_get_height(self.counter_);
+    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_, counterHeight).draw();
 }
 void WaveformWidget::cover(lv_event_t *event) {
     auto *info = static_cast<lv_cover_check_info_t *>(lv_event_get_param(event));

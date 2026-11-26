@@ -1,5 +1,6 @@
 #pragma once
 #include "openosc/acquisition/readouts.hpp"
+#include "openosc/data/status.hpp"
 
 namespace openosc {
 class ApplicationView;
@@ -28,10 +29,15 @@ public:
     uint32_t screenCalculations() const { return screenRuns_; }
     uint32_t recordCalculations() const { return recordRuns_; }
     bool recordRunning() const { return record_.running(); }
+    const scope::ReadoutResult &shown() const { return shown_; }
 
 private:
     void publish(ApplicationView &view, uint32_t now);
     void record(DataAccess &data, ApplicationView &view, const scope::ReadoutSelection &selection, uint32_t now, bool due);
+    // GitHub #171 (Short window f/T: From the counter): the f/T a just computed shown_ cannot resolve,
+    // from the count of its record's moment (CounterFallback, its timestampUs), once: a cached result
+    // (HOLD pan, a record done) keeps what its moment had, a new one is judged by its own.
+    void counterFallback(DataAccess &data, const Rational &samplesPerSecond);
     scope::RecordReadouts record_;
     scope::ReadoutResult shown_;
     scope::ReadoutSelection selection_;

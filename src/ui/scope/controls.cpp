@@ -66,6 +66,8 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
     case CounterSource: options.counter.source=uint8_t((options.counter.source+3+direction)%3); break;
     case CounterAverage: cycle(options.counter.average, direction, counterAverages); break;
     case CounterPpm: step(options.counter.ppm, direction, fine ? 1 : 10, -1000, 1000); break;
+    case CounterEstimate: options.counter.estimate ^= 1; break;
+    case CounterTimed: options.counter.timed ^= 1; break;
     case TraceStyle:
         options.style = Style((unsigned(options.style) + 3 + direction) % 3);
         break;

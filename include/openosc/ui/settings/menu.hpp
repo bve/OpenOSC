@@ -15,7 +15,8 @@ enum class SettingsAction : uint8_t {
     // Settings > Display > Tooltips (GitHub #108): a row each, in Tooltip order, then the critical ones (always on).
     TooltipUsage, TooltipUnavailable, TooltipProgress, TooltipDone, TooltipAdvisory, TooltipCritical,
     MenuLeftKey,
-    MenuContrast // Settings > Display > Menu contrast (GitHub #44): Theme or High contrast.
+    MenuContrast, // Settings > Display > Menu contrast (GitHub #44): Theme or High contrast.
+    MeasurementWake // Settings > Power > Wake on measurement (GitHub #169): Off, DMM, Scope or Both.
 };
 struct SettingsEntry {
     const char *name;

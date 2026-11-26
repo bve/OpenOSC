@@ -77,7 +77,9 @@ bool CounterWindow::observe(const uint32_t (&counts)[2],uint32_t cycles,uint32_t
     for (unsigned c=0;c<2;++c) windows_[c][step_]={double(edges[c])*clock_/elapsed,edges[c],uint32_t(us),at_,now};
     if (++step_==CounterLadder::Steps) {
         step_=0;
-        for (unsigned c=0;c<2;++c) snapshot_.channels[c]=CounterLadder::decide(windows_[c],kernelHz_);
+        for (unsigned c=0;c<2;++c)
+            snapshot_.channels[c]=rebased_&(1U<<c) ? CounterReading{} : CounterLadder::decide(windows_[c],kernelHz_);
+        rebased_=0;
         ++snapshot_.sequence;
     }
     restart(counts,cycles,now);
