@@ -310,7 +310,7 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Hold-to-power-off with a progress bar
 - Power-on keys: hold AUTO/RANGE, HOLD/SAVE or MODE together with REL while switching on to start
   in the screen chosen for that key (**Settings → Device → Power → Power-on keys**): the
-  oscilloscope, the generator or any multimeter function. AUTO/RANGE starts Continuity by default
+  oscilloscope, the generator or any multimeter function. AUTO/RANGE starts Continuity by default.
 - Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
 
 **Recovery bootloader**

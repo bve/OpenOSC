@@ -9,13 +9,16 @@ namespace openosc {
 // Settings > Device > Power > Power-on keys: the screen the instrument starts on when AUTO/RANGE,
 // HOLD/SAVE or MODE is held with REL while switching on. A target is Off (the saved start screen), the
 // Scope, the Generator or a multimeter function (its MeterFunctions index after FirstFunction).
+// Stored as one number, power.on_keys in settings.json (packed()): 5 bits a target, AUTO/RANGE lowest;
+// absent while all three are at the defaults.
 // Files before it: AUTO/RANGE starts Continuity, the other two keys do nothing.
 struct PowerOnKeys {
     enum Key : unsigned { AutoRange, HoldSave, Mode, Count }; // Also the order they are tried in.
     static constexpr uint32_t Off = 0, Oscilloscope = 1, Generator = 2, FirstFunction = 3;
     static constexpr uint32_t Options = FirstFunction + MeterFunctionCount;
     static constexpr uint32_t Keys[Count] = {Keypad::AutoRange, Keypad::HoldSave, Keypad::Mode};
-    static_assert(Options <= 256, "a target is one byte");
+    static constexpr unsigned TargetBits = 5;
+    static_assert(Options <= (1u << TargetBits), "a target is 5 bits of power.on_keys");
     uint8_t target[Count] = {FirstFunction + unsigned(dmm::Function::Continuity), Off, Off};
     bool valid() const {
         for (uint32_t t : target) if (t >= Options) return false;
@@ -25,10 +28,23 @@ struct PowerOnKeys {
         return target == Off ? "Off" : target == Oscilloscope ? "Oscilloscope" : target == Generator ? "Generator"
                                                                                 : MeterFunctions[target - FirstFunction].name;
     }
-    // The settings.json value: Off, then the InstrumentModeKeys of the Scope and the Generator.
-    static const char *key(uint32_t target) {
-        return target == Off ? "off" : target == Oscilloscope ? InstrumentModeKeys[unsigned(MeasurementMode::Oscilloscope)]
-             : target == Generator ? InstrumentModeKeys[unsigned(MeasurementMode::Generator)] : MeterFunctions[target - FirstFunction].key;
+    // The power.on_keys value: the three targets, TargetBits each, in Key order from the lowest bits.
+    uint32_t packed() const {
+        uint32_t bits = 0;
+        for (unsigned i = 0; i < Count; ++i) bits |= uint32_t(target[i]) << (i * TargetBits);
+        return bits;
+    }
+    // Takes a packed value; false (nothing changed) for a target of Options or above or a bit above the three fields.
+    bool unpack(uint32_t bits) {
+        if (bits >> (Count * TargetBits)) return false;
+        uint8_t parsed[Count];
+        for (unsigned i = 0; i < Count; ++i) {
+            const uint32_t t = (bits >> (i * TargetBits)) & ((1u << TargetBits) - 1);
+            if (t >= Options) return false;
+            parsed[i] = uint8_t(t);
+        }
+        for (unsigned i = 0; i < Count; ++i) target[i] = parsed[i];
+        return true;
     }
     // The first target that is not Off among the keys held (a Keypad mask), in Key order.
     uint32_t pick(uint32_t keys) const {

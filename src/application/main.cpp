@@ -60,15 +60,17 @@ int main() {
     BootTiming::mark(BootTiming::Mounted);
     Watchdog::progress(); // Boot stages are the boot's progress (one pass, WatchdogPolicy::OperationMs).
     PreferencesFile preferences(fs);
-    preferences.load();
-    preferences.applyPowerOnKeys(powerOnKeys); // Before PE10, which follows the start mode.
-    Board::configurePe10(preferences.values().mode == unsigned(MeasurementMode::Generator));
+    const bool loaded = preferences.load();
+    // PE10 follows the start mode, the one a power-on key picks (applied below, after the guard).
+    Board::configurePe10(preferences.startMode(powerOnKeys) == unsigned(MeasurementMode::Generator));
     BootTiming::mark(BootTiming::Settings);
     Watchdog::progress();
     // The 360 MHz profile only through its guard (BootGuard), before USB starts (STORE-02).
     BootGuard guard(fs);
     RunModeSetting setting(preferences);
     const auto start = guard.start(preferences.values().scope.runMode, setting);
+    // After the guard: its rollback saves the settings as stored, not the key-selected screen.
+    preferences.applyPowerOnKeys(powerOnKeys, loaded);
     BootTiming::mark(BootTiming::Guard);
     Watchdog::progress();
     if (!ClockControl::selectPerformance(start.mode)) {
