@@ -22,8 +22,8 @@ void MeterScreen::activate(const ApplicationState &) {
     style(face_, palette_, appearance_);
     layout(analog_);
     host_.functionIcon().show(dmm::Function::Unknown, false, look_.color(MeterRole::Function));
-    reading("----.--", DataStatus::NoData);
     host_.elements().text(ElementId::Unit, "");
+    reading("----.--", DataStatus::NoData);
     host_.elements().text(ElementId::Details, "Waiting");
     host_.elements().text(ElementId::Measurements, "");
     host_.meterSummary().update({}, nullptr, look_.color(MeterRole::Mode));
@@ -66,13 +66,14 @@ void MeterScreen::style(unsigned face, unsigned palette, const MeterAppearance &
     if (lv_obj_get_style_text_font(line, LV_PART_MAIN) != look_.text(MeterRole::Details, details))
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, details), 0);
 }
-// Digital (ScreenLayout::digital): the reading block is the sign row (function sign, jacks, unit badge)
-// over the 64 px digits, the measurements block the summary (meta row, MIN/MAX/AVG, bar) or the
-// trend. Analog (ScreenLayout::analog): the dial block is the sign and the meta row (range, range
-// mode, AC frequency) over the 92 px dial with RMS and the jacks as its marking; the measurements
-// block MIN/MAX/AVG on one row; the reading block the 64 px digits with their unit centred. The soft
-// keys are the order's Buttons block. The theme's x, widths and fonts stay; its y inside a block
-// are taken relative to its default body top.
+// Digital (ScreenLayout::digital): the reading block is the sign row (function sign, jacks) over
+// the 64..80 px digits with their unit beside them at the row's right edge, the measurements block
+// the summary (meta row, MIN/MAX/AVG, bar) or the trend. Analog (ScreenLayout::analog): the dial
+// block is the sign and the meta row (range, range mode, AC frequency) over the 92 px dial with RMS
+// and the jacks as its marking; the measurements block MIN/MAX/AVG on one row; the reading block
+// the 64 px digits with their unit, centred. Both reading rows are MeterReading::showRow's (GitHub
+// #185). The soft keys are the order's Buttons block. The theme's x, widths and fonts stay; its y
+// inside a block are taken relative to its default body top.
 void MeterScreen::layout(bool analog) {
     analog_ = analog;
     const auto *t = host_.theme().elements[Mode];
@@ -80,7 +81,7 @@ void MeterScreen::layout(bool analog) {
     const auto &details = t[unsigned(ElementId::Details)], &rows = t[unsigned(ElementId::Measurements)];
     auto &elements = host_.elements();
     auto *summary = elements.get(ElementId::Measurements), *line = elements.get(ElementId::Details);
-    auto *value = elements.get(ElementId::Reading), *unitLabel = elements.get(ElementId::Unit);
+    auto *value = elements.get(ElementId::Reading);
     const auto place = [](lv_obj_t *object, int x, int y, int w, int h) { lv_obj_set_pos(object, x, y); lv_obj_set_size(object, w, h); };
     host_.functionIcon().visible(true);
     host_.meterSummary().bar(!analog && bar_);
@@ -95,13 +96,13 @@ void MeterScreen::layout(bool analog) {
         host_.meterSummary().statisticsRows(true);
         host_.functionIcon().place(reading.x, dial.y + 1);
         host_.dial().place(reading.x, dial.y + ScreenLayout::DialOffset, reading.width, ScreenLayout::DialHeight);
+        const auto &row = analogSpans_[unsigned(AnalogBlock::Reading)];
+        readingBox_ = {reading.x, row.y, reading.x + reading.width - 1, row.y + row.height - 1};
         // The info line's right slot in the meta row (only "Waiting" before a packet; the jacks are the dial's marking).
         const int jacks = rows.x + MeterSummary::CompactMetaX + 158;
         place(line, jacks, dial.y, rows.x + rows.width - jacks, MeterSummary::CompactRow);
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, MeterSummary::CompactFont), 0);
         lv_obj_set_style_text_align(line, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_set_style_text_align(unitLabel, LV_TEXT_ALIGN_LEFT, 0);
-        lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_LEFT, 0);
         lv_obj_set_hidden(value, false);
         host_.buttons(analogSpans_[unsigned(AnalogBlock::Buttons)].y);
     } else {
@@ -117,13 +118,13 @@ void MeterScreen::layout(bool analog) {
         place(line, details.x, details.y + dy, details.width, details.height);
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, details.font), 0);
         lv_obj_set_style_text_align(line, LV_TEXT_ALIGN_LEFT, 0);
-        place(value, reading.x, reading.y + dy, reading.width, reading.height + grown);
-        place(unitLabel, unit.x, unit.y + dy, unit.width, unit.height);
-        lv_obj_set_style_text_align(unitLabel, LV_TEXT_ALIGN_RIGHT, 0);
+        // The digits and their unit share the theme's reading box.
+        readingBox_ = {reading.x, reading.y + dy, reading.x + reading.width - 1, reading.y + dy + reading.height + grown - 1};
         lv_obj_set_hidden(value, !reading.visible);
         host_.buttons(digitalSpans_[unsigned(DigitalBlock::Buttons)].y);
     }
     host_.dial().visible(analog);
+    this->reading(lv_label_get_text(value), shownState_); // The row in its new box (an order changes no reading).
 }
 void MeterScreen::arrangement(const DigitalArrangement &digital, const AnalogArrangement &analog, bool shown) {
     if (!digital.valid() || !analog.valid() || (digital == digital_ && analog == analogOrder_)) return;
@@ -147,15 +148,10 @@ void MeterScreen::reading(const char *text, DataStatus state) {
     const int font = analog_ || box.font < ScreenLayout::Digits ? box.font : box.font == ScreenLayout::Digits ? digits_ : std::min<int>(box.font, digits_);
     const auto fonts = MeterStyles::reading(look_.face, decltype(box.font)(font));
     const bool changed = std::strcmp(lv_label_get_text(label), text) != 0;
-    if (!analog_) {
-        const auto alignment = state == DataStatus::Ok ? LV_TEXT_ALIGN_RIGHT
-                             : state == DataStatus::Overload ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT;
-        MeterReading::showDigital(label, text, fonts, alignment);
-    } else {
-        const auto &span = analogSpans_[unsigned(AnalogBlock::Reading)];
-        const lv_area_t area = {box.x, span.y, box.x + box.width - 1, span.y + span.height - 1};
-        MeterReading::showCentred(label, elements.get(ElementId::Unit), text, fonts, area, UnitGap);
-    }
+    shownState_ = state;
+    // Digital: the row at the box's right edge; analog: centred under the dial. OL centred alone.
+    MeterReading::showRow(label, elements.get(ElementId::Unit), text, fonts, readingBox_, UnitGap, analog_,
+                          state == DataStatus::Overload);
     // The 64 px digits redraw beyond their box (LVGL's extra draw margin of the face). Where that
     // reaches the soft keys next to the reading block, the keys are redrawn whole with it: a card
     // cut by the margin's edge would not repaint exactly as a whole redraw (its sign lines).
@@ -260,12 +256,14 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
             shownUnit = MeterText::unit(result.unit);
         }
     }
-    elements.text(ElementId::Unit, shownUnit);
+    // OL stands alone, centred (GitHub #185); the card keeps the range's unit.
+    const auto state = MeterText::state(result);
+    elements.text(ElementId::Unit, state == DataStatus::Overload ? "" : shownUnit);
     const auto function = context.selecting != dmm::Function::Unknown ? context.selecting : dmm::Functions::identify(result);
     const char *terminals = dmm::Terminals::forFunction(function);
     // The function as its sign; the row says only what the sign cannot: MEAN, RMS, the jacks.
     host_.functionIcon().show(function, result.kind == dmm::Kind::DiodeWithBeeper, look_.color(MeterRole::Function));
-    reading(text, MeterText::state(result));
+    reading(text, state);
     // AC V.F.C. (the ZT706S's third F1 position) is V AC with its mark, as on the factory screen:
     // "VFC" first on the sign row (digital) or on the dial's marking (analog: the meta row's right
     // slot holds the AC frequency), and on the F1 card's value line.
@@ -296,7 +294,10 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     // holds the AC frequency only), so it has its place in every layout, order and look.
     char charge[24] = "";
     if (context.charge && dmm::ChargeCounter::counts(function)) dmm::ChargeCounter::format(context.charge->ampereHours(), charge, sizeof charge);
+    // MIN/MAX/AVG may leave out a unit the live reading shows beside its digits.
+    const char *sharedUnit = state == DataStatus::Ok && !lv_obj_is_hidden(elements.get(ElementId::Unit))
+                                 ? shownUnit : nullptr;
     host_.meterSummary().update(result, context.display != 2 && (context.showStatistics || context.display == 1) ? statistics : nullptr,
-                                look_.color(MeterRole::Mode), reference, relative, result.peerRelative, charge);
+                                look_.color(MeterRole::Mode), reference, relative, result.peerRelative, charge, sharedUnit);
 }
 } // namespace openosc::ui

@@ -9,8 +9,9 @@ namespace openosc::ui {
 class ScopeActions final : public PropertyList {
 public:
     // Bode: the frequency response analysis (GitHub #72), with either board's generator (ZT703S DAC, ZT706S module).
+    // The waveform saves are the gzip ones only (GitHub #187); ScopeRecorder keeps its plain RAW and CSV formats.
     enum Action { Display, Measurements, Cursors, Layout, Colors, Acquisition, Decoder, ArmSingle,
-                  SaveRaw, SaveCsv, SaveCsvGz, SaveRawGz, Spectrum, CenterChannels, ResetPan, TriggerMidpoint, Bode, All };
+                  SaveCsvGz, SaveRawGz, Spectrum, CenterChannels, ResetPan, TriggerMidpoint, Bode, All };
     static constexpr unsigned Count = All;
     explicit ScopeActions(const plot::Options &options = {}) : cursors_(options.cursors),
           spectrum_(options.mode == plot::Mode::Spectrum || options.mode == plot::Mode::SpectrumOverlay) {}
@@ -21,8 +22,9 @@ public:
     }
     void name(unsigned row, char *output, size_t capacity) const override {
         static constexpr const char *names[] = {"Display", "Measurements", "Cursors", "Layout", "Colors", "Acquisition", "Decoder",
-            "Rearm Single", "Save waveform RAW", "Save waveform CSV", "Save waveform CSV.gz", "Save waveform RAW.gz",
+            "Rearm Single", "Save waveform CSV.gz", "Save waveform RAW.gz",
             "FFT spectrum", "Center channels", "Reset pan", "Trigger 50%", "Bode (FRA)"};
+        static_assert(sizeof names / sizeof *names == Count);
         std::snprintf(output, capacity, "%s", row == Spectrum && spectrum_ ? "FFT settings" : row < Count ? names[row] : "");
     }
     unsigned options(unsigned row) const override { return row == Cursors ? 4 : 0; }

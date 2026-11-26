@@ -228,10 +228,15 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   Its Auto mode follows the MKR rule: CH1 alone at 10 or 25 ns/div on the 200 and 280 MHz profiles,
   except in Roll or while the generator streams from the DAC. On interleaves CH1 alone at every timebase
   and profile. The ZT703S defaults to Off and the ZT706S to Auto (the stock rule)
-- Save waveforms to `/openosc/CAPTURES` from **Analyze**. Choose **Save waveform CSV.gz** or
-  **Save waveform RAW.gz** for streaming gzip compression. Decompress the file on a computer
-  to get the same CSV or RAW data as the corresponding plain export. OpenOSC checks available
-  space as it writes and removes the temporary file if a compressed save runs out of space.
+- Save waveforms to `/openosc/CAPTURES` from **Analyze** with **Save waveform CSV.gz** or
+  **Save waveform RAW.gz**. Both use streaming gzip compression. Decompress the file on a
+  computer to recover the CSV or RAW data. OpenOSC checks free space as it writes compressed
+  bytes and removes the temporary file if the save runs out of space.
+- **Settings → Files & USB → Waveforms** lists the saved waveforms with their sizes. F3 deletes
+  the selected file after a confirmation. **Clear waveforms** deletes every waveform after a
+  confirmation, and F4 stops it part way. Both cover files in `/openosc/CAPTURES` ending in
+  `.CSV`, `.RAW`, `.CSV.GZ` or `.RAW.GZ` in any letter case, including plain exports from
+  earlier firmware. Finish any waveform saves or USB downloads before deleting waveforms.
 
 **Multimeter**
 
@@ -243,7 +248,11 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Statistics, trend chart and CSV logging
 - Resistance and capacitance use Ω, kΩ, MΩ and pF, nF, µF on the display, including for REL,
   MEAN and MIN/MAX/AVG. The displayed precision follows the meter resolution. For example,
-  0.6700 MΩ appears as 670.0 kΩ, 0.090 nF as 90 pF, and 22.00 mF as 22000 µF.
+  0.6700 MΩ appears as 670.0 kΩ, 0.090 nF as 90 pF, and 22.00 mF as 22000 µF. **Range** shows
+  the meter's range limit in its own unit, so a 90 pF reading on the 9.999 nF range shows
+  `Range 9.999 nF` with the reading in pF.
+- The unit stands to the right of the reading on its baseline. MIN, MAX and AVG omit the unit when
+  all three use the unit shown beside the reading. OL appears centred without a unit.
 - Session logging without a PC (**MENU → Measurement → Session log**): interval rows (count, min, max
   and average of the readings in each interval) or event records (a new record whenever the reading
   leaves a percentage band), stopped manually, at a set duration or when you leave the multimeter.

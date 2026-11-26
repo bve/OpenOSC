@@ -81,7 +81,13 @@ or is canceled. Deletion while a file is in use returns `-221`.
 
 Compressed waveform exports use `CAPnnnnn.CSV.GZ` and `CAPnnnnn.RAW.GZ`. Take the filename
 from `MMEM:CAT? "CAPTURES"` and download the gzip bytes with `MMEM:DATA?`. Decompress them on
-the host to recover the original CSV or RAW file.
+the host to recover the original CSV or RAW file. Save waveforms from the instrument's
+**Analyze** menu in either gzip format. Plain `CAPnnnnn.CSV` and `CAPnnnnn.RAW` files from
+earlier firmware stay listed and downloadable.
+
+While **Settings → Files & USB → Waveforms** is open on the instrument, including its delete
+confirmation and **Clear waveforms**, `MMEM:DEL` of a `CAPTURES` file returns `-221`. While
+**Clear waveforms** runs, `MMEM:DATA?` of a waveform file also returns `-221`.
 
 The instrument saves screenshots as PNG. Use the filename from
 `MMEM:CAT? "SCREENSHOTS"` to download a stored PNG or an earlier BMP.

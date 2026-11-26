@@ -86,6 +86,11 @@ void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t n
         if (shots_.busy()) { view_.notify(Tooltip::Unavailable, "Finish screenshot first",now); break; }
         confirmOperation(ui::Confirmation("CLEAR SCREENSHOTS?","Delete all screenshots"),&ApplicationController::clearImages);
         break;
+    case ui::SettingsAction::Captures: openCaptures(now); break;
+    case ui::SettingsAction::ClearCaptures:
+        if (data_.scopeRecording()) { view_.notify(Tooltip::Unavailable, "Finish waveform save first",now); break; }
+        confirmOperation(ui::Confirmation("CLEAR WAVEFORMS?","Delete all waveforms","Other files in CAPTURES are kept"),&ApplicationController::clearCaptures);
+        break;
     case ui::SettingsAction::UsbRemote:
         if (!prefs_.usbController) view_.notify(Tooltip::Unavailable, "Enable USB controller first", now); // No link to be remote over.
         else if (usbAutoOff()) view_.notify(Tooltip::Unavailable, "USB Auto: no computer found", now); // No attempt from here.

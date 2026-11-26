@@ -107,6 +107,7 @@ public:
     const ui::MeterCards &meterCards() { return host_.meterCards(); }
     const ui::AnalogDial &dial() { return host_.dial(); }
     const ui::MeterLook &meterLook() const { return meter_.look(); } // The DMM look in force (tests).
+    const lv_area_t &meterReadingBox() const { return meter_.readingBox(); } // The reading row's box (tests).
     const ui::RecordOverview &recordOverview() const { return overview_; }
     lv_obj_t *element(ElementId id) { return host_.elements().get(id); }
     void properties(const ui::PropertyList &properties, unsigned selected); // Browsing on `selected`.
@@ -122,6 +123,7 @@ public:
     // another menu) and then only redrawn; sessionsClosed() deletes its object before `view` goes.
     void sessions(const ui::ImageList &list);
     void awgFiles(const ui::ImageList &list); // GEN > Waveform > AWG file (docs/AWG.md).
+    void captures(const ui::ImageList &list); // Settings > Files & USB > Waveforms (GitHub #186).
     void sessionTrend(const char *name, ui::SessionTrendView &view, const ui::SessionTrendData &data, bool rebuild = false);
     void sessionsClosed();
     const ui::SessionTrendView *sessionTrendView() const { return sessionTrendLive_ ? sessionTrend_ : nullptr; } // Tests.

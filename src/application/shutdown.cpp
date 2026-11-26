@@ -31,6 +31,7 @@ public:
     // is closed and its .TMP removed now (its export ended), so nothing writes the volume after it.
     void prepare() override {
         a_.imageReader_.cancel(); a_.images_.cancelClear();
+        a_.closeCaptures();
         a_.closeSessions(false);
         a_.closeAwgFiles(false);
         cancelCsvFiles();

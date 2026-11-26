@@ -273,11 +273,16 @@ int InstrumentBackend::fileOpen(const char *path, uint32_t &bytes) {
         return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : found == FR_INVALID_NAME ? -257 : -250; // As MMEM:CAT? lists.
     const bool screenshot = shots && screenshot::ImageCatalog::supportedName(info.fname);
     if (screenshot && application_.images_.clearing()) return -221;
+    // A waveform export (GitHub #186): none is opened while Clear waveforms runs.
+    const bool capture = !std::strncmp(path, CaptureFiles::Directory, std::strlen(CaptureFiles::Directory)) &&
+                         CaptureFiles::supportedName(info.fname);
+    if (capture && application_.captures_ && application_.captures_->clearing()) return -221;
     const FRESULT result = f_open(&file_, path, FA_READ);
     if (result != FR_OK) return result == FR_NO_FILE || result == FR_NO_PATH ? -256 : result == FR_INVALID_NAME ? -257 : -250;
     fileOpen_ = true;
-    fileShot_ = screenshot;
-    ++storage::openReaders; storage::screenshotReaders += fileShot_; bytes = uint32_t(f_size(&file_));
+    fileShot_ = screenshot; fileCapture_ = capture;
+    ++storage::openReaders; storage::screenshotReaders += fileShot_; storage::captureReaders += fileCapture_;
+    bytes = uint32_t(f_size(&file_));
     return 0;
 }
 size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
@@ -285,7 +290,10 @@ size_t InstrumentBackend::fileRead(uint32_t at, uint8_t *out, size_t size) {
     if (!fileOpen_ || (f_tell(&file_) != at && f_lseek(&file_, at) != FR_OK) || f_read(&file_, out, UINT(size), &n) != FR_OK) return 0;
     return n;
 }
-void InstrumentBackend::fileClose() { if (fileOpen_) { f_close(&file_); --storage::openReaders; storage::screenshotReaders -= fileShot_; } fileOpen_ = false; }
+void InstrumentBackend::fileClose() {
+    if (fileOpen_) { f_close(&file_); --storage::openReaders; storage::screenshotReaders -= fileShot_; storage::captureReaders -= fileCapture_; }
+    fileOpen_ = fileShot_ = fileCapture_ = false;
+}
 int InstrumentBackend::fileDelete(const char *path) {
     if (!application_.fs_.mounted()) return -250;
     const auto &a = application_;
@@ -300,6 +308,8 @@ int InstrumentBackend::fileDelete(const char *path) {
     if (written || (a.sessionsBrowsing() && !strncasecmp(path, storage::Layout::Logs, std::strlen(storage::Layout::Logs)))) return -221;
     if (storage::openReaders || (shots && (a.imageReader_.busy() || a.images_.clearing() || a.panel_ == ApplicationController::Panel::Images ||
         (a.panel_ == ApplicationController::Panel::Confirmation && a.confirmationImages_)))) return -221; // Being read or browsed.
+    // Settings > Files & USB > Waveforms (GitHub #186): listed, confirmed or cleared there, deleted only there.
+    if (a.capturesBrowsing() && !strncasecmp(path, CaptureFiles::Directory, std::strlen(CaptureFiles::Directory))) return -221;
     const FRESULT result = f_unlink(path);
     return result == FR_OK ? 0 : result == FR_NO_FILE || result == FR_NO_PATH ? -256 : result == FR_INVALID_NAME ? -257 : -250;
 }

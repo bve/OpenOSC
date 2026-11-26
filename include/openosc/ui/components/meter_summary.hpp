@@ -12,6 +12,8 @@ namespace openosc::ui {
 // values use the shown reading's unit and resolution (dmm::Resolution: AVG never has more decimals
 // than the readings); one from another range that does not fit there keeps the display's five digits.
 // A resistance or capacitance takes the prefix of its own magnitude (dmm::DisplayPrefix, GitHub #168).
+// Each value carries its unit, unless all three are in the unit the main reading shows beside its
+// digits (GitHub #185): a mix of prefixes, an overload or no reading keep every unit.
 class MeterSummary {
 public:
     static constexpr int Width = 296, Columns = 3, ColumnGap = 4, ColumnWidth = (Width - (Columns - 1) * ColumnGap) / Columns;
@@ -43,9 +45,11 @@ public:
     static constexpr unsigned CompactFont = 12;
     static constexpr int BarTop = 63, Height = 89; // The bar's rows: BarTop..Height.
     // `charge`: the ampere-hour counter's text for the secondary slot when the reading has no secondary
-    // value of its own (DC current; null or empty: none).
+    // value of its own (DC current; null or empty: none). `primaryUnit`: the unit shown beside the
+    // main digits (MeterText::unit's form; null or empty: none shown).
     void update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
-                double reference = 0, bool relative = false, bool peerRelative = false, const char *charge = nullptr);
+                double reference = 0, bool relative = false, bool peerRelative = false, const char *charge = nullptr,
+                const char *primaryUnit = nullptr);
     void bar(const dmm::Result &result, DataStatus status, uint32_t accent,
              const dmm::RelativeReading *relative = nullptr, dmm::TemperatureAxis *axis = nullptr) {
         bar_.update(result, status, accent, relative, axis);
@@ -62,9 +66,11 @@ private:
     void arrange();
     void centre(unsigned column);
     void flowMeta(); // The meta row's three texts at their widths (digital and compact).
+    // A statistic's number and its unit in display form ("670.0", "kΩ").
+    struct Statistic { char number[24], unit[sizeof dmm::Result::unit]; };
     // A statistic at the last valid reading's resolution, else at the display's digits; a resistance or
     // capacitance in its magnitude's prefix at `exponent` (Statistics' quantum; Unknown: the reading's).
-    void statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative = false,
+    void statisticText(double value, Quantity quantity, Statistic &output, bool relative = false,
                        int8_t exponent = dmm::DisplayPrefix::Unknown) const;
     static int textWidth(lv_obj_t *label); // Its text in its own font (the role's typeface).
     MeterLook look_{};

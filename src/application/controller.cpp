@@ -161,6 +161,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         serviceBode(now);
         pauseHiddenCapture(now, usb.enumerating(now));
         serviceImages(now);
+        serviceCaptures(now);
         serviceMeterLog(now);
         serviceAwgFiles(now);
         if (uiReady_ && !shots_.busy()) {
@@ -311,6 +312,12 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
         else if ((events.longPress&Keypad::HoldSave) && !imageReader_.busy() && !images_.clearing()) {
             startScreenshot(now);
         } else imageKeys(keys,now);
+        return;
+    }
+    if (panel_ == Panel::Captures) { // As the screenshots' list: every key but the MENU and HOLD holds.
+        if (events.longPress&Keypad::Menu) { leaveCaptures(now); settingsMenu_.open(); navigator_.reset(); showSettings(); }
+        else if ((events.longPress&Keypad::HoldSave) && !(captures_ && captures_->clearing())) startScreenshot(now);
+        else captureKeys(keys,now);
         return;
     }
     // The saved DMM sessions take every key but MODE, the MENU hold (Settings) and the HOLD hold (a

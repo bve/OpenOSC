@@ -12,7 +12,7 @@ namespace openosc::ui {
 class MeterScreen final : public InstrumentScreen {
 public:
     static constexpr unsigned AnalogDisplay = 3; // MeterPreferences::display.
-    static constexpr int UnitGap = 8; // Between the analog view's digits and their unit.
+    static constexpr int UnitGap = 8; // Between the digits and their unit (digital and analog).
     // The theme's default DMM body began at y 55 under its top cards: its sign row's y there is the
     // origin its element positions are taken relative to inside the reading block.
     static constexpr int ThemeBodyTop = 55;
@@ -34,6 +34,7 @@ public:
     const BlockSpan &analogSpan(AnalogBlock block) const { return analogSpans_[unsigned(block)]; }
 
     const MeterLook &look() const { return look_; } // What is applied (tests).
+    const lv_area_t &readingBox() const { return readingBox_; } // The reading row's box (tests).
 
 private:
     void feed(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative); // Bar or dial target.
@@ -50,6 +51,8 @@ private:
     bool recording_ = false;
     bool bar_ = true;
     dmm::TemperatureAxis temperatureAxis_;
+    DataStatus shownState_ = DataStatus::NoData; // Of the reading shown (its row is placed again on a layout).
+    lv_area_t readingBox_{}; // The reading row's box (MeterReading::showRow): the theme's, in its block.
     int digits_ = ScreenLayout::Digits; // Digital: the size the reading block holds (ScreenLayout::digitsFor).
     DigitalArrangement digital_;
     AnalogArrangement analogOrder_;

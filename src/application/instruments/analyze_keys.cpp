@@ -78,14 +78,11 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         if (!applyScope(request, now, ScopeApply::Resume)) { view_.notify(Tooltip::Unavailable, "Cannot arm single capture", now); return; }
         break;
     }
-    case Actions::SaveRaw:
-    case Actions::SaveCsv:
     case Actions::SaveCsvGz:
     case Actions::SaveRawGz: {
+        // Streaming gzip: no uncompressed size is reserved first (ScopeRecorder::beginGzip).
         using Format = ScopeRecorder::Format;
-        static constexpr Format formats[] = {Format::Raw, Format::Csv, Format::CsvGz, Format::RawGz};
-        static_assert(Actions::SaveRawGz - Actions::SaveRaw + 1 == sizeof formats / sizeof *formats);
-        if (!data_.recordScope(formats[row - Actions::SaveRaw])) {
+        if (!data_.recordScope(row == Actions::SaveCsvGz ? Format::CsvGz : Format::RawGz)) {
             view_.notify(Tooltip::Critical, "Cannot start waveform save", now); return;
         }
         view_.notify(Tooltip::Progress, "Saving waveform...", now);

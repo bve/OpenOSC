@@ -79,6 +79,9 @@ struct MeterText {
         }
         return displayReading(result, output, capacity);
     }
+    // Every unit the main reading can show (unit() of the packets' units and of the #168 prefixes).
+    static constexpr const char *ReadingUnits[] = {"V", "mV", "uV", "A", "mA", "µA", "Ω", "kΩ", "MΩ",
+                                                   "pF", "nF", "µF", "mF", "°C", "°F"};
     static const char *unit(const char *unit) {
         if (!std::strcmp(unit, "Ohm")) return "Ω";
         if (!std::strcmp(unit, "kOhm")) return "kΩ";

@@ -13,6 +13,7 @@
 #include "openosc/screenshot/writer.hpp"
 #include "openosc/screenshot/catalog.hpp"
 #include "openosc/application/awg_files.hpp"
+#include "openosc/data/capture_files.hpp"
 #include "openosc/screenshot/reader.hpp"
 #include "openosc/settings/preferences_file.hpp"
 #include "openosc/settings/theme_store.hpp"
@@ -115,6 +116,22 @@ private:
     void deleteImage(uint32_t now);
     void clearImages(uint32_t now);
     void closeImages();
+    // Settings > Files & USB > Waveforms and Clear waveforms (GitHub #186, captures.cpp): the waveform
+    // exports' list, one file's or every file's deletion. The catalog exists only while its list, its
+    // confirmation or its clear is open (LVGL heap); MMEM:DEL waits meanwhile.
+    bool ensureCaptures(uint32_t now); // The catalog allocated (false: said, none).
+    void openCaptures(uint32_t now);
+    void showCaptures();
+    void captureKeys(uint32_t keys, uint32_t now);
+    void deleteCapture(uint32_t now);
+    void clearCaptures(uint32_t now);
+    void leaveCaptures(uint32_t now); // Back to Settings on the row it was opened from (a clear stops, said).
+    void closeCaptures();             // The catalog freed (a clear in progress stops).
+    [[gnu::noinline]] void serviceCaptures(uint32_t now);
+    ui::SoftKeys captureSoftKeys() const;
+    bool capturesBrowsing() const { return captures_ != nullptr; } // The CAPTURES files are listed (MMEM:DEL waits).
+    CaptureFiles *captures_ = nullptr;
+    unsigned captureProgress_ = 0;
     void beginZero(uint32_t now,bool hardware);
     void beginSoftwareZero(uint32_t now) { beginZero(now,false); }
     void beginHardwareZero(uint32_t now) { beginZero(now,true); }
@@ -169,7 +186,7 @@ private:
     bool zeroWatched_=false;
     uint32_t zeroProgress_=UINT32_MAX;
     ConfirmHandler confirmationHandler_=nullptr;
-    bool confirmationImages_=false;
+    bool confirmationImages_=false, confirmationCaptures_=false;
     bool confirmationZero_=false;
     bool confirmationSettings_=false;
     ui::Confirmation confirmation_{ShutdownAction::PowerOff};
@@ -428,7 +445,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLog, Sessions, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, AwgFiles, Confirmation, Images, Zero, InterleaveMatch, GainMatch, Bode };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLog, Sessions, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, AwgFiles, Confirmation, Images, Captures, Zero, InterleaveMatch, GainMatch, Bode };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;

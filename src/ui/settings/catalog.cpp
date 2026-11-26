@@ -55,6 +55,8 @@ constexpr SettingsEntry files[] = {
     {"USB Remote", Action::UsbRemote},
     {"Screenshots",Action::Images},
     {"Clear screenshots",Action::ClearImages},
+    {"Waveforms",Action::Captures},         // The Analyze exports in /openosc/CAPTURES (GitHub #186).
+    {"Clear waveforms",Action::ClearCaptures},
     {"Back", Action::Back},
 };
 constexpr SettingsEntry device[] = {

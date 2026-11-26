@@ -14,7 +14,7 @@ bool ApplicationController::setRemote(bool enabled, const char *left) {
     if (enabled && panel_ == Panel::Bode) finishBode(now, Tooltip::Done, nullptr); // Restored before the clock and the host change.
     if (enabled && bodeOwns()) return false; // Its restore refused (busy) or unconfirmed: tried again, then Remote.
     if (enabled) {
-        if (images_.clearing()) return false;
+        if (images_.clearing() || (captures_ && captures_->clearing())) return false;
         // A busy image reader refuses the clock change itself (Refused): nothing is cancelled for a
         // Remote that does not happen.
         const uint32_t previous = ClockControl::activeMode();

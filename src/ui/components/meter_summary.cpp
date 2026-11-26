@@ -107,32 +107,33 @@ void spaced(double value, Quantity quantity, char *output, size_t capacity) {
 } // namespace
 // In the reading's display units (MeterText::unit: kΩ, µF), as the reading's own unit label. A
 // resistance or capacitance in the prefix of its own magnitude at the quantum of its readings
-// (dmm::DisplayPrefix, Statistics' exponents; GitHub #168), as the main digits are.
-void MeterSummary::statisticText(double value, Quantity quantity, char *output, size_t capacity, bool relative,
-                                 int8_t exponent) const {
+// (dmm::DisplayPrefix, Statistics' exponents; GitHub #168), as the main digits are. The number and
+// its unit apart, so the caller may leave out a unit the main reading already shows.
+void MeterSummary::statisticText(double value, Quantity quantity, Statistic &output, bool relative, int8_t exponent) const {
     static constexpr const char *units[] = {"", "V", "A", "Ohm", "F", "Hz"};
+    const auto unit = [&](const char *raw) { std::snprintf(output.unit, sizeof output.unit, "%s", MeterText::unit(raw)); };
+    output.number[0] = output.unit[0] = 0;
     if (prefix_.valid() && prefix_.quantity() == quantity) {
         const auto prefix = exponent != dmm::DisplayPrefix::Unknown ? prefix_.at(exponent) : prefix_;
-        char number[24];
-        const char *unit = nullptr;
-        if (prefix.format(value, number, sizeof number, unit)) {
-            const int written = std::snprintf(output, capacity, "%s%s", number, MeterText::unit(unit));
-            if (written > 0 && size_t(written) < capacity) return;
-        }
+        const char *prefixed = nullptr;
+        if (prefix.format(value, output.number, sizeof output.number, prefixed)) { unit(prefixed); return; }
     }
     if (resolution_.valid() && resolution_.quantity() == quantity &&
-        resolution_.format(value, MeterText::unit(resolution_.unit()), output, capacity, relative)) return;
-    if (quantity == Quantity::Temperature) { std::snprintf(output, capacity, "----"); return; }
+        resolution_.format(value, "", output.number, sizeof output.number, relative)) { unit(resolution_.unit()); return; }
+    if (quantity == Quantity::Temperature) { std::snprintf(output.number, sizeof output.number, "----"); return; }
     char text[24];
-    const char *unit = units[unsigned(quantity)];
-    if (!plot::Format::quantity(value, unit, text, sizeof text, dmm::Resolution::MaxDigits)) { std::snprintf(output, capacity, "----"); return; }
+    const char *base = units[unsigned(quantity)];
+    if (!plot::Format::quantity(value, base, text, sizeof text, dmm::Resolution::MaxDigits)) {
+        std::snprintf(output.number, sizeof output.number, "----");
+        return;
+    }
     // The number and its SI prefix, then the prefixed unit in its display form.
-    const size_t length = std::strlen(text), base = std::strlen(unit);
-    const size_t prefixed = length >= base + 1 && std::isalpha(uint8_t(text[length - base - 1])) ? base + 1 : base;
-    char raw[8];
-    std::snprintf(raw, sizeof raw, "%s", text + length - std::min(prefixed, length));
-    text[length - std::min(prefixed, length)] = 0;
-    std::snprintf(output, capacity, "%s%s", text, MeterText::unit(raw));
+    const size_t length = std::strlen(text), plain = std::strlen(base);
+    const size_t prefixed = length >= plain + 1 && std::isalpha(uint8_t(text[length - plain - 1])) ? plain + 1 : plain;
+    const size_t cut = length - std::min(prefixed, length);
+    unit(text + cut);
+    text[cut] = 0;
+    std::snprintf(output.number, sizeof output.number, "%s", text);
 }
 int MeterSummary::textWidth(lv_obj_t *label) {
     lv_point_t size;
@@ -175,7 +176,7 @@ void MeterSummary::palette(const MeterLook &look) {
 }
 void MeterSummary::visible(bool value) { lv_obj_set_hidden(root_, !value); }
 void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *statistics, uint32_t accent,
-                          double reference, bool relative, bool peerRelative, const char *charge) {
+                          double reference, bool relative, bool peerRelative, const char *charge, const char *primaryUnit) {
     const double offset = relative ? reference : 0;
     if (const auto resolution = dmm::Resolution::of(result); resolution.valid()) {
         resolution_ = resolution;
@@ -184,9 +185,12 @@ void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *stat
     const bool temperature = result.primary.quantity == Quantity::Temperature;
     bool changed = Elements::setText(secondary_, result.secondary.valid() ? result.secondaryText : charge ? charge : "");
     if (relative) {
-        char value[32], text[48];
-        if (temperature) statisticText(reference, result.primary.quantity, value, sizeof value);
-        else spaced(reference, result.primary.quantity, value, sizeof value);
+        char value[sizeof(Statistic::number) + sizeof(Statistic::unit)], text[48];
+        if (temperature) {
+            Statistic shown;
+            statisticText(reference, result.primary.quantity, shown);
+            std::snprintf(value, sizeof value, "%s%s", shown.number, shown.unit);
+        } else spaced(reference, result.primary.quantity, value, sizeof value);
         std::snprintf(text, sizeof text, "REL ref %s", value); changed |= Elements::setText(reference_, text);
     } else if (peerRelative) changed |= Elements::setText(reference_, "REL ref: controller");
     else if (temperature) changed |= Elements::setText(reference_, "Temperature");
@@ -203,14 +207,20 @@ void MeterSummary::update(const dmm::Result &result, const dmm::Statistics *stat
     // overload or no reading, or of another quantity) shows "--" as the factory's placeholders.
     const bool shown = statistics != nullptr;
     const auto view = shown ? dmm::StatisticsView::of(*statistics, result.primary.quantity, offset) : dmm::StatisticsView{};
-    char texts[Columns][24] = {};
+    char texts[Columns][sizeof(Statistic::number) + sizeof(Statistic::unit)] = {};
     if (shown && !view.valid)
         for (auto &text : texts) std::snprintf(text, sizeof text, "--");
     if (view.valid) {
         const double numbers[Columns] = {view.minimum, view.maximum, view.average};
         const int8_t exponents[Columns] = {view.minimumExponent, view.maximumExponent, view.averageExponent};
+        Statistic values[Columns];
         for (unsigned c = 0; c < Columns; ++c)
-            statisticText(numbers[c], view.quantity, texts[c], sizeof texts[c], relative || peerRelative, exponents[c]);
+            statisticText(numbers[c], view.quantity, values[c], relative || peerRelative, exponents[c]);
+        // The unit once, beside the main digits, when all three are in it (GitHub #185); else each its own.
+        bool shared = primaryUnit && *primaryUnit;
+        for (const auto &value : values) shared = shared && !std::strcmp(value.unit, primaryUnit);
+        for (unsigned c = 0; c < Columns; ++c)
+            std::snprintf(texts[c], sizeof texts[c], "%.23s%.11s", values[c].number, shared ? "" : values[c].unit);
     }
     // One size for the three, each in its own typeface: the largest (ValueFont, then 12; compact:
     // 12 beside the names) in which all three fit their columns, so they share a baseline.

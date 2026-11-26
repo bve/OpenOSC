@@ -114,6 +114,6 @@ private:
     mutable dmm::Result reading_;
     char serial_[25]{};
     FIL file_{};
-    bool fileOpen_ = false, fileShot_ = false;
+    bool fileOpen_ = false, fileShot_ = false, fileCapture_ = false; // The open file counts as a screenshot or a waveform reader.
 };
 } // namespace openosc
