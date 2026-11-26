@@ -27,6 +27,11 @@ void DataAccess::serviceRolling(uint32_t now) {
     // a trend counts a point closed and a restart of its DMM part).
     const bool trend=request_.trend;
     const uint64_t stored=trend ? trend_.revision() : rolling_.dropped()+rolling_.size();
+    // A trend at its limit (TrendBuffer::full), its last point published, stops as STOP stops it. Only a
+    // running capture: after RUN the full buffer waits for startCapture's reset, not for another stop.
+    if (trend && trend_.full() && stored==rollingPublished_ && capture_.state()==scope::FrameMailbox::State::Capturing) {
+        trendLimit_=true; holdScope(true); return;
+    }
     if (!(trend ? trend_.size() : rolling_.size()) || stored==rollingPublished_ || !store_.writable() || uint32_t(now-rollingAt_)<16) return;
     // The trend's frame is its means; Roll's history keeps the channels' metadata and the rate.
     const auto snapshot=trend ? trend_.snapshot(rolling_.snapshot().metadata()) : rolling_.snapshot();

@@ -161,6 +161,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     const dmm::ReadingTrace &meterReadings() const { return meterReadings_; }
     // The trend's copy on show (ScopeRequest::trend): valid while its sequence is not 0.
     const scope::TrendView &trendShown() const { return trend_.shown(); }
+    // True once after a trend stopped at its limit (TrendBuffer::full, held as by STOP), for its notice.
+    bool takeTrendLimit() { const bool reached = trendLimit_; trendLimit_ = false; return reached; }
     // AUTO/RANGE (pressDmmRange, setDmmAuto, setDmmRange, stepDmmRange) only where the function shown
     // has ranges (dmm::Ranges::selectable): elsewhere refused at once, nothing sent, nothing busy.
     bool dmmRanged() const { return !meter_.typeK() && dmm::Ranges::selectable(dmm::Functions::identify(meter_.latest())); }
@@ -567,7 +569,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     uint32_t rollingAt_=0;
     bool rollingActive_=false,rollingLost_=false;
     // serviceBackground is running (a frame is being drawn): the trend is written by poll alone.
-    bool backgroundPass_=false;
+    // trendLimit_: the trend stopped at its limit, not yet told (takeTrendLimit).
+    bool backgroundPass_=false,trendLimit_=false;
     scope::TriggerCache triggerCache_;
     scope::FrameLease readout_;
     uint32_t readoutRevision_ = 0;
