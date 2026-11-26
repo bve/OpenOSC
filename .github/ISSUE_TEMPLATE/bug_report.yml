@@ -11,6 +11,14 @@ body:
         > [!IMPORTANT]
         > **One problem per report.** Open a separate issue for each bug. Put several problems in one
         > report only when they have the same cause or always appear together.
+
+        > [!TIP]
+        > **Title:** describe what happens in a few words. Pick the **Area** below: it is added to the
+        > title automatically as `Area: …`, and a trailing period is removed.
+        > Examples:
+        > - `Scope: Trigger level moves when changing V/div`
+        > - `DMM: Analog scale numbers overlap the scale line`
+        > - `Bode: Setup settings are lost after a power cycle`
   - type: checkboxes
     id: single
     attributes:
@@ -36,17 +44,26 @@ body:
     validations:
       required: true
   - type: dropdown
-    id: part
+    id: area
     attributes:
       label: Area
+      description: The part of OpenOSC the problem is in. It becomes the title prefix.
       options:
-        - Oscilloscope
-        - Multimeter
-        - Signal generator
-        - USB / SCPI / remote control
-        - Files, screenshots, settings
-        - Recovery bootloader or installation
-        - Other
+        - Scope
+        - DMM
+        - Generator
+        - Bode
+        - Decoder
+        - Screenshots
+        - Battery
+        - Power
+        - Menus
+        - UI
+        - USB
+        - Recovery
+        - Storage
+        - Hardware
+        - Performance
     validations:
       required: true
   - type: dropdown

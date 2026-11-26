@@ -491,3 +491,12 @@ Releases come out often, and you do not need to install every one: see
 
 If you'd like to turn your scopemeter into a retro gaming handheld, check out my
 just-for-fun dual-boot builds at [OpenOSC-RetroGo](https://github.com/bve/OpenOSC-RetroGo).
+
+## Other devices
+
+OpenOSC currently targets the ZT703S and ZT706S, and I can port it to other devices. A port needs
+the device on my bench: its board has to be traced, its peripherals identified and every function
+tested on real hardware. If you'd like OpenOSC on another oscilloscope or multimeter, I'd be
+grateful if you could send me a unit to study. Please get in touch in
+[Discussions](https://github.com/bve/OpenOSC/discussions) first, so we can check the device and
+agree on shipping.

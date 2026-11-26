@@ -9,6 +9,14 @@ body:
         > **One feature or improvement per request.** Open a separate issue for each idea, so that each
         > one can be discussed, planned and closed on its own. A list of unrelated improvements in one
         > issue is hard to track. Group ideas only when they belong to the same feature.
+
+        > [!TIP]
+        > **Title:** describe what you would like in a few words. Pick the **Area** below: it is added to the
+        > title automatically as `Area: …`, and a trailing period is removed.
+        > Examples:
+        > - `DMM: Right-align the reading and center OL`
+        > - `Scope: Video (PAL/NTSC/SECAM) trigger`
+        > - `Decoder: Add RS-485 decoding (DMX)`
   - type: checkboxes
     id: single
     attributes:
@@ -16,6 +24,29 @@ body:
       options:
         - label: This request describes one feature or improvement, or changes that belong to the same feature.
           required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: The part of OpenOSC the request is for. It becomes the title prefix.
+      options:
+        - Scope
+        - DMM
+        - Generator
+        - Bode
+        - Decoder
+        - Screenshots
+        - Battery
+        - Power
+        - Menus
+        - UI
+        - USB
+        - Recovery
+        - Storage
+        - Hardware
+        - Performance
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:

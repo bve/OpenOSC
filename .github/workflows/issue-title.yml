@@ -1,0 +1,45 @@
+name: Issue title
+
+# Issues opened from the forms carry an "Area" field. The title becomes "Area: Description":
+# an area prefix the reporter typed (any case, "Area:" or "Area -") is replaced, the first letter is
+# capitalised and a trailing period is removed. Issues without the field are left alone.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const areas = ["Scope", "DMM", "Generator", "Bode", "Decoder", "Screenshots", "Battery", "Power",
+                           "Menus", "UI", "USB", "Recovery", "Storage", "Hardware", "Performance"];
+            const aliases = {
+              "oscilloscope": "Scope", "osc": "Scope", "cursors": "Scope", "trigger": "Scope",
+              "multimeter": "DMM", "meter": "DMM",
+              "signal generator": "Generator", "gen": "Generator",
+              "bode plot": "Bode", "fra": "Bode",
+              "screenshot": "Screenshots", "files": "Storage", "file": "Storage",
+              "menu": "Menus", "settings": "Menus", "scpi": "USB", "usbtmc": "USB",
+            };
+            const issue = context.payload.issue;
+            const field = /^### Area\s*\n+([^\n]+)/m.exec(issue.body || "");
+            const area = field && areas.find(a => a === field[1].trim());
+            if (!area) return;
+            const known = [...areas, ...Object.keys(aliases)]
+              .map(a => a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+            let text = issue.title.trim();
+            for (let previous = ""; previous !== text;) {
+              previous = text;
+              text = text.replace(new RegExp(`^\\[?(?:${known}|area)\\]?(?:\\s*:|\\s+[-–])\\s*`, "i"), "").trim();
+            }
+            text = text.replace(/[.\s]+$/, "");
+            if (!text) return;
+            const title = `${area}: ${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+            if (title !== issue.title)
+              await github.rest.issues.update({ ...context.repo, issue_number: issue.number, title });
