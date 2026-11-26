@@ -2,7 +2,7 @@
 
 namespace openosc::plot {
 namespace {
-constexpr unsigned rows[][14] = {
+constexpr unsigned rows[][12] = {
     {Controls::View, Controls::Channel, Controls::Zoom, Controls::Pan, Controls::CenterTrigger, Controls::Visible,
      Controls::Invert, Controls::Gain, Controls::Position, Controls::GridStyle, Controls::GridBrightness, Controls::MathTrace},
     {Controls::SampleReduction, Controls::TraceInterpolation, Controls::TraceStyle, Controls::Average,

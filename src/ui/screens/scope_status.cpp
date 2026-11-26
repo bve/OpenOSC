@@ -36,9 +36,21 @@ void ScopeScreen::status(DataStatus health, bool held) {
     }
     if (automatic_ && (health==DataStatus::Ok || health==DataStatus::NoData)) text="AUTO SETUP";
     if (calibrating_ && (health==DataStatus::Ok || health==DataStatus::NoData)) text="CALIBRATING";
-    if (status_ != text) {
-        status_ = text;
-        const bool running = !std::strncmp(text,"RUN",3) || !std::strncmp(text,"TRIG'D",6) || (!std::strncmp(text,"ROLL",4) && !std::strchr(text,'/'));
+    // A trend on show (generator()): ROLL is TREND, and it and STOP carry the record's elapsed time in a
+    // fixed width ("TREND 03:59", "STOP 1:02:15"), so the pill does not jump as the seconds count.
+    char trend[24];
+    if (trendSeconds_ >= 0 && (!std::strcmp(text,"ROLL") || !std::strcmp(text,"ROLL RAW") || !std::strcmp(text,"STOP") ||
+                               !std::strcmp(text,"STOP RAW"))) {
+        const auto s = unsigned(trendSeconds_);
+        const char *state = text[0] == 'R' ? text[4] ? "TREND RAW" : "TREND" : text;
+        if (s >= 3600) std::snprintf(trend, sizeof trend, "%s %u:%02u:%02u", state, s / 3600, s / 60 % 60, s % 60);
+        else std::snprintf(trend, sizeof trend, "%s %02u:%02u", state, s / 60, s % 60);
+        text = trend;
+    }
+    if (std::strcmp(status_, text)) {
+        std::snprintf(status_, sizeof status_, "%s", text);
+        const bool running = !std::strncmp(text,"RUN",3) || !std::strncmp(text,"TRIG'D",6) || !std::strncmp(text,"TREND",5) ||
+                             (!std::strncmp(text,"ROLL",4) && !std::strchr(text,'/'));
         const bool stopped = !std::strncmp(text,"STOP",4) || !std::strcmp(text,"SINGLE") || std::strstr(text,"ERROR") ||
                              std::strstr(text,"TIMEOUT") || std::strstr(text,"OVERFLOW");
         host_.status(text, running ? StatusTone::Good : stopped ? StatusTone::Alert : StatusTone::Warning);

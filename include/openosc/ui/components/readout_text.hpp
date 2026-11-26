@@ -55,6 +55,8 @@ public:
     // limit: a bounded value's significant digits (Measurements::digits; 0: unbounded, the forms as
     // they are). No form then shows more, a coarse form's fixed decimals included ("12.35kHz" and
     // ">99.99%" are refused at 2 or 3), and ">99%" is that value's bound at two.
+    // unit: the value's unit in place of the measurement's (the DMM trace's readings, any quantity);
+    // peak to peak then takes its short tag "pp" in every form, its "V" being no longer true.
     static constexpr unsigned Forms = 10, Overflow = Forms - 1;
     // The prefix to keep near its range's edge (Format::quantity; -1: none), Scope's hysteresis. Its own
     // type, explicit: `gap` (a bool, after it) can never turn into a preferred prefix by position.
@@ -65,7 +67,7 @@ public:
         Prefer(bool) = delete;
     };
     static bool form(unsigned kind, bool valid, double value, const char *mark, unsigned index, ReadoutParts &output, unsigned size = 12,
-                     unsigned limit = 0, Prefer prefer = {}, bool gap = true);
+                     unsigned limit = 0, Prefer prefer = {}, bool gap = true, const char *unit = nullptr);
     // How a computed value reads in any layout (footer panels, Legacy): its mark ("~": a tone from
     // the spectrum, or approximate) and its digit limit (0 without a bound: Full, Vpp, ...).
     struct Presentation { const char *mark = ""; unsigned limit = 0; };

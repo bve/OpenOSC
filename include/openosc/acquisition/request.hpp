@@ -2,6 +2,7 @@
 #include "openosc/acquisition/analysis.hpp"
 #include "openosc/acquisition/frontend.hpp"
 #include "openosc/acquisition/record_depths.hpp"
+#include "openosc/acquisition/timebases.hpp"
 
 namespace openosc {
 struct ScopeRequest {
@@ -13,8 +14,25 @@ struct ScopeRequest {
     uint32_t probeNumerator[2] = {1, 1}, probeDenominator[2] = {1, 1};
     bool rollAuto=true;
     bool longerRecord = true;
-    // A qualified trigger needs a bounded record with the history around its candidate.
-    bool rolling() const { return rollAuto && timebaseNs>=200000000 && trigger.mode==scope::TriggerMode::Auto && !trigger.qualified(); }
+    // Trend (TrendBuffer): the step after Timebases::Maximum. It rolls at Timebases::SampledMaximum, as a
+    // flag because the time/div of its record is its own (it grows with the record).
+    bool trend=false;
+    // Roll: Auto from 200 ms/div with rollAuto, and always past Timebases::SampledMaximum (averaged Roll)
+    // and in a trend. Up to it, a qualified trigger needs a bounded record with the history around its candidate.
+    bool rolling() const {
+        return trigger.mode==scope::TriggerMode::Auto && (trend || timebaseNs>scope::Timebases::SampledMaximum ||
+                                                          (rollAuto && timebaseNs>=200000000 && !trigger.qualified()));
+    }
+    // Past Timebases::SampledMaximum, and in a trend (which takes that time/div), the scope only rolls: a
+    // trigger mode asked for there is Auto (every caller through ApplicationController::applyScope, the
+    // saved settings as they load; DataAccess refuses any other). True when it changed the mode.
+    bool followTimebase() {
+        if (trend) timebaseNs=scope::Timebases::SampledMaximum;
+        else if (timebaseNs<=scope::Timebases::SampledMaximum) return false;
+        if (trigger.mode==scope::TriggerMode::Auto) return false;
+        trigger.mode=scope::TriggerMode::Auto;
+        return true;
+    }
     unsigned channels() const { return scope::RecordBudget::channels(frontend.enabled[0], frontend.enabled[1]); }
     uint32_t depth() const { return scope::RecordBudget::perChannel(recordPoints, channels()); } // Points per channel.
     // At a fixed timebase, depth beyond the default budget can extend the captured time.
@@ -34,7 +52,7 @@ struct ScopeRequest {
         if (source < 2 && !frontend.enabled[source] && frontend.enabled[source ^ 1]) trigger.channel = scope::Channel(source ^ 1);
     }
     bool same(const ScopeRequest &other) const {
-        if (timebaseNs != other.timebaseNs || recordPoints != other.recordPoints || rollAuto!=other.rollAuto ||
+        if (timebaseNs != other.timebaseNs || recordPoints != other.recordPoints || rollAuto!=other.rollAuto || trend!=other.trend ||
             longerRecord != other.longerRecord ||
             trigger != other.trigger) return false;
         for (unsigned c = 0; c < 2; ++c)

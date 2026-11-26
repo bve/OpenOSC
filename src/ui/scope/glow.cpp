@@ -4,6 +4,7 @@
 #include "src/draw/lv_draw_private.h"
 #include "src/draw/sw/blend/lv_draw_sw_blend_private.h"
 #include <cstring>
+#include <new>
 #if defined(__ARM_FEATURE_DSP)
 #include <arm_acle.h>
 #endif
@@ -15,22 +16,22 @@ constexpr unsigned RowWords = (MaximumWidth + 31) / 32;
 constexpr unsigned RingRows = 8, BandRows = 4;
 static_assert(RingRows > Radius && !(RingRows & (RingRows - 1)));
 // Only the synchronous software draw callback uses this workspace. It is
-// cleared per channel and never referenced by a queued task or DMA2D.
+// cleared per channel and never referenced by a queued task or DMA2D. It
+// lies in the spectrum's FFT work bytes (SpectrumStorage::work).
 static_assert(LV_USE_OS == LV_OS_NONE);
 struct GlowScratch {
     uint32_t silhouette[MaximumHeight][RowWords];
     uint32_t rings[Radius][RingRows][RowWords];
     uint8_t band[BandRows * MaximumWidth];
 };
-#if defined(OPENOSC_APPLICATION)
-__attribute__((section(".scope_glow"), aligned(8)))
-#endif
-GlowScratch scratch;
+static_assert(sizeof(GlowScratch) <= sizeof(scope::SpectrumStorage::work), "Glow scratch exceeds the FFT work area");
+static_assert(alignof(GlowScratch) <= alignof(scope::SpectrumStorage::Work), "FFT work area under-aligned for Glow");
 
 class Silhouette {
 public:
-    Silhouette(int width, int height) : right_(width - 1), bottom_(height - 1), bounds_{width, height, -1, -1} {
-        std::memset(scratch.silhouette, 0, height * sizeof(scratch.silhouette[0]));
+    Silhouette(GlowScratch &scratch, int width, int height)
+        : scratch_(scratch), right_(width - 1), bottom_(height - 1), bounds_{width, height, -1, -1} {
+        std::memset(scratch_.silhouette, 0, height * sizeof(scratch_.silhouette[0]));
     }
 
     void segment(int x1, int y1, int x2, int y2) {
@@ -43,15 +44,16 @@ public:
         bounds_.x2 = std::max<int>({bounds_.x2, x1, x2});
         bounds_.y1 = std::min<int>({bounds_.y1, y1, y2});
         bounds_.y2 = std::max<int>({bounds_.y2, y1, y2});
-        rasterLine(x1, y1, x2, y2, [](unsigned x, unsigned y) {
-            scratch.silhouette[y][x / 32] |= 1U << (x % 32);
+        rasterLine(x1, y1, x2, y2, [this](unsigned x, unsigned y) {
+            scratch_.silhouette[y][x / 32] |= 1U << (x % 32);
         });
     }
 
-    const uint32_t *row(int y) const { return y >= 0 && y <= bottom_ ? scratch.silhouette[y] : empty_; }
+    const uint32_t *row(int y) const { return y >= 0 && y <= bottom_ ? scratch_.silhouette[y] : empty_; }
     const lv_area_t &bounds() const { return bounds_; }
 
 private:
+    GlowScratch &scratch_;
     int right_, bottom_;
     lv_area_t bounds_;
     static constexpr uint32_t empty_[RowWords]{};
@@ -76,8 +78,8 @@ private:
 // approximate circles. Only the rows needed by the next stage are retained.
 class Halo {
 public:
-    Halo(unsigned words, unsigned opacity) : words_(words) {
-        std::memset(scratch.rings, 0, sizeof(scratch.rings));
+    Halo(GlowScratch &scratch, unsigned words, unsigned opacity) : scratch_(scratch), words_(words) {
+        std::memset(scratch_.rings, 0, sizeof(scratch_.rings));
         constexpr uint8_t falloff[Radius] = {94, 78, 58, 39, 23, 11};
         for (unsigned i = 0; i < Radius; ++i)
             alpha_[i] = uint8_t((falloff[i] * opacity + 127) / 255);
@@ -144,7 +146,7 @@ private:
         }
     }
 
-    uint32_t *row(unsigned r, int y) { return scratch.rings[r][unsigned(y) % RingRows]; }
+    uint32_t *row(unsigned r, int y) { return scratch_.rings[r][unsigned(y) % RingRows]; }
 
     template <bool Square>
     void grow(uint32_t *out, const uint32_t *top, const uint32_t *center, const uint32_t *bottom) const {
@@ -160,6 +162,7 @@ private:
         }
     }
 
+    GlowScratch &scratch_;
     unsigned words_;
     uint8_t alpha_[Radius];
 };
@@ -176,7 +179,8 @@ struct GlowTask {
         const auto &options = model.options();
         const auto &view = model.viewport();
         const auto &plot = task->area;
-        Silhouette shape(view.width, view.height);
+        auto &scratch = *new (model.drawScratch()) GlowScratch;
+        Silhouette shape(scratch, view.width, view.height);
         GlowPath main(shape), extrema(shape);
         if (options.mode == Mode::XY)
             xyGeometry(model.storage().xy, model.xyCount(), options.style, main);
@@ -190,7 +194,7 @@ struct GlowTask {
         const int bottom = std::min<int>({ink.y2 + Radius, task->clip_area.y2 - plot.y1, int(view.height) - 1});
         if (left > right || top > bottom) return;
 
-        Halo halo((view.width + 31) / 32, options.channels[self.channel].opacity);
+        Halo halo(scratch, (view.width + 31) / 32, options.channels[self.channel].opacity);
         auto *rows = scratch.band;
         const int stride = right - left + 1;
         int bandStart = top;

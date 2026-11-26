@@ -20,8 +20,8 @@ bool sameCh1Range(const ScopeRequest &a, const ScopeRequest &b) {
 }
 }
 bool DataAccess::validateScope(const ScopeRequest &r) const {
-    if (r.timebaseNs < 10 || r.timebaseNs > 20000000000ULL || !scope::RecordBudget::valid(r.recordPoints) ||
-        !r.trigger.valid())
+    if (r.timebaseNs < 10 || r.timebaseNs > scope::Timebases::Maximum || !scope::RecordBudget::valid(r.recordPoints) ||
+        !r.trigger.valid() || ((r.timebaseNs > scope::Timebases::SampledMaximum || r.trend) && !r.rolling()))
         return false;
     for (unsigned c = 0; c < 2; ++c)
         if (!r.probeNumerator[c] || !r.probeDenominator[c] || r.frontend.range[c] > 10 ||
@@ -77,6 +77,10 @@ bool DataAccess::configureScopeCore(const ScopeRequest &r,bool force,bool preser
     const bool previousHeadroom = interleaveHeadroom_;
     if (!sameCh1Range(previous, r) || !interleaving(r)) interleaveHeadroom_ = false;
     request_ = r;
+    // Bank 3 is no trend's from here: a capture of a later start (deferred, or from serviceBackground under
+    // a draw) may write it before startCapture runs, and nothing may be drawn from it meanwhile. AutoSetup's
+    // and the zero's trials take the trial area instead: a held trend stays for their end to return to.
+    if (!r.trend && !internalCapture()) trend_.forget();
     forcePending_ = false; forcedSequence_ = 0; // A force belongs to the acquisition it was given for.
     if (!describeNext(configuration_)) describeChannels(configuration_); // Conversions follow the request.
     // In a burst of setting changes only the last one starts a capture (poll waits for quiet): each
@@ -132,7 +136,8 @@ bool DataAccess::zeroTrial() const {
     return phase==calibration::ZeroOperation::Phase::Applying || phase==calibration::ZeroOperation::Phase::Collecting;
 }
 // The plan of the next capture: a record of the request's per-channel depth, the fixed trial
-// depth, or a Roll window (at most RollWindow points per channel, as Roll keeps 16-bit history).
+// depth, or a Roll window (at most RollWindow points per channel, as Roll keeps 16-bit history; past
+// Timebases::SampledMaximum the ADC runs that timebase's plan and Roll averages it, RollingBuffer).
 // A buffer the DMA cannot fill at the full rate (AcquisitionArena::fullRate) is planned at half
 // of it; a ring shorter than the depth (the compact 128K one, a split ring's capacity) keeps the record
 // within it, less the headroom at the full rate.
@@ -151,7 +156,8 @@ bool DataAccess::samplePlan(scope::SamplePlan &plan, const scope::CaptureBuffer 
     const uint32_t depth = internalCapture() ? buffer.ringPoints()
         : rolling ? std::min<uint32_t>(request_.depth(), scope::AcquisitionArena::RollWindow)
         : std::min<uint32_t>(request_.depth(), capacity & ~(4*perTransfer-1));
-    return scope::SamplePlan::calculate(request_.timebaseNs,depth,maximumRate,capacity,plan,
+    const uint64_t timebase = rolling ? scope::Timebases::sampled(request_.timebaseNs) : request_.timebaseNs;
+    return scope::SamplePlan::calculate(timebase,depth,maximumRate,capacity,plan,
                                         rolling ? scope::SamplePlan::FullSpeedHeadroom
                                                 : scope::SamplePlan::headroom(buffer,maximumRate*perTransfer),
                                         perTransfer, rolling || internalCapture() ? 0 : request_.windowPoints());
@@ -422,6 +428,8 @@ bool DataAccess::describeNext(scope::FrameMetadata &metadata) {
     bool rolling=false;
     if (!planCapture(plan,buffer,rolling) ||
         !scope::CaptureTiming::points(TimerClock::apb1(),plan.rate,buffer.pointsPerTransfer(),timing,rate)) return false;
+    // An averaged Roll's records (RollingBuffer): a point per Timebases::averaging of the ADC's.
+    if (rolling && !rate.scaled(1,scope::Timebases::averaging(request_.timebaseNs),rate)) return false;
     auto next=metadata;
     next.samples=next.ring=plan.count; next.origin=0;
     next.samplesPerSecond=rate; next.timebaseNs=request_.timebaseNs;
@@ -554,7 +562,8 @@ bool DataAccess::startCapture() {
     metadata.rolling=rolling;
     if (rolling) metadata.samples=metadata.ring=buffer.ringPoints(); // Roll runs the DMA ring continuously.
     metadata.samplesPerSecond = plan.rate;
-    metadata.timebaseNs = request_.timebaseNs;
+    // The capture's own: an averaged Roll's is the ADC's (Timebases::sampled), its records the request's.
+    metadata.timebaseNs = rolling ? scope::Timebases::sampled(request_.timebaseNs) : request_.timebaseNs;
     // The budget the user's record was planned for: the status bar names it, never the request staged
     // later. Roll and internal captures (zero calibration, AutoSetup trials) name only what they hold.
     static_assert(scope::RecordBudget::Minimum % 1024 == 0 && scope::RecordBudget::Maximum / 1024 <= UINT16_MAX);
@@ -599,12 +608,21 @@ bool DataAccess::startCapture() {
     staged_ = false; // This capture runs the current request.
     if (!zeroBusy()) counters_.start();
     configuration_.samples=configuration_.ring=plan.count;
-    if (rolling) { configuration_.layout=scope::Layout::Linear; configuration_.interleaveOffset=0; }
+    const uint32_t averaging=scope::Timebases::averaging(request_.timebaseNs);
+    if (rolling) {
+        configuration_.layout=scope::Layout::Linear; configuration_.interleaveOffset=0;
+        configuration_.timebaseNs=request_.timebaseNs; // As its records (RollingBuffer::snapshot) are.
+        configuration_.samplesPerSecond.scaled(1,averaging,configuration_.samplesPerSecond);
+    }
     rollingActive_=rolling;
     if (rolling) {
-        rolling_.reset(plan.count); rollingConsumed_=rollingPublished_=0; rollingLost_=false;
+        rolling_.reset(plan.count,averaging); rollingConsumed_=rollingPublished_=0; rollingLost_=false;
         rollingAt_=Board::milliseconds()-16;
     }
+    // Bank 3 is the trend's only while it runs: any other capture may write it. An internal one (AutoSetup's
+    // or the zero's trials) takes the trial area and leaves it, and the frozen record on show, alone.
+    if (rolling && request_.trend) trend_.reset(meterReadings_.quantity());
+    else if (!internalCapture()) trend_.forget();
     if (!holdPending_) status_ = DataStatus::Ok; // A pending HOLD's retry keeps the fault until a record arrives.
     applyForce();
     return true;

@@ -12,10 +12,21 @@ struct ReadoutSelection {
     static constexpr unsigned PerChannel=4;
     uint32_t values[2][PerChannel]={{0,1,2,8},{0,1,2,8}};
     ReadoutBasis basis=ReadoutBasis::Screen;
+    // The Scope's DMM trace (plot::MeterReadouts): readouts of its readings over the visible window,
+    // whatever the basis; only MeterKinds. Not the scheduler's (same() leaves them out).
+    static constexpr Measurement MeterKinds[]={Measurement::Off,Measurement::Mean,Measurement::Minimum,Measurement::Maximum,
+                                               Measurement::PeakToPeak,Measurement::Rms};
+    static constexpr bool meterKind(unsigned value) {
+        for (auto kind : MeterKinds) if (value==unsigned(kind)) return true;
+        return false;
+    }
+    uint8_t meter[PerChannel]={uint8_t(Measurement::Mean),uint8_t(Measurement::PeakToPeak),uint8_t(Measurement::Minimum),
+                               uint8_t(Measurement::Maximum)};
     bool valid() const {
         if (unsigned(basis)>1) return false;
         for (const auto &channel : values) for (auto value : channel)
             if (value>=Measurements::Count) return false;
+        for (auto value : meter) if (!meterKind(value)) return false;
         return true;
     }
     // A value is shown for the channel (other than Off and the hardware counter, kept apart).

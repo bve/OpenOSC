@@ -8,6 +8,6 @@ namespace openosc {
 inline constexpr size_t ThemeDocumentCapacity = JSON_OBJECT_SIZE(7) + JSON_OBJECT_SIZE(9)
     + InstrumentModeCount * (JSON_ARRAY_SIZE(ThemeInputElementLimit)
         + ThemeInputElementLimit * JSON_OBJECT_SIZE(10)) + 2048
-    + JSON_OBJECT_SIZE(23)+JSON_ARRAY_SIZE(2)+2*JSON_OBJECT_SIZE(6)+JSON_OBJECT_SIZE(7)+JSON_OBJECT_SIZE(3)+512; // Plot reserve includes density and brightness (#85, #86).
+    + JSON_OBJECT_SIZE(23)+JSON_ARRAY_SIZE(2)+2*JSON_OBJECT_SIZE(6)+JSON_OBJECT_SIZE(7)+JSON_OBJECT_SIZE(3)+512; // Plot reserve includes density and brightness (#85, #86) and the DMM trace.
 using ThemeDocument = StaticJsonDocument<ThemeDocumentCapacity>;
 }

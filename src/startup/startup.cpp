@@ -9,8 +9,8 @@ extern uint32_t _sidma_data, _sdma_data, _edma_data;
 #ifdef OPENOSC_APPLICATION
 // ITCM workspaces using 64-bit ECC words.
 extern uint64_t _sdecode_workspace, _edecode_workspace, _susb_trace, _eusb_trace;
-extern uint64_t _sscope_glow, _escope_glow;
 extern uint64_t _sbode, _ebode, _sscpi_measure, _escpi_measure, _sdmm_log, _edmm_log;
+extern uint64_t _smeter_trace, _emeter_trace;
 #endif
 void Reset_Handler();
 void Bootstrap_Fault();
@@ -68,10 +68,10 @@ void Reset_Handler() {
     __DSB(); __ISB();
     for (auto* p = &_sdecode_workspace; p < &_edecode_workspace; ++p) *p = 0;
     for (auto* p = &_susb_trace; p < &_eusb_trace; ++p) *p = 0;
-    for (auto* p = &_sscope_glow; p < &_escope_glow; ++p) *p = 0;
     for (auto* p = &_sbode; p < &_ebode; ++p) *p = 0;
     for (auto* p = &_sscpi_measure; p < &_escpi_measure; ++p) *p = 0;
     for (auto* p = &_sdmm_log; p < &_edmm_log; ++p) *p = 0;
+    for (auto* p = &_smeter_trace; p < &_emeter_trace; ++p) *p = 0;
     __DSB();
 #endif
     for (unsigned i = 0; i < 256; ++i)

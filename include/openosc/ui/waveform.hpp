@@ -17,7 +17,7 @@ public:
     void colors(const Theme &theme);
     // The Scope appearance's roles the theme has no field for (plot::Palette: FollowSource and
     // Contrast keep their automatic meaning); repaints. Never touches the record or the options.
-    void roles(uint32_t trigger, uint32_t tagText, uint32_t readout);
+    void roles(uint32_t trigger, uint32_t tagText, uint32_t readout, uint32_t meter);
     const plot::Palette &palette() const { return palette_; } // The colours in force (tests).
     // Swap CH1/CH2 (plot::ChannelView): repaints the record on show, a held one included; never
     // touches the record, the options or the model.
@@ -44,6 +44,11 @@ public:
     void note(const char *text, uint32_t color);
     // The frequency counter overlay in the top left corner; empty hides it.
     void counter(const char *text, uint32_t color);
+    // The Scope's DMM trace: the readings its line is drawn from (nullptr: none).
+    void meterReadings(const dmm::ReadingTrace *readings);
+    // A trend's points (DataAccess::trendShown): drawn instead of the channels' traces and the DMM line
+    // while the copy is valid, in the record's own view (it places its own points); nullptr: none.
+    void trend(const scope::TrendView *view);
     const char *note() const { return note_ && !lv_obj_is_hidden(note_) ? lv_label_get_text(note_) : ""; } // On show.
     void service(uint32_t now);
     bool captureReference(unsigned channel);
@@ -72,5 +77,7 @@ private:
     plot::TriggerMark triggerMark_;
     bool held_ = false, inlineScales_ = true;
     const plot::ColumnCache *cache_ = nullptr;
+    const dmm::ReadingTrace *meter_ = nullptr;
+    const scope::TrendView *trend_ = nullptr;
 };
 } // namespace openosc

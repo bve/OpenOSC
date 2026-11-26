@@ -11,7 +11,7 @@ bool ScopePreferences::valid() const {
         triggerMinimumNs < scope::TriggerSettings::MinimumNs || triggerMinimumNs > scope::TriggerSettings::MaximumNs ||
         triggerMaximumNs < scope::TriggerSettings::MinimumNs || triggerMaximumNs > scope::TriggerSettings::MaximumNs ||
         !measurements.valid() ||
-        runMode>=RunModeCount || rollAuto>1 || longerRecord > 1 || interleave>(board::Current::Features.interleaveControl() ? 2U : 1U) ||
+        runMode>=RunModeCount || rollAuto>1 || trend>1 || longerRecord > 1 || interleave>(board::Current::Features.interleaveControl() ? 2U : 1U) ||
         factoryRecordFormat>3 || !arrangement.valid() || !appearance.valid() || !decoder.valid() || !keys.valid()) return false;
     for (unsigned c = 0; c < 2; ++c)
         if (enabled[c] > 1 || coupling[c] > 1 || position[c] > 160 || !probeNumerator[c] ||

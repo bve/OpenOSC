@@ -4,9 +4,11 @@
 #include "openosc/ui/scope/display_scale.hpp"
 #include "openosc/ui/scope/view_zoom.hpp"
 #include "openosc/ui/scope/plot_frame.hpp"
+#include "openosc/ui/scope/trace_move.hpp"
 #include "openosc/acquisition/readouts.hpp"
 #include <cstdio>
 #include <cstring>
+
 
 namespace openosc::ui {
 void ScopeScreen::activate(const ApplicationState &state) {
@@ -14,7 +16,7 @@ void ScopeScreen::activate(const ApplicationState &state) {
     host_.scopeFooter().selection(measurements_);
     countersValid_=false; readoutsPainted_=false;
     valid_ = false;
-    status_ = "WAITING FOR DATA";
+    std::snprintf(status_, sizeof status_, "WAITING FOR DATA");
     automatic_=calibrating_=false;
     host_.status(status_, StatusTone::Warning);
     // Closing a panel reactivates this screen: a trace still on display keeps its labels.
@@ -29,8 +31,9 @@ void ScopeScreen::activate(const ApplicationState &state) {
     }
     cards();
 }
-void ScopeScreen::settings(const scope::FrameMetadata &next, unsigned channel) {
+void ScopeScreen::settings(const scope::FrameMetadata &next, unsigned channel, bool nextTrend) {
     next_ = next;
+    nextTrend_ = nextTrend;
     select(channel);
     cards();
 }
@@ -40,6 +43,16 @@ void ScopeScreen::context(unsigned channel, plot::Focus focus, bool panReverse) 
     focus_ = focus; panReverse_ = panReverse;
     cards();
     if (focus_ == plot::Focus::Zoom) zoomNote();
+}
+void ScopeScreen::meter(const Meter &meter) {
+    if (meter.selected == meter_.selected && meter.perDivision == meter_.perDivision && !std::strcmp(meter.unit, meter_.unit) &&
+        !std::strcmp(meter.function, meter_.function))
+        return;
+    meter_ = meter;
+    cards();
+}
+void ScopeScreen::meterReadouts(const plot::MeterReadouts &readouts) {
+    if (!host_.overlayActive()) host_.scopeFooter().meter(readouts);
 }
 void ScopeScreen::select(unsigned channel) {
     channel_ = channel < 2 ? channel : 0;
@@ -69,6 +82,20 @@ void ScopeScreen::generator(const generator::Snapshot &output, bool captureHalve
     }
     widget.note(text, gen ? host_.theme().generator : host_.theme().cursor);
 }
+// A valid trend copy under a rolling frame is a trend on show (AutoSetup's trials keep a held trend's copy
+// but show their own frames): its elapsed time goes to the status pill, and the cards have no pending
+// time/div (the record's own is shown). Running, the time is the clock since the record's first sample,
+// a second at a time (the copy grows a point at a time, tens of seconds late in a long record); held,
+// what it reached, or the copy's span for one shown held from the start.
+void ScopeScreen::trend(const scope::TrendView &copy, uint64_t nowUs) {
+    const auto &model = host_.waveform().model();
+    const bool trending = copy.sequence != 0 && model.hasFrame() && model.metadata().rolling;
+    if (trending_ != trending) { trending_ = trending; cards(); }
+    int32_t seconds = -1;
+    if (trending && !statusHeld_ && nowUs >= copy.startUs) seconds = int32_t((nowUs - copy.startUs) / 1000000);
+    else if (trending) seconds = trendSeconds_ >= 0 ? trendSeconds_ : copy.rate.valid() ? int32_t(copy.size / copy.rate.value()) : -1;
+    if (trendSeconds_ != seconds) { trendSeconds_ = seconds; status(health_, statusHeld_); }
+}
 // Zoom & Pan (issue #96): its factor and what the arrows do, in place of the GEN note.
 void ScopeScreen::zoomNote() {
     auto &widget = host_.waveform();
@@ -86,20 +113,26 @@ void ScopeScreen::cards() {
     const auto &selected = shown.channels[channel_];
     const auto &view = host_.channelView(); // Each card names and tints its input by its on-screen slot.
     char scale[24], time[24], value[64], title[64], details[160];
-    const auto scaleValue = plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
+    // The DMM trace selected (F1/F2): its units/div in place of the channel's V/div.
+    const bool meter = meter_.selected;
+    auto scaleValue = plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
+    if (meter) scaleValue = {meter_.perDivision, meter_.unit};
     plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 3); // The strip uses the same precision.
     const bool spectrum = widget.options().mode == plot::Mode::Spectrum;
     const double secondsPerDivision = framed && !spectrum
         ? plot::DisplayScale::secondsPerDivision(model.viewport(), shown) : shown.timebaseNs / 1e9;
-    plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
+    if (!(trending_ && !spectrum && plot::Format::steady(secondsPerDivision, 3, time, sizeof time)))
+        plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
-    std::snprintf(title, sizeof title, "Scale CH%u", view.number(channel_));
+    if (meter) std::snprintf(title, sizeof title, "Scale DMM");
+    else std::snprintf(title, sizeof title, "Scale CH%u", view.number(channel_));
     // Keep the value row at the plotted scale. A waiting record can still be on screen after its
     // range changes. Show the next setting in the title until a record at that scale arrives.
     if (framed) {
-        const bool volts = plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
-        const bool seconds = plot::DisplayScale::timePending(shown, widget.options(), next_);
+        const bool volts = !meter && plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
+        // A trend's time/div is its record's own, shown as it grows: none is pending for it or before it.
+        const bool seconds = !trending_ && !nextTrend_ && plot::DisplayScale::timePending(shown, widget.options(), next_);
         char pendingVolts[16] = "", pendingTime[16] = "";
         if (volts) {
             const auto scaleNext = plot::DisplayScale::channel(next_.channels[channel_], plot::ChannelOptions{});
@@ -115,24 +148,30 @@ void ScopeScreen::cards() {
                 std::snprintf(title, sizeof title, "Next %s", first);
         }
     }
-    std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", view.number(channel_), plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
+    if (meter) std::snprintf(details, sizeof details, "DMM %s  %s %s%s%s", meter_.function, scale, time, *next ? "  " : "", next);
+    else std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", view.number(channel_), plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
     // Keep the font fixed. A wide pair uses two significant digits, then coarser unit prefixes
     // if needed (for example, "500mcnt" becomes "0.5cnt").
     std::snprintf(value, sizeof value, "%s %s", scale, time);
     for (bool coarse : {false, true}) {
         if (Elements::textWidth(value, 11) <= ScreenLayout::ButtonWidth - 8) break;
         plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 2, coarse);
-        plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 2, coarse);
+        if (!(trending_ && !spectrum && plot::Format::steady(secondsPerDivision, 2, time, sizeof time)))
+            plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 2, coarse);
         std::snprintf(value, sizeof value, "%s %s", scale, time);
     }
     bar.item(0, title, value, *next, true);
-    // F2 Position: the channel it moves, with its coupling and probe.
+    // F2 Position: the channel it moves, with its coupling and probe; the DMM trace with its unit.
     const char *compactProbe = std::strcmp(probe, "x10000") == 0 ? "X10K" : probe;
-    std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
+    if (meter) std::snprintf(value, sizeof value, "DMM %s", meter_.unit);
+    else std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
     bar.item(1, "Position", value);
     static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
     static constexpr const char *types[] = {"Trigger", "Pulse width", "Runt", "Rise/Fall"};
-    std::snprintf(value, sizeof value, "CH%u %s", view.number(unsigned(model.triggerChannel())), modes[unsigned(triggerMode_) % 3]);
+    // No channel shown (the DMM trace alone, plot::ChannelDisplay): Auto, of no channel.
+    const bool source = plot::ChannelDisplay::shown(shown, widget.options(), 0) || plot::ChannelDisplay::shown(shown, widget.options(), 1);
+    if (source) std::snprintf(value, sizeof value, "CH%u %s", view.number(unsigned(model.triggerChannel())), modes[unsigned(triggerMode_) % 3]);
+    else std::snprintf(value, sizeof value, "%s", modes[0]);
     bar.item(2, types[unsigned(triggerType_)], value);
     if (focus_ == plot::Focus::Zoom) { // Zoom & Pan: F4 goes back to the card it came from.
         char factor[16];
@@ -144,12 +183,12 @@ void ScopeScreen::cards() {
     else
         bar.item(3, "Analyze", widget.options().mode == plot::Mode::XY ? "XY" : spectrum ? "FFT" : widget.options().mode == plot::Mode::SpectrumOverlay ? "Y-T+FFT" : "Display");
     // Selected, each card takes the colour of what it acts on (issue #21): F1 Scale and F2 Position
-    // the selected channel's, F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
+    // the selected channel's (the DMM trace's), F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
     using Tint = ParameterBar::Tint;
     const auto channelTint = [&](unsigned c) { return c > 1 ? Tint::Neutral : view.slot(c) ? Tint::Channel2 : Tint::Channel1; };
-    bar.tint(0, channelTint(channel_));
-    bar.tint(1, channelTint(channel_));
-    bar.tint(2, channelTint(unsigned(model.triggerChannel())));
+    bar.tint(0, meter ? Tint::Meter : channelTint(channel_));
+    bar.tint(1, meter ? Tint::Meter : channelTint(channel_));
+    bar.tint(2, source ? channelTint(unsigned(model.triggerChannel())) : Tint::Neutral);
     bar.tint(3, Tint::Neutral);
     if (!host_.overlayActive()) bar.select(focus_ == plot::Focus::Zoom ? 3U : unsigned(focus_));
     host_.elements().text(ElementId::Details, details);

@@ -28,7 +28,8 @@ public:
     void measurement(const ApplicationState &state);
     void capture(const scope::FrameView &frame, bool held, unsigned channel, DataStatus health);
     void captureStatus(DataStatus status, bool held) { scope_.status(status, held); refreshIndicators(); }
-    void scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel);
+    // source: a channel is shown to trigger on; none (the DMM trace alone): "AUTO", no channel and no level.
+    void scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel, bool source);
     void scopeCounters(const scope::CounterSnapshot &snapshot) { scope_.counters(snapshot); }
     bool scopeReadouts(const scope::ReadoutResult &result, const ui::ReadoutState &state) { return scope_.readouts(result, state); }
     bool scopeReadoutsPainted() const { return scope_.readoutsPainted(); }
@@ -48,10 +49,16 @@ public:
     void decoderResults(const ui::DecodeTable::Content &table, const char *info, const decoding::ResultSet *traced);
     const ui::DecodeTable &decodeTable() const { return host_.decodeTable(); }
     const ui::DecodeStrip &decodeStrip() const { return host_.decodeStrip(); }
-    void scopeSettings(const scope::FrameMetadata &metadata, unsigned channel) { scope_.settings(metadata, channel); }
+    void scopeSettings(const scope::FrameMetadata &metadata, unsigned channel, bool nextTrend) {
+        scope_.settings(metadata, channel, nextTrend);
+    }
     void scopeContext(unsigned channel, plot::Focus focus, bool panReverse = false) { scope_.context(channel, focus, panReverse); }
+    void scopeMeter(const ui::ScopeScreen::Meter &meter) { scope_.meter(meter); }
+    void scopeMeterReadouts(const plot::MeterReadouts &readouts) { scope_.meterReadouts(readouts); }
     // The generator note on the plot; captureHalved: DataAccess::generatorLoadsBus().
     void scopeGenerator(const generator::Snapshot &output, bool captureHalved) { scope_.generator(output, captureHalved); }
+    // The trend on show and its elapsed time in the status pill (ScopeScreen::trend).
+    void scopeTrend(const scope::TrendView &trend, uint64_t nowUs) { scope_.trend(trend, nowUs); }
     void focusParameter(unsigned index) { host_.parameters().select(index); }
     // Block orders (CONTRACT.md §4): only y moves, nothing is rebuilt (record, HOLD, zoom, leases,
     // statistics stay); the same order is a no-op; an invalid order is ignored. Applied at once when
@@ -144,6 +151,12 @@ public:
     lv_obj_t *menu() const { return menu_; } // Tests: the menu's box.
     const char *toast() const { return toastShowing() ? lv_label_get_text(toast_) : ""; } // On show now.
     bool toastShowing() const { return notice_ != Notice::None; } // A notice is on show (store(): none over another).
+    // DISPlay:TEXT: a message for the person at the device, in a box over every screen (a notice over
+    // it) until a key takes it (dismissMessage: true when one was on show), its CLEar or the next one;
+    // "" takes it away. message(): the text on show, "" for none.
+    void message(const char *text);
+    const char *message() const { return messageShowing() ? lv_label_get_text(message_) : ""; }
+    bool dismissMessage();
     // The frequency response plot (GitHub #72), hidden until shown. Shown as a menu is: the
     // host's overlay (no Scope elements drawn under it, the keys' bar at the bottom), the menu box hidden.
     ui::BodeView &bode() { return bode_; }
@@ -187,9 +200,12 @@ private:
     ui::ScopeScreen scope_;
     ui::MeterScreen meter_;
     ui::GeneratorScreen generator_;
+    bool messageShowing() const { return message_ && !lv_obj_is_hidden(message_); }
+    lv_obj_t *message_ = nullptr;
     lv_obj_t *menu_ = nullptr, *toast_ = nullptr, *generatorIndicator_ = nullptr, *usbIndicator_ = nullptr, *fps_ = nullptr, *trigger_ = nullptr, *edge_ = nullptr, *channelTag_ = nullptr;
     static constexpr unsigned NoTriggerChannel = 2;
     unsigned channelTagChannel_ = NoTriggerChannel;
+    bool triggerSource_ = true; // scopeTrigger's source: the channel tag and the edge are shown.
     uint32_t channelTagColor_ = 0, channelTagInk_ = 0;
     static void drawChannelTag(lv_event_t *event);
     void refreshTriggerColors(unsigned channel);

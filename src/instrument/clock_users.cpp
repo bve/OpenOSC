@@ -48,6 +48,9 @@ bool DataAccess::restartClockUsers(bool generator, bool measurement) {
             // RUN, Normal, Single and Roll plan their capture from the new clocks; a capture that
             // waits for the memory of a frame still on show or read stays active (activateScope).
             ok = activateScope() && ok;
+            // The DMM trace's chip stayed powered: only its UART stopped (baud rate from PCLK1). One
+            // that does not start is LinkWatchdog's (its silence power-cycles the chip), not the clock's.
+            if (meterTraceRunning_ && !watchdog_.off()) startMeterUart();
         } else ok = activate(measurement_) && ok;
     }
     if (serialRetime_) ok = serial_.start(meter_.latest().sequence) && ok;

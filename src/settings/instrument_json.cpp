@@ -336,7 +336,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
     // boolean was ignored), the ZT703S the old boolean (Off or On).
     s.interleave = board::Current::Features.adcInterleave ? 2 : legacyInterleave;
     if (!number(scope, "interleave_mode", s.interleave)) return false;
-    if (!(scope.containsKey("run_mode") ? number(scope,"run_mode",s.runMode) : boolean(scope,"high_performance",s.runMode)) || !boolean(scope,"roll_auto",s.rollAuto) ||
+    if (!(scope.containsKey("run_mode") ? number(scope,"run_mode",s.runMode) : boolean(scope,"high_performance",s.runMode)) || !boolean(scope,"roll_auto",s.rollAuto) || !boolean(scope,"trend",s.trend) ||
         !boolean(scope, "longer_record", s.longerRecord) ||
         !choice(scope, "factory_record_format", s.factoryRecordFormat, factoryRecordFormats) ||
         !choice(meter, "display", output.meter.display, displays) ||
@@ -422,6 +422,14 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
             }
         }
     }
+    if (scope.containsKey("dmm_measurements")) { // The DMM trace's readouts; files before them: the defaults.
+        const auto readouts=scope["dmm_measurements"].as<JsonArrayConst>();
+        if (readouts.size()!=scope::ReadoutSelection::PerChannel) return false;
+        for (unsigned i=0; i<scope::ReadoutSelection::PerChannel; ++i) {
+            if (!readouts[i].is<uint32_t>() || !scope::ReadoutSelection::meterKind(readouts[i].as<uint32_t>())) return false;
+            s.measurements.meter[i]=uint8_t(readouts[i].as<uint32_t>());
+        }
+    }
     if (scope.containsKey("measure_basis")) {
         const char *basis=scope["measure_basis"] | "";
         if (!std::strcmp(basis,"screen")) s.measurements.basis=scope::ReadoutBasis::Screen;
@@ -437,6 +445,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     scope["run_mode"] = s.runMode;
     scope["roll_auto"]=bool(s.rollAuto);
     if (!s.longerRecord) scope["longer_record"] = false;
+    scope["trend"]=bool(s.trend);
     scope["interleave"]=s.interleave == 1;
     // Both: older ZT703S firmware reads only the boolean, so Auto reaches it as Off.
     if (board::Current::Features.interleaveControl()) scope["interleave_mode"] = s.interleave;
@@ -461,6 +470,8 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
         auto row=measurements.createNestedArray();
         for (auto value : channel) row.add(value);
     }
+    auto readouts = scope.createNestedArray("dmm_measurements");
+    for (auto value : s.measurements.meter) readouts.add(unsigned(value));
     scope["measure_basis"] = s.measurements.basis==scope::ReadoutBasis::Record ? "record" : "screen";
     arrangement(scope, "arrangement", s.arrangement);
     ScopeAppearanceJson::encode(scope, s.appearance);

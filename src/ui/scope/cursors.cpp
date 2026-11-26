@@ -36,8 +36,9 @@ CursorReadout Model::cursors() const {
             out.reciprocalValid = std::isfinite(out.reciprocalHz);
         }
     }
+    if (cursor.channel == CursorOptions::Meter) return out; // The DMM trace's levels: Painter::cursors.
     const auto &channel = metadata_.channels[cursor.channel];
-    if (cursor.voltage && channel.enabled && options_.channels[cursor.channel].visible &&
+    if (cursor.voltage && channel.enabled && options_.drawn(cursor.channel) &&
         axes_[cursor.channel].factor) {
         const auto &axis = axes_[cursor.channel];
         out.deltaCodes = axis.code(cursorPixel(cursor.yB, viewport_.height - 1)) -

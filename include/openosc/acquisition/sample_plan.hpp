@@ -3,6 +3,7 @@
 #include "openosc/acquisition/frame.hpp"
 #include "openosc/acquisition/record_depths.hpp"
 #include "openosc/acquisition/arena.hpp"
+#include "openosc/acquisition/timebases.hpp"
 #include <algorithm>
 #include <numeric>
 
@@ -32,7 +33,7 @@ struct SamplePlan {
     static bool calculate(uint64_t timebaseNs, uint32_t depth, uint32_t maximumRate, uint32_t ringPoints, SamplePlan &out,
                           uint32_t headroom = FullSpeedHeadroom, uint32_t pointsPerTransfer = 1, uint32_t windowPoints = 0) {
         const uint32_t granule = 4 * pointsPerTransfer;
-        if (timebaseNs < 10 || timebaseNs > 20000000000ULL || !RecordDepth::valid(depth) || ringPoints < depth ||
+        if (timebaseNs < 10 || timebaseNs > Timebases::SampledMaximum || !RecordDepth::valid(depth) || ringPoints < depth ||
             !maximumRate || maximumRate > MaximumSampleRate || (pointsPerTransfer != 1 && pointsPerTransfer != 2) ||
             depth % granule) return false;
         const uint64_t pointRate = uint64_t(maximumRate) * pointsPerTransfer;

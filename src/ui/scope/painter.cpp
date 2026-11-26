@@ -22,8 +22,9 @@ void Painter::draw() {
         model_.statistics().drawBatches = 0;
         // Time traces only: X-Y and the spectrum have no time axis to run off the record.
         const auto mode = model_.options().mode;
-        const RecordGaps gaps = model_.hasFrame() && (mode == Mode::Time || mode == Mode::SpectrumOverlay)
-            ? RecordGaps::of(model_.viewport(), model_.metadata().samples) : RecordGaps{};
+        const bool timeAxis = model_.hasFrame() && (mode == Mode::Time || mode == Mode::SpectrumOverlay);
+        const RecordGaps gaps = !timeAxis ? RecordGaps{}
+            : trendShown() ? trendGaps() : RecordGaps::of(model_.viewport(), model_.metadata().samples);
         recordGaps(gaps);
         grid();
         if (!model_.hasFrame())

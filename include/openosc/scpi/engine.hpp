@@ -37,8 +37,9 @@ private:
     bool scopeCommand(const Command &command);
     bool channelCommand(const Command &command);
     bool waveformCommand(const Command &command);
+    struct MeterMatch; // A DMM header as the measurement serves it now (meter.cpp).
     bool meterCommand(const Command &command);
-    bool meterHoldCommand(const Command &command); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
+    bool meterHoldCommand(const Command &command, MeterMatch &match); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
     bool generatorCommand(const Command &command);
     bool decodeCommand(const Command &command); // DECode: (decode.cpp).
     bool systemCommand(const Command &command); // Idle settings and MMEMory: (system.cpp), either profile.

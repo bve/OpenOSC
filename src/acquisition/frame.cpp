@@ -1,5 +1,6 @@
 #include "openosc/acquisition/frame.hpp"
 #include "openosc/acquisition/adc_bus_glitch.hpp"
+#include "openosc/acquisition/timebases.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -15,7 +16,8 @@
 
 namespace openosc::scope {
 bool FrameMetadata::valid() const {
-    if ((timebaseNs && (timebaseNs < 10 || timebaseNs > 20000000000ULL)) ||
+    // A trend's time/div (Roll's) passes Maximum once its record is longer than ten hours: the span bound below holds it.
+    if ((timebaseNs && (timebaseNs < 10 || (!rolling && timebaseNs > Timebases::Maximum))) ||
         !samples || samples > ring || !ring || ring > MaximumRing || !samplesPerSecond.valid() ||
         static_cast<unsigned>(layout) > static_cast<unsigned>(Layout::FourByteBanks))
         return false;

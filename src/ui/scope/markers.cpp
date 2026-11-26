@@ -1,6 +1,7 @@
 #include "openosc/ui/scope/painter.hpp"
 #include "openosc/ui/scope/tag_digits.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace openosc::plot {
 // Position markers sit in the PlotFrame margins (x < 0, x > w, y < 0 in plot coordinates), never
@@ -27,16 +28,19 @@ void Painter::markers() {
             if (traces[c].clippedBottom)
                 text("v", w - 12 - slot * 12, h - 13, color, 12);
         }
-    if (o.showZero) {
-        const int zero[2] = {traces[0].zero, traces[1].zero};
-        const bool shown[2] = {traces[0].enabled, traces[1].enabled};
-        int centre[2];
+    // The DMM trace's line beyond the plot (meterTrace): its marks beside the channels', in its colour.
+    if (meterAbove_) text("^", w - 36, 0, palette_.meter, 12);
+    if (meterBelow_) text("v", w - 36, h - 13, palette_.meter, 12);
+    if (o.showZero) { // CH1, CH2 and the DMM trace (Y-T, Y-T+FFT: X-Y returned above).
+        const int zero[ZeroTags::Count] = {traces[0].zero, traces[1].zero, int(std::lround(meterZero()))};
+        const bool shown[ZeroTags::Count] = {traces[0].enabled, traces[1].enabled, o.meter.shown};
+        int centre[ZeroTags::Count];
         ZeroTags::place(zero, shown, h + 1, centre);
-        for (unsigned c = 0; c < 2; ++c)
+        for (unsigned c = 0; c < ZeroTags::Count; ++c)
             if (shown[c]) zeroTag(c, zero[c], centre[c], h);
     }
     const unsigned source = unsigned(model_.triggerChannel());
-    if (model_.metadata().rolling || !o.showTrigger || !model_.metadata().channels[source].enabled || !o.channels[source].visible)
+    if (model_.metadata().rolling || !o.showTrigger || !model_.metadata().channels[source].enabled || !o.drawn(source))
         return;
     const auto color = palette_.triggerColor(source); // The Trigger role, else the source channel's colour.
     // Trigger level: right margin, pointing at the plot edge.
@@ -77,11 +81,11 @@ void Painter::limitBadge(int y, int limit, int h, uint32_t color) {
     fill({x, y0 + 3, x, y0 + 6}, ink); // The stroke and the dot of "!".
     fill({x, y0 + 8, x, y0 + 8}, ink);
 }
-// The channel's zero: a box with its digit in the left margin at `centre` and a tip to the plot
-// edge at the zero itself (or, for a zero above or below the plot, an arrow that way).
+// The channel's zero (c 2: the DMM trace's): a box with its digit in the left margin at `centre` and
+// a tip to the plot edge at the zero itself (or, for a zero above or below the plot, an arrow that way).
 void Painter::zeroTag(unsigned c, int zero, int centre, int h) {
     const auto color = palette_.channel(c);
-    const unsigned digit = palette_.view.slot(c); // The on-screen number, as its colour.
+    const unsigned digit = palette_.view.slot(c); // The on-screen number, as its colour (the DMM trace's "M" stays).
     const int left = -PlotFrame::Left, half = PlotFrame::TagHeight / 2, tip = left + PlotFrame::TagWidth;
     fill({area_.x1 + left, area_.y1 + centre - half, area_.x1 + tip - 1, area_.y1 + centre + half}, color);
     // The digit: TagDigits' raster, centred (two tag pixels on each side), one fill per run.
