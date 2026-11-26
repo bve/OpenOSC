@@ -44,6 +44,26 @@ struct MeterText {
         default: return "----.--";
         }
     }
+    // Screen-only formatting: keep decoder, CSV, serial and saved-record text untouched. Strip
+    // redundant zeros before the integer part of a valid reading, but keep one zero before a point.
+    static bool displayReading(const dmm::Result &result, char *output, size_t capacity) {
+        if (!output || !capacity) return false;
+        const char *text = reading(result);
+        const int copied = std::snprintf(output, capacity, "%s", text);
+        if (copied < 0 || size_t(copied) >= capacity) return false;
+        if (!result.primary.valid()) return true;
+
+        const size_t sign = output[0] == '-' ? 1 : 0;
+        size_t dot = sign;
+        while (output[dot] && output[dot] != '.') ++dot;
+        size_t firstNonZero = sign;
+        while (firstNonZero < dot && output[firstNonZero] == '0') ++firstNonZero;
+        const size_t keep = firstNonZero < dot ? firstNonZero : (dot > sign ? dot - 1 : sign);
+        if (keep > sign) {
+            std::memmove(output + sign, output + keep, std::strlen(output + keep) + 1);
+        }
+        return true;
+    }
     static const char *unit(const char *unit) {
         if (!std::strcmp(unit, "Ohm")) return "Ω";
         if (!std::strcmp(unit, "kOhm")) return "kΩ";
@@ -56,7 +76,7 @@ struct MeterText {
     }
     // A scale number (the dial's and the bar's, GitHub #134): `value` counts at `decimals` (at most 6)
     // in the reading's unit, by integer arithmetic: trailing zeros dropped (0.50 -> 0.5, 1.000 -> 1),
-    // a whole multiple of 1000 from 10000 up as "k" (10000 -> 10k). False and "": it does not fit.
+    // a whole multiple of 1000 from 10000 up as "k". False and "": it does not fit.
     static bool scaleNumber(int value, unsigned decimals, char *output, size_t capacity) {
         if (!output || !capacity) return false;
         output[0] = 0;

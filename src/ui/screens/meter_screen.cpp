@@ -116,8 +116,7 @@ void MeterScreen::layout(bool analog) {
         place(line, details.x, details.y + dy, details.width, details.height);
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, details.font), 0);
         lv_obj_set_style_text_align(line, LV_TEXT_ALIGN_LEFT, 0);
-        place(value, reading.x, reading.y + dy, reading.width,
-              reading.height + grown);
+        place(value, reading.x, reading.y + dy, reading.width, reading.height + grown);
         place(unitLabel, unit.x, unit.y + dy, unit.width, unit.height);
         lv_obj_set_style_text_align(unitLabel, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_hidden(value, !reading.visible);
@@ -233,7 +232,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     const double reference = relative ? context.relative->reference().si : 0;
     const auto *statistics = context.statistics;
     char text[128];
-    std::snprintf(text, sizeof text, "%s", MeterText::reading(result));
+    if (!MeterText::displayReading(result, text, sizeof text)) std::snprintf(text, sizeof text, "----.--");
     elements.text(ElementId::Unit, MeterText::unit(result.unit));
     const bool mean = context.display == 1 && statistics && statistics->count() &&
                       statistics->quantity() == result.primary.quantity;
