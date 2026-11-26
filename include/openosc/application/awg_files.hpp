@@ -4,7 +4,7 @@
 #include "openosc/ui/images/browser.hpp"
 
 namespace openosc {
-// GEN > Waveform > AWG file (ZT703S, GitHub #175, docs/AWG.md): the waveform files in /openosc/AWG
+// GEN > Waveform > AWG file (both boards, GitHub #175, docs/AWG.md): the waveform files in /openosc/AWG
 // (*.CSV, a page of names at a time, as the screenshots' list) and the chosen one read in slices
 // (SliceBytes a main-loop pass) through ArbitraryCsv into the generator's stage. No file is held while
 // the list shows. The controller owns one only while the list is open (from the LVGL heap: no DTCM,

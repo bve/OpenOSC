@@ -66,7 +66,7 @@ struct Preferences {
                timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
                useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && unsigned(menuContrast) < MenuContrastCount && holdTime < 3 && usbController < UsbControllerCount && bode.valid() &&
-               generatorShape < generator::OfferedShapes && generator::ArbitraryLimits::rate(generatorArbitraryRate) &&
+               generatorShape < generator::ShapeCount && generator::ArbitraryLimits::rate(generatorArbitraryRate) &&
                generatorMillihertz >= generator::Capabilities::MinimumMillihertz &&
                generatorMillihertz <= generator::Capabilities::maximumMillihertz(generator::Shape(generatorShape),generator::Level(generatorLevel)) &&
                generatorDutyPermille >= generator::Capabilities::MinimumDutyPermille &&

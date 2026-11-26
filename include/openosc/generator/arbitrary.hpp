@@ -20,18 +20,20 @@ private:
     Output &output_;
     const void *owner_;
 };
-// The Arbitrary waveform's memory (GitHub #175, docs/AWG.md): the two DAC banks of the ZT703S output,
-// shared with the built tables of the other shapes. One bank may hold the loaded waveform; a new one
-// is staged by one owner at a time (a SCPI session or the CSV loader) in a bank that neither plays nor
-// holds it, so the waveform in force stays intact until the new one is complete and validated
-// (commit). The other shapes' tables never go into the loaded waveform's bank. Without registers.
+// The Arbitrary waveform's memory (GitHub #175, docs/AWG.md): two banks of ArbitraryLimits::MaximumPoints
+// codes in SRAM4. ZT703S: the DAC output's banks, shared with the built tables of the other shapes (they
+// never go into the loaded waveform's bank); ZT706S: the module driver's, for the waveform alone. One
+// bank may hold the loaded waveform; a new one is staged by one owner at a time (a SCPI session or the
+// CSV loader) in a bank that neither plays nor holds it, so the waveform in force stays intact until the
+// new one is complete and validated (commit). The codes are kept as loaded on both boards. Without
+// registers.
 class ArbitraryBanks {
 public:
     static constexpr unsigned None = 2, Points = ArbitraryLimits::MaximumPoints;
     using Table = uint16_t[Points];
     // Ready: the stage is the owner's (empty). Pending: the owner holds one already (its earlier block
     // not taken yet). Busy: another owner's. Conflict: no free bank (the output plays another shape
-    // and a waveform is loaded). Unsupported: no DAC (ZT706S).
+    // and a waveform is loaded; the ZT703S DAC only). Unsupported: a generator without the AWG (test doubles).
     enum class Stage : uint8_t { Ready, Pending, Busy, Conflict, Unsupported };
     struct Undo { unsigned bank; uint16_t points; ArbitrarySource source; };
     explicit ArbitraryBanks(Table *tables) : tables_(tables) {}
@@ -67,8 +69,8 @@ private:
     uint32_t revision_ = 0;
     bool lost_ = false;
 };
-// SOURce:ARBitrary:DATA's IEEE 488.2 definite-length block: little-endian int16 DAC codes, unscaled,
-// 0..4095 each, ArbitraryLimits points. Every byte of the announced length is data (LF, CR, NUL).
+// SOURce:ARBitrary:DATA's IEEE 488.2 definite-length block: little-endian int16 codes, 0..4095 each,
+// ArbitraryLimits points (ZT703S 2..1024, ZT706S 20..255). Every byte of the announced length is data (LF, CR, NUL).
 class ArbitraryBlock {
 public:
     // The announced length before any data: 0, or -223 (an odd count, fewer or more points than allowed).
@@ -84,7 +86,7 @@ private:
     uint8_t low_ = 0;
     int16_t error_ = 0;
 };
-// A waveform file (docs/AWG.md): ASCII text, one unscaled DAC code 0..4095 a line, LF or CRLF.
+// A waveform file (docs/AWG.md): ASCII text, one code 0..4095 a line, LF or CRLF.
 // Blank lines and lines starting with '#' are skipped; one header line (starting with a letter) may
 // come before the first code; a UTF-8 byte order mark at the start is skipped. Anything else stops
 // the load with its line: a NUL or other control byte, a CR without LF, a line longer than

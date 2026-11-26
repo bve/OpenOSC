@@ -6,7 +6,8 @@ namespace openosc::ui {
 class FrequencyEditor {
 public:
     // Millihertz as uint64: the ZT706S module's 10 MHz is 1e10 mHz. `samples`: an Arbitrary waveform's
-    // sample rate in mS/s instead (S/s units, whole samples a second: no digit below 1 S/s).
+    // sample rate in mS/s instead (S/s units, whole samples a second: no digit below 1 S/s, none shown;
+    // up to the ZT706S module's 200 MS/s, 2e11 mS/s).
     void begin(uint64_t millihertz, uint64_t maximum, uint64_t minimum = 1, bool samples = false);
     bool samples() const { return samples_; }
     void move(int direction);
@@ -24,9 +25,11 @@ public:
     void text(char *output, size_t capacity) const;
 
 private:
-    // 10 digits up to 9 999 999.999 Hz; one more where the maximum reaches 10 MHz (ZT706S).
-    unsigned digits() const { return maximum_ >= 10000000000ULL ? 11 : 10; }
+    // Digits of the value in thousandths: 10 up to 9 999 999.999 Hz; 11 where the maximum reaches
+    // 10 MHz or 10 MS/s, 12 for 100 MS/s and more (ZT706S). A sample rate shows none below 1 S/s.
+    unsigned digits() const { return maximum_ >= 100000000000ULL ? 12 : maximum_ >= 10000000000ULL ? 11 : 10; }
     unsigned integerDigits() const { return digits() - 3 - unit_ * 3; }
+    unsigned fractionDigits() const { return 3 + unit_ * 3 - (samples_ ? 3 : 0); }
     uint64_t value_ = 1000000, maximum_ = 1000000000, minimum_ = 1;
     unsigned power_ = 3, unit_ = 0;
     bool samples_ = false;

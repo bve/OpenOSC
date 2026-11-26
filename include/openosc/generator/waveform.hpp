@@ -1,11 +1,13 @@
 #pragma once
+#include "openosc/board/current.hpp"
 #include "openosc/platform/timer_plan.hpp"
 #include "openosc/settings/run_mode.hpp"
 #include <cstddef>
+#include <type_traits>
 
 namespace openosc::generator {
-// Arbitrary (ZT703S only, GitHub #175, docs/AWG.md): DAC codes loaded from a CSV file or over SCPI,
-// played at its own sample rate. The board's Capabilities say whether it is offered.
+// Arbitrary (GitHub #175, docs/AWG.md): codes 0..4095 loaded from a CSV file or over SCPI, played at
+// its own sample rate; on both boards, within each generator's ArbitraryLimits.
 enum class Shape : uint8_t { Sine, Square, Triangle, HalfSine, PositiveSine, Sawtooth, Arbitrary };
 inline constexpr unsigned StandardShapes = 6, ShapeCount = 7;
 enum class Level : uint8_t { Dedicated, Low, High, Custom };
@@ -143,7 +145,8 @@ struct DacCapabilities {
     }
     static bool duty(Shape shape) { return shape == Shape::Square; }
     static uint16_t amplitudeLimitMillivolts(Shape, uint64_t) { return 5000; } // Not used: the module's field is kept as stored.
-    static constexpr bool Arbitrary = true;
+    // What sets an Arbitrary waveform's level (LevelText, the editor): its codes, unscaled on the DAC.
+    static constexpr const char *ArbitraryLevel = "DAC codes", *ArbitraryLevelDetail = "AWG: the waveform's DAC codes 0-4095";
     // Frequency within the shape and level at `timerHz` (0: any run mode; the timer plan checks what
     // it can represent).
     static bool accepts(const Settings &s, uint32_t timerHz = 0);
@@ -154,10 +157,11 @@ struct DacCapabilities {
 // 0..MaximumCode. One DAC update a sample: the waveform repeats at rate / points. The rate is at least
 // MinimumSamplesPerSecond and at most the DAC stream's ceiling at the clock that runs (6.25 MS/s on
 // the 200 MHz profile, 10 MS/s on the others: DacCapabilities::minimumDivider).
-struct ArbitraryLimits {
+struct DacArbitraryLimits {
     static constexpr unsigned MinimumPoints = 2, MaximumPoints = 1024;
     static constexpr uint16_t MaximumCode = 4095;
     static constexpr uint32_t MinimumSamplesPerSecond = 1, MaximumSamplesPerSecond = DacCapabilities::MaximumSamplesPerSecond;
+    static constexpr const char *TooFew = "fewer than 2 codes", *TooMany = "more than 1024 codes";
     // `timerHz` 0: the highest of any run mode (what a stored setting may hold).
     static uint32_t maximumSamplesPerSecond(uint32_t timerHz = 0) {
         if (!timerHz) return MaximumSamplesPerSecond;
@@ -167,8 +171,37 @@ struct ArbitraryLimits {
     static bool rate(uint32_t samplesPerSecond, uint32_t timerHz = 0) {
         return samplesPerSecond >= MinimumSamplesPerSecond && samplesPerSecond <= maximumSamplesPerSecond(timerHz);
     }
-    static bool points(unsigned count) { return count >= MinimumPoints && count <= MaximumPoints; }
+    static constexpr bool points(unsigned count) { return count >= MinimumPoints && count <= MaximumPoints; }
 };
+// The Arbitrary waveform on the ZT706S module (docs/AWG.md): the frame the module takes for its own
+// shapes (ModuleWave, SerialFrameCodec: N one-byte samples, each held `divisor` ticks of a clock the
+// factory takes as ClockHz), with the loaded codes as its samples. The codes are 0..MaximumCode as on
+// the ZT703S, kept as loaded (SOUR:ARB:DATA? returns them); each goes out as sample(code), the nearest
+// of 0..255. MinimumPoints..MaximumPoints: the sample counts the factory builder sends (N from 255 down
+// to 20, 706S GEN 240707E0), the table length exact (never decimated or cut). The rate is nominal,
+// ClockHz / divisor with the divisor nearest ClockHz / rate (ModuleWave::arbitraryDivisor), so the
+// highest is ClockHz: divisor 1, as the factory's own 10 MHz sine of 20 samples. The module's real clock,
+// its output per code and its bandwidth are not established on hardware.
+struct ModuleArbitraryLimits {
+    static constexpr unsigned MinimumPoints = 20, MaximumPoints = 255;
+    static constexpr uint16_t MaximumCode = 4095;
+    static constexpr uint32_t ClockHz = 200000000; // The factory's software constant (ModuleWave::ClockHz).
+    static constexpr uint32_t MinimumSamplesPerSecond = 1, MaximumSamplesPerSecond = ClockHz;
+    static constexpr const char *TooFew = "fewer than 20 codes", *TooMany = "more than 255 codes";
+    static constexpr uint32_t maximumSamplesPerSecond(uint32_t = 0) { return MaximumSamplesPerSecond; } // No DAC timer.
+    static constexpr bool rate(uint32_t samplesPerSecond, uint32_t = 0) {
+        return samplesPerSecond >= MinimumSamplesPerSecond && samplesPerSecond <= MaximumSamplesPerSecond;
+    }
+    static constexpr bool points(unsigned count) { return count >= MinimumPoints && count <= MaximumPoints; }
+    // The module's byte for a code: round(code * 255 / 4095). 4095 is odd, so no code lies halfway
+    // between two bytes: always the nearest; 0 -> 0, 2048 -> 128, 4095 -> 255, monotonic.
+    static constexpr uint8_t sample(uint16_t code) { return uint8_t((uint32_t(code) * 255 + MaximumCode / 2) / MaximumCode); }
+};
+static_assert(ModuleArbitraryLimits::sample(0) == 0 && ModuleArbitraryLimits::sample(8) == 0 && ModuleArbitraryLimits::sample(9) == 1 &&
+              ModuleArbitraryLimits::sample(2047) == 127 && ModuleArbitraryLimits::sample(2048) == 128 && ModuleArbitraryLimits::sample(4095) == 255);
+// The board's: one set of limits for the CSV loader, SCPI, the settings file and the drivers.
+using ArbitraryLimits = std::conditional_t<board::Current::Features.generator == board::GeneratorDriver::SerialModule,
+                                           ModuleArbitraryLimits, DacArbitraryLimits>;
 // Where the loaded Arbitrary samples came from (none after every reset: they live in RAM only).
 enum class ArbitrarySource : uint8_t { None, File, Remote };
 class WaveTable {
@@ -203,7 +236,7 @@ struct Snapshot {
     uint32_t timerHz = 0;  // The DAC timer clock the limits are computed at (0: no DAC, the ZT706S module).
     uint32_t faults = 0;   // Stops the output made by itself so far (each one reported once).
     OutputFault fault = OutputFault::None; // The last of them.
-    // The loaded Arbitrary waveform (ZT703S): its points (0: none), where it came from, and a count
+    // The loaded Arbitrary waveform: its points (0: none), where it came from, and a count
     // that moves with every waveform loaded (SOUR:ARB:DATA? reads stop when it moves).
     uint16_t arbitraryPoints = 0;
     ArbitrarySource arbitrarySource = ArbitrarySource::None;

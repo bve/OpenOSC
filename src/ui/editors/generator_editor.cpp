@@ -9,9 +9,9 @@ namespace {
 using Caps = generator::Capabilities;
 using Row = GeneratorEditor::Row;
 constexpr Row DacWaveRows[] = {Row::Shape, Row::Duty, Row::Level, Row::Frequency, Row::File};
-constexpr Row ModuleWaveRows[] = {Row::Shape, Row::Duty, Row::Amplitude, Row::Frequency};
-constexpr const Row *WaveRows = Caps::Arbitrary ? DacWaveRows : ModuleWaveRows;
-constexpr unsigned WaveCount = Caps::Arbitrary ? sizeof DacWaveRows / sizeof *DacWaveRows : sizeof ModuleWaveRows / sizeof *ModuleWaveRows;
+constexpr Row ModuleWaveRows[] = {Row::Shape, Row::Duty, Row::Amplitude, Row::Frequency, Row::File};
+constexpr const Row *WaveRows = Caps::Levels ? DacWaveRows : ModuleWaveRows;
+constexpr unsigned WaveCount = Caps::Levels ? sizeof DacWaveRows / sizeof *DacWaveRows : sizeof ModuleWaveRows / sizeof *ModuleWaveRows;
 // Layout last: the screen's block order (GENERATOR LAYOUT), not a setting of the output.
 constexpr Row DacParameters[] = {Row::Duty, Row::Level, Row::Drive, Row::MinimumCode, Row::MaximumCode, Row::Preset, Row::Frequency, Row::Layout};
 constexpr Row ModuleParameters[] = {Row::Duty, Row::Amplitude, Row::Preset, Row::Frequency, Row::Layout};
@@ -33,11 +33,12 @@ GeneratorEditor::Row GeneratorEditor::row(unsigned index) const {
 PropertyKind GeneratorEditor::kind(unsigned index) const {
     switch (row(index)) {
     case Row::Level: return draft_.settings.arbitrary() && wave_ ? PropertyKind::Info : PropertyKind::Choice; // AWG: the waveform's codes.
+    case Row::Amplitude: return draft_.settings.arbitrary() && wave_ ? PropertyKind::Info : PropertyKind::Number;
     case Row::Shape: case Row::Preset: return PropertyKind::Choice;
     case Row::File: return PropertyKind::Action; // MENU opens the AWG file list.
     case Row::Drive: return drives(draft_.settings) ? PropertyKind::Choice : PropertyKind::Info;
     case Row::Duty: return Caps::duty(draft_.settings.shape) ? PropertyKind::Number : PropertyKind::Info;
-    case Row::Amplitude: case Row::MinimumCode: case Row::MaximumCode: return PropertyKind::Number;
+    case Row::MinimumCode: case Row::MaximumCode: return PropertyKind::Number;
     case Row::Frequency: return PropertyKind::Info; // Set in the frequency editor.
     case Row::Layout: return PropertyKind::Action;  // MENU opens GENERATOR LAYOUT.
     }
@@ -50,7 +51,7 @@ void GeneratorEditor::name(unsigned index, char *output, size_t capacity) const 
 }
 unsigned GeneratorEditor::options(unsigned index) const {
     switch (row(index)) {
-    case Row::Shape: return generator::OfferedShapes;
+    case Row::Shape: return generator::ShapeCount;
     case Row::Level: return 4;
     case Row::Preset: return PresetOptions;
     case Row::Drive: return drives(draft_.settings) ? 2 : 0;
@@ -159,6 +160,7 @@ void GeneratorEditor::value(unsigned index, char *output, size_t capacity) const
         else std::snprintf(output, capacity, "Not available");
         return;
     case Row::Amplitude: { // Nominal: the module's output voltage is not calibrated.
+        if (wave_ && draft_.settings.arbitrary()) { std::snprintf(output, capacity, "Codes 0-4095 as 8-bit"); return; } // Kept for the other shapes.
         const unsigned top = Caps::amplitudeLimitMillivolts(draft_.settings.shape, generator::Frequency::millihertz(draft_.settings.frequencyHz));
         std::snprintf(output, capacity, "%u.%u V (max %u.%u) nom.", draft_.settings.amplitudeMillivolts / 1000,
                       draft_.settings.amplitudeMillivolts % 1000 / 100, top / 1000, top % 1000 / 100);

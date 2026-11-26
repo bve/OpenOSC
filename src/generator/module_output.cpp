@@ -1,4 +1,5 @@
 #include "openosc/generator/module_output.hpp"
+#if OPENOSC_BOARD == 706
 #include "openosc/generator/capabilities.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/interrupts.hpp"
@@ -16,6 +17,10 @@ struct Wire {
     volatile uint8_t head = 0, tail = 0; // Written by the interrupt / by the foreground.
 };
 Wire wire;
+// The Arbitrary waveform's banks (ArbitraryBanks): 2 x 510 bytes in SRAM4 (.generator, the DAC tables'
+// section on the ZT703S, otherwise unused on this board), outside the DTCM that holds the stack.
+alignas(32) uint16_t tables[2][ModuleArbitraryLimits::MaximumPoints] __attribute__((section(".generator")));
+static_assert(sizeof tables == 2 * sizeof(ArbitraryBanks::Table), "One bank a table of the board's limits");
 constexpr uint32_t BaudRate = 9600;
 constexpr unsigned Priority = 7; // Below the capture DMA (5) and USB (4): a byte has ~1 ms.
 constexpr uint32_t Errors = USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE | USART_ISR_PE;
@@ -45,6 +50,7 @@ void interrupt() {
 }
 } // namespace
 
+ModuleOutput::ModuleOutput(PeripheralResources &) : banks_(tables) {}
 bool ModuleOutput::start() {
     if (running_) return true;
     __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -84,22 +90,47 @@ void ModuleOutput::failed(uint32_t now) {
     applied_ = Applied::Unknown;
     recovery_.failed(now);
 }
+bool ModuleOutput::frame(const Settings &settings, bool on, ModuleWave::Frame &frame) const {
+    if (on && settings.arbitrary())
+        return ModuleWave::buildArbitrary(banks_.samples(), banks_.points(), settings.arbitrarySamplesPerSecond, frame);
+    return ModuleWave::build(settings, on, frame);
+}
 bool ModuleOutput::submit(bool on) {
     ModuleWave::Frame frame;
-    if (!ModuleWave::build(settings_, on, frame) || !start()) return false;
+    if (!this->frame(settings_, on, frame) || !start()) return false;
     if (on) link_.submit(frame); else link_.submitOff(frame);
     return true;
 }
 bool ModuleOutput::configure(const Settings &settings) {
+    if (!ModuleCapabilities::accepts(settings)) return false;
+    if (settings.arbitrary() && !banks_.loaded()) {
+        // Selected with no waveform (after a reset): kept as asked, off until one is committed. Not
+        // while the output is on: what plays stays.
+        if (requested_) return false;
+        settings_ = settings; plan_ = {};
+        return true;
+    }
     ModuleWave::Frame frame;
-    if (!ModuleCapabilities::accepts(settings) || !ModuleWave::build(settings, true, frame)) return false;
+    if (!this->frame(settings, true, frame)) return false;
     const auto previous = settings_;
     settings_ = settings;
     if (requested_ && !settings_.same(previous) && !request(true)) { settings_ = previous; return false; }
-    plan_ = {}; plan_.count = uint16_t(frame.timing.count); plan_.actualHz = frame.actualHz;
+    planned(frame);
     return true;
 }
+ModuleOutput::Commit ModuleOutput::commitArbitrary(const void *owner, unsigned points, ArbitrarySource source) {
+    ArbitraryBanks::Undo undo;
+    if (!banks_.commit(owner, points, source, undo)) { banks_.abort(owner); return Commit::Refused; }
+    if (!settings_.arbitrary()) return Commit::Done; // Kept for when Arbitrary is selected.
+    ModuleWave::Frame frame;
+    // Every code was checked as it came (ArbitraryBanks::put) and the rate by configure(): it builds.
+    if (this->frame(settings_, true, frame) && (!requested_ || request(true))) { planned(frame); return Commit::Done; }
+    // ON and the UART did not start: nothing was sent, the previous waveform stays the loaded one.
+    banks_.rollback(undo);
+    return Commit::Refused;
+}
 bool ModuleOutput::enable() {
+    if (settings_.arbitrary() && !banks_.loaded()) return false; // Nothing to play (after a reset).
     // Already on or on its way; after a failure (NO ACK, stuck UART) ON is asked again.
     if (requested_ && (link_.busy() || applied_ == Applied::On)) return true;
     if (!request(true)) return false;
@@ -151,3 +182,4 @@ bool ModuleOutput::retime(bool) {
     return start(); // The frame waiting goes on the new clock (service).
 }
 } // namespace openosc::generator
+#endif

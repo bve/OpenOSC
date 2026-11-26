@@ -45,10 +45,10 @@ const char *ArbitraryCsv::text(Error error) {
     switch (error) {
     case Error::Binary: return "not a text file";
     case Error::Line: return "line too long";
-    case Error::Syntax: return "not a DAC code";
+    case Error::Syntax: return "not a code 0-4095";
     case Error::Range: return "code above 4095";
-    case Error::TooMany: return "more than 1024 codes";
-    case Error::TooFew: return "fewer than 2 codes";
+    case Error::TooMany: return ArbitraryLimits::TooMany;
+    case Error::TooFew: return ArbitraryLimits::TooFew;
     case Error::Size: return "file larger than 64 KiB";
     case Error::Stage: return "waveform memory taken";
     default: return "";

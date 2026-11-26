@@ -4,7 +4,7 @@
 #include <new>
 #include <type_traits>
 
-// GEN > Waveform > AWG file (ZT703S, GitHub #175, docs/AWG.md): the /openosc/AWG list, and the chosen
+// GEN > Waveform > AWG file (both boards, GitHub #175, docs/AWG.md): the /openosc/AWG list, and the chosen
 // CSV read a slice a main-loop pass into the generator's stage (the waveform in force stays until the
 // whole file is validated), then committed. Up/Down select, MENU (or Right, F1) loads, F4 back to
 // WAVEFORM; MODE leaves as anywhere (the browser and an unfinished load go, serviceAwgFiles).

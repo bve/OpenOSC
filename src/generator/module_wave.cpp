@@ -25,7 +25,7 @@ uint16_t ModuleWave::limitMillivolts(Shape shape, uint64_t millihertz) {
     case Shape::Triangle: case Shape::HalfSine: case Shape::PositiveSine:
         return hertz < 1000000 ? 5000 : 4000;
     case Shape::Sawtooth: return 4000;
-    case Shape::Square: case Shape::Arbitrary: break; // No AWG on the module (ModuleCapabilities::accepts).
+    case Shape::Square: case Shape::Arbitrary: break; // Arbitrary: kept for the other shapes (its codes set its level).
     }
     return 5000;
 }
@@ -129,10 +129,46 @@ void ModuleWave::samples(Shape shape, unsigned count, uint16_t code, unsigned du
         output[i] = uint8_t(rounded < 0 ? 0 : rounded > code ? code : rounded);
     }
 }
+namespace {
+// The frame's encoding, its acknowledge and nominal frequency, from the samples at frame.bytes + 14
+// (SerialFrameCodec::encode moves them in place) and frame.timing.
+bool seal(ModuleWave::Frame &frame, const uint8_t *samples) {
+    if (!SerialFrameCodec::encode(samples, frame.timing.count, frame.timing.divisor, frame.bytes, sizeof frame.bytes))
+        return false;
+    const unsigned checksum = 14 + frame.timing.count;
+    frame.acknowledge = uint8_t(frame.bytes[checksum] + frame.bytes[checksum + 1]);
+    frame.actualHz = {ModuleWave::ClockHz, uint64_t(frame.timing.count) * frame.timing.divisor};
+    return true;
+}
+} // namespace
+uint32_t ModuleWave::arbitraryDivisor(uint32_t rate) {
+    if (!ModuleArbitraryLimits::rate(rate)) return 0;
+    const uint64_t floor = ClockHz / rate, ceil = floor + 1;
+    // |ClockHz/d - rate| = |ClockHz - rate*d| / d: both remainders are below `rate`, so the cross
+    // products stay below 2^56.
+    const uint64_t below = ClockHz - rate * floor, above = rate * ceil - ClockHz;
+    return uint32_t(above * floor < below * ceil ? ceil : floor);
+}
+bool ModuleWave::buildArbitrary(const uint16_t *codes, unsigned points, uint32_t rate, Frame &frame) {
+    frame = {};
+    if (!codes || !ModuleArbitraryLimits::points(points)) return false;
+    frame.timing = {arbitraryDivisor(rate), points};
+    if (!frame.timing.divisor) return false;
+    uint8_t *samples = frame.bytes + 14; // Built in their place in the frame: one buffer on the stack.
+    for (unsigned i = 0; i < points; ++i) {
+        if (codes[i] > ModuleArbitraryLimits::MaximumCode) { frame = {}; return false; }
+        samples[i] = ModuleArbitraryLimits::sample(codes[i]);
+    }
+    frame.code = 255; // The byte scale: the codes set the level.
+    if (seal(frame, samples)) return true;
+    frame = {};
+    return false;
+}
 bool ModuleWave::build(const Settings &settings, bool enabled, Frame &frame) {
     frame = {};
     const uint64_t millihertz = Frequency::millihertz(settings.frequencyHz);
-    if (!settings.valid() || settings.arbitrary() || !millihertz) return false;
+    // OFF is the same zero waveform for every shape (Arbitrary too: the boot's OFF, a saved AWG).
+    if (!settings.valid() || (enabled && (settings.arbitrary() || !millihertz))) return false;
     uint8_t wave[MaximumSamples];
     const Shape shape = settings.shape;
     uint64_t target = millihertz;
@@ -150,11 +186,6 @@ bool ModuleWave::build(const Settings &settings, bool enabled, Frame &frame) {
     if (!frame.timing.count || !frame.timing.divisor) return false;
     if (frame.code) samples(shape, frame.timing.count, frame.code, duty, wave);
     else for (unsigned i = 0; i < frame.timing.count; ++i) wave[i] = 0;
-    if (!SerialFrameCodec::encode(wave, frame.timing.count, frame.timing.divisor, frame.bytes, sizeof frame.bytes))
-        return false;
-    const unsigned checksum = 14 + frame.timing.count;
-    frame.acknowledge = uint8_t(frame.bytes[checksum] + frame.bytes[checksum + 1]);
-    frame.actualHz = {ClockHz, uint64_t(frame.timing.count) * frame.timing.divisor};
-    return true;
+    return seal(frame, wave);
 }
 } // namespace openosc::generator

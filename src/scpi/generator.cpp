@@ -69,8 +69,8 @@ bool Engine::generatorCommand(const Command &c) {
         if (!settings.valid()) { error(-222); return true; }
     } else if (shape) {
         constexpr const char *names[] = {"SINusoid","SQUare","TRIangle","HALF","POSitive","RAMP","ARBitrary"};
-        unsigned i = 0; while (i < generator::OfferedShapes && !Header::word(c.argument, names[i])) ++i;
-        if (i == generator::OfferedShapes) { error(-224); return true; } settings.shape = generator::Shape(i);
+        unsigned i = 0; while (i < generator::ShapeCount && !Header::word(c.argument, names[i])) ++i;
+        if (i == generator::ShapeCount) { error(-224); return true; } settings.shape = generator::Shape(i);
     } else if (frequency && settings.arbitrary()) { // Arbitrary: the rate that repeats the waveform at this frequency.
         double value; if (!argument(c, value, Header::Unit::Frequency)) return true;
         if (!snapshot.arbitraryPoints) { error(-221); return true; }

@@ -7,7 +7,7 @@ namespace openosc::ui {
 // (generator::Capabilities): ZT703S levels and DAC codes, ZT706S module amplitude in volts.
 class GeneratorEditor final : public PropertyList {
 public:
-    // File: the ZT703S AWG file list (MENU opens it, docs/AWG.md).
+    // File: the AWG file list (MENU opens it, docs/AWG.md).
     enum class Row : uint8_t { Shape, Duty, Level, Amplitude, MinimumCode, MaximumCode, Preset, Frequency, Drive, Layout, File };
     // The loaded Arbitrary waveform as the panel shows it (generator::Snapshot) and the file it came
     // from (empty: none, or not a file).

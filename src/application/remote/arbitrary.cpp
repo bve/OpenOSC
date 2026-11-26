@@ -4,7 +4,7 @@
 #include "openosc/scpi/parser.hpp"
 #include <type_traits>
 
-// SOURce:ARBitrary:DATA's block for the session this backend serves (ZT703S AWG, docs/AWG.md): staged
+// SOURce:ARBitrary:DATA's block for the session this backend serves (AWG, docs/AWG.md): staged
 // in the generator's free bank as the bytes come (Engine::feed, also inside FAT waits: only the stage's
 // own bank is written), taken once the whole block is validated (the engine's dispatch).
 namespace openosc {

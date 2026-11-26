@@ -184,7 +184,7 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         !number(generator, "amplitude_mv", candidate.generatorAmplitudeMillivolts) ||
         !number(generator,"minimum_code",candidate.generatorMinimumCode) ||
         !number(generator,"maximum_code",candidate.generatorMaximumCode) ||
-        !number(generator, "arbitrary_rate_sps", candidate.generatorArbitraryRate)) // ZT703S AWG; absent: the default.
+        !number(generator, "arbitrary_rate_sps", candidate.generatorArbitraryRate)) // AWG (both boards); absent: the default.
         return false;
     if (generator.containsKey("level")) {
         if (!generator["level"].is<const char *>()) return false;
@@ -216,9 +216,9 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!generator["shape"].is<const char *>())
             return false;
         unsigned index = 0;
-        while (index < generator::OfferedShapes && std::strcmp(generator["shape"], generatorShapes[index]))
+        while (index < generator::ShapeCount && std::strcmp(generator["shape"], generatorShapes[index]))
             ++index;
-        if (index == generator::OfferedShapes) // "arbitrary" only where the board has the AWG.
+        if (index == generator::ShapeCount)
             return false;
         candidate.generatorShape = index;
     }
@@ -276,7 +276,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     arrangement(document["generator"].as<JsonObject>(), "arrangement", values.generatorArrangement);
     document["generator"]["minimum_code"] = values.generatorMinimumCode;
     document["generator"]["maximum_code"] = values.generatorMaximumCode;
-    if (generator::Capabilities::Arbitrary) document["generator"]["arbitrary_rate_sps"] = values.generatorArbitraryRate;
+    document["generator"]["arbitrary_rate_sps"] = values.generatorArbitraryRate;
     if (document.overflowed()) return 0;
     if (pretty && measureJsonPretty(document) >= capacity) pretty = false; // Every field, compact.
     if ((pretty ? measureJsonPretty(document) : measureJson(document)) >= capacity)

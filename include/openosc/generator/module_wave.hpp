@@ -54,7 +54,19 @@ public:
     static Timing timing(uint64_t millihertz, Shape shape, unsigned dutyPermille = 500);
     // `count` samples of `shape` from 0 to `code`; the square's duty in permille (low run first).
     static void samples(Shape shape, unsigned count, uint16_t code, unsigned dutyPermille, uint8_t *output);
-    // The frame for `settings` (OFF: `enabled` false, a zero waveform at 1 kHz as the factory's OFF).
+    // The frame for `settings` (OFF: `enabled` false, a zero waveform at 1 kHz as the factory's OFF,
+    // whatever the shape). Arbitrary has its own frame (buildArbitrary): refused here when enabled.
     static bool build(const Settings &settings, bool enabled, Frame &frame);
+    // The divisor nearest `samplesPerSecond` (ModuleArbitraryLimits): floor or ceil of ClockHz / rate,
+    // whichever gives the smaller |ClockHz / divisor - rate| (compared exactly; equal: the floor, the
+    // higher rate). 0 for a rate outside the limits.
+    static uint32_t arbitraryDivisor(uint32_t samplesPerSecond);
+    // The Arbitrary waveform's frame: `points` codes (0..4095, ModuleArbitraryLimits) each sent as
+    // ModuleArbitraryLimits::sample, all of them (never decimated or cut), held arbitraryDivisor ticks.
+    // actualHz: the nominal repetition, ClockHz / (points * divisor). False: points, a code or the rate
+    // outside the limits (nothing built).
+    static bool buildArbitrary(const uint16_t *codes, unsigned points, uint32_t samplesPerSecond, Frame &frame);
 };
+static_assert(ModuleArbitraryLimits::ClockHz == ModuleWave::ClockHz && ModuleArbitraryLimits::MaximumPoints == ModuleWave::MaximumSamples &&
+              ModuleArbitraryLimits::MinimumPoints == ModuleWave::MinimumSamples, "The AWG frame is the module's own frame");
 } // namespace openosc::generator

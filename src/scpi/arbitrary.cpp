@@ -1,26 +1,24 @@
 #include "openosc/scpi/engine.hpp"
 #include "openosc/generator/arbitrary.hpp"
-#include "openosc/generator/capabilities.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 
-// The Arbitrary waveform over SCPI (ZT703S, GitHub #175, docs/AWG.md):
-//   SOURce:ARBitrary:DATA <block>   unscaled DAC codes, little-endian int16, 2..1024 of them (0..4095)
-//   SOURce:ARBitrary:DATA?          the loaded waveform as the same block (#10: none)
-//   SOURce:ARBitrary:SRATe <S/s>|?  the sample rate (1 S/s .. the DAC ceiling at this clock)
+// The Arbitrary waveform over SCPI (GitHub #175, docs/AWG.md), both boards within ArbitraryLimits:
+//   SOURce:ARBitrary:DATA <block>   codes 0..4095, little-endian int16 (ZT703S 2..1024, ZT706S 20..255)
+//   SOURce:ARBitrary:DATA?          the loaded waveform as the same block, the codes as loaded (#10: none)
+//   SOURce:ARBitrary:SRATe <S/s>|?  the sample rate asked (ZT703S: 1 S/s .. the DAC ceiling at this
+//                                   clock; ZT706S: 1 S/s .. 200 MS/s nominal)
 //   SOURce:ARBitrary:POINts?        its points (0: none loaded)
 //   SOURce:ARBitrary:SOURce?        NONE, FILE (a CSV from /openosc/AWG) or REMote (a block)
-// SOUR:FUNC ARB selects it; SOUR:FREQ then sets the rate as frequency x points. The ZT706S module has
-// no AWG: these are -241 there.
+// SOUR:FUNC ARB selects it; SOUR:FREQ then sets the rate as frequency x points. A block or a rate that
+// sends a ZT706S module frame completes with the module's acknowledge (waitGenerator: -240 without).
 namespace openosc::scpi {
 namespace {
-using Caps = generator::Capabilities;
 using Limits = generator::ArbitraryLimits;
 }
 int16_t Engine::blockBegin(const char *header, uint32_t bytes) {
     if (!Header::matches(header, "SOURce:ARBitrary:DATA")) return -168;
-    if (!Caps::Arbitrary) return -241;
     if (const int16_t e = generator::ArbitraryBlock::check(bytes)) return e;
     return backend_.arbitraryBegin(this, bytes);
 }
@@ -29,11 +27,11 @@ bool Engine::arbitraryCommand(const Command &c) {
     const bool data = match("SOURce:ARBitrary:DATA"), rate = match("SOURce:ARBitrary:SRATe");
     const bool points = match("SOURce:ARBitrary:POINts"), source = match("SOURce:ARBitrary:SOURce");
     if (!data && !rate && !points && !source) return false;
-    if (!Caps::Arbitrary) { if (c.block) dropBlock(); error(-241, c.query); return true; }
     const auto snapshot = backend_.generator();
     if (data && c.block) { // The block is staged already: taken as a whole, or nothing changes.
         if (c.query) { dropBlock(); error(-108, true); return true; }
         if (const int16_t e = backend_.arbitraryCommit(this)) error(e);
+        else waitGenerator(); // A ZT706S module playing it acknowledges the new frame.
         return true;
     }
     if (data) {
@@ -58,6 +56,7 @@ bool Engine::arbitraryCommand(const Command &c) {
     if (value != std::floor(value) || !(value >= 0) || value > 4294967295.0 || !Limits::rate(uint32_t(value), snapshot.timerHz)) { error(-222); return true; }
     settings.arbitrarySamplesPerSecond = uint32_t(value);
     if (!backend_.configureGenerator(settings)) error(-222);
+    else waitGenerator();
     return true;
 }
 } // namespace openosc::scpi

@@ -272,7 +272,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Rearrangeable screen (**Settings → Display → Generator layout**)
 - ZT703S: square output as in the stock firmware (DAC below 1 kHz, PWM from 1 kHz) or PWM
   always; Reference 1 kHz preset
-- ZT703S: [arbitrary waveform playback](docs/AWG.md) from a CSV file or a binary SCPI/VISA upload
+- [Arbitrary waveform playback](docs/AWG.md) from CSV or binary SCPI/VISA, with 2 to 1024 points on
+  the ZT703S and 20 to 255 points on the ZT706S. Test coverage for ZT706S is limited to host checks.
 - ZT706S: its external generator module, up to 10 MHz
 
 **USB and remote control**

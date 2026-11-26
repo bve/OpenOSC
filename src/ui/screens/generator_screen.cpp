@@ -67,9 +67,10 @@ void GeneratorScreen::update(const generator::Snapshot &snapshot) {
     if (snapshot.applied.actualHz.valid())
         plot::Format::quantity(snapshot.applied.actualHz.value(), "Hz", applied, sizeof applied);
     if (arbitrary && !snapshot.arbitraryPoints) std::snprintf(text, sizeof text, "No AWG waveform loaded");
-    else if (arbitrary) {
-        char rate[24];
-        plot::Format::quantity(double(requested.arbitrarySamplesPerSecond), "S/s", rate, sizeof rate);
+    else if (arbitrary) { // The rate that plays: the DAC timer's, or the module's ClockHz / divisor (nominal).
+        char rate[24] = "--";
+        if (snapshot.applied.actualHz.valid() && snapshot.applied.count)
+            plot::Format::quantity(snapshot.applied.actualHz.value() * snapshot.applied.count, "S/s", rate, sizeof rate);
         std::snprintf(text, sizeof text, "Applied %s, %u pts at %s", applied, unsigned(snapshot.arbitraryPoints), rate);
     } else std::snprintf(text, sizeof text, "Applied %s", applied);
     elements.text(ElementId::Measurements, text);

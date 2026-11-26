@@ -62,7 +62,7 @@ bool Settings::valid() const {
 }
 bool DacCapabilities::accepts(const Settings &s, uint32_t timerHz) {
     if (!s.valid()) return false;
-    if (s.arbitrary()) return ArbitraryLimits::rate(s.arbitrarySamplesPerSecond, timerHz); // The codes are the waveform's.
+    if (s.arbitrary()) return DacArbitraryLimits::rate(s.arbitrarySamplesPerSecond, timerHz); // The codes are the waveform's.
     const double millihertz = s.frequencyHz.value() * 1000;
     return millihertz >= MinimumMillihertz && millihertz <= double(maximumMillihertz(s.shape, s.level, timerHz));
 }
@@ -125,7 +125,7 @@ bool OutputPlan::calculate(const Settings &settings, uint32_t clock, OutputPlan 
     if (!clock || !settings.valid()) return false;
     OutputPlan candidate;
     if (settings.arbitrary()) { // One DAC update a sample, at the waveform's own rate: no table to fit.
-        if (!ArbitraryLimits::points(points) || !ArbitraryLimits::rate(settings.arbitrarySamplesPerSecond, clock) ||
+        if (!DacArbitraryLimits::points(points) || !DacArbitraryLimits::rate(settings.arbitrarySamplesPerSecond, clock) ||
             !TimerPlan::calculate(clock, {settings.arbitrarySamplesPerSecond, 1}, candidate.timer, Dac::minimumDivider(clock)))
             return false;
         candidate.count = uint16_t(points);
