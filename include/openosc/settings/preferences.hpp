@@ -11,6 +11,7 @@
 #include "openosc/settings/tooltips.hpp"
 #include "openosc/settings/bode_preferences.hpp"
 #include "openosc/settings/menu_contrast.hpp"
+#include "openosc/settings/power_on_keys.hpp"
 #include <cstdint>
 
 namespace openosc {
@@ -46,6 +47,9 @@ struct Preferences {
     uint32_t generatorArbitraryRate = 1024000;
     bool menuLeftStep = false; // Settings > Display > Left key in menus. Uses the padding before generatorMillihertz.
     MenuContrast menuContrast = MenuContrast::Theme; // Settings > Display > Menu contrast (GitHub #44). The same padding.
+    // REL + AUTO/RANGE, HOLD/SAVE or MODE at power-on (Settings > Device > Power), packed: the last two
+    // bytes of that padding (sizeof checked below).
+    PowerOnKeys powerOnKeys;
     uint64_t generatorMillihertz = 1000000; // uint64: the ZT706S module reaches 10 MHz = 1e10 mHz.
     uint32_t generatorLevel = 0, generatorMinimumCode = 1000, generatorMaximumCode = 3000;
     uint32_t generatorSquareDrive = 0; // generator::SquareDrive (ZT703S Dedicated square): 0 factory, 1 PWM.
@@ -74,7 +78,7 @@ struct Preferences {
                generatorAmplitudeMillivolts <= generator::Capabilities::amplitudeLimitMillivolts(generator::Shape(generatorShape), generatorMillihertz) &&
                (!generator::Capabilities::AmplitudeStepMillivolts || !(generatorAmplitudeMillivolts % (generator::Capabilities::AmplitudeStepMillivolts ? generator::Capabilities::AmplitudeStepMillivolts : 1))) &&
                generatorLevel<4 && generatorSquareDrive<2 && generatorStartup<2 && generatorLastOutput<2 && generatorArrangement.valid() && generatorMinimumCode<=generatorMaximumCode &&
-               generatorMaximumCode<=4095 && scope.valid() && meter.valid() && idle.valid() &&
+               generatorMaximumCode<=4095 && scope.valid() && meter.valid() && idle.valid() && powerOnKeys.valid() &&
                scope::SamplePlan::calculate(timebaseNs,
                     scope::RecordBudget::perChannel(scope.recordPoints,scope::RecordBudget::channels(scope.enabled[0],scope.enabled[1])),
                     RunModes[scope.runMode].maximumSampleRate(),scope::RecordBudget::Maximum,sampling);

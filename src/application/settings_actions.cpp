@@ -124,6 +124,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.swapChannels = chosen.swapChannels; view_.channelView(plot::ChannelView{prefs_.swapChannels != 0});
     prefs_.tooltipsHidden = chosen.tooltipsHidden; view_.tooltips(prefs_.tooltipsHidden); // A notice of a kind hidden goes now.
     prefs_.scope.keys = chosen.scope.keys; // Read by the next AUTO, F2 or F4 stroke.
+    prefs_.powerOnKeys = chosen.powerOnKeys; // Read at the next power-on.
     if (idle) { idle_.configure(prefs_.idle, now); dimmed_ = false; }
     applyBrightness();
     changed(now);

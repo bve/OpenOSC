@@ -82,6 +82,13 @@ constexpr SettingsEntry selectablePerformance[] = {
     {"Restart device", Action::Restart},
     {"Back", Action::Back},
 };
+// The screen REL held with a key at power-on starts in (PowerOnKeys).
+constexpr SettingsEntry powerOnKeys[] = {
+    {"AUTO / RANGE", Action::PowerOnAuto},
+    {"HOLD / SAVE", Action::PowerOnHold},
+    {"MODE", Action::PowerOnMode},
+    {"Back", Action::Back},
+};
 constexpr SettingsEntry power[] = {
     {"Backlight timeout",Action::BacklightTimeout},
     {"Idle backlight",Action::BacklightIdleLevel},
@@ -89,6 +96,7 @@ constexpr SettingsEntry power[] = {
     {"Wake on measurement",Action::MeasurementWake}, // GitHub #169: DMM changes, Scope triggers.
     {"Power-off hold",Action::HoldTime},
     {"Generator at startup",Action::GeneratorStartup},
+    {"Power-on keys",Action::None,Page::PowerOnKeys},
     {"Battery gain",Action::BatteryGain},     // The battery display trim (GitHub #107).
     {"Battery offset",Action::BatteryOffset},
     {"Back",Action::Back},
@@ -161,6 +169,7 @@ constexpr SettingsPageDefinition pages[] = {
     page("INTERLEAVE OFFSET","Settings / Device / Scope calibration / Interleave",Page::Calibration,interleave),
     page("SCOPE SHORTCUTS", "Settings / Display / Scope shortcuts", Page::Display, scopeKeys),
     page("TOOLTIPS", "Settings / Display / Tooltips", Page::Display, tooltips),
+    page("POWER-ON KEYS", "Settings / Device / Power / Power-on keys", Page::Power, powerOnKeys),
 };
 static_assert(sizeof pages / sizeof *pages == unsigned(Page::Count));
 }

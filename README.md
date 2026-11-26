@@ -347,6 +347,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   responds to a change of at least 10% of full scale within the same range. A range change sets a
   new reference, and dedicated millivolt modes are excluded. The scope responds to a new live
   record with a genuine trigger in Auto, Normal or Single.
+- Power-on keys: hold AUTO/RANGE, HOLD/SAVE or MODE together with REL while switching on to start
+  in the screen chosen for that key (**Settings → Device → Power → Power-on keys**): the
+  oscilloscope, the generator or any multimeter function. AUTO/RANGE starts Continuity by default.
 - Hardware watchdog in both the firmware and Recovery: a hang or a crash restarts the device
 
 **Recovery bootloader**
