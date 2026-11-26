@@ -506,7 +506,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
 #else
     DmmSessionRecorder session_;
 #endif
-    dmm::Function meterFunction() const; // The function a reading is of (Type K: Temperature).
+    dmm::Function meterFunction() const; // The function a reading is of (thermocouple: Temperature).
+    dmm::ThermocoupleType thermocoupleType() const; // The curve of a thermocouple reading; Count otherwise.
     scope::FrameLease heldFrame_;
     scope::HeldTrigger heldTrigger_;
     scope::InterleaveTracker interleave_; // ZT706S: CH1's frequency, range correction and gain (InterleaveTracker).

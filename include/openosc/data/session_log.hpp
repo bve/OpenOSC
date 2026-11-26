@@ -2,6 +2,7 @@
 #include "openosc/measurement/dmm/function.hpp"
 #include "openosc/measurement/dmm/log_settings.hpp"
 #include "openosc/measurement/dmm/result.hpp"
+#include "openosc/measurement/dmm/thermocouple.hpp"
 #include <cstddef>
 #include <cstdint>
 
@@ -9,7 +10,7 @@ namespace openosc::dmm {
 // What a reading is to a session (docs/DMM_SESSION_LOGGING.md). Ok: a valid number of the session's
 // function and quantity. The others carry no value: Overload (OL), NoReading (blank, dashes, an
 // unreadable packet), Held (the DMM's own HOLD: a frozen source), OtherFunction (another function or
-// quantity, or the DMM's own REL changed), NoData (no packet at all).
+// quantity, another thermocouple type, or the DMM's own REL changed), NoData (no packet at all).
 enum class LogStatus : uint8_t { Ok, Overload, NoReading, Held, OtherFunction, NoData, Count };
 // Why an event record opened: the session's first record, a reading outside the band of the record
 // before it, the first value after a record without values, a record without values.
@@ -34,13 +35,16 @@ struct LogContext {
     Quantity quantity = Quantity::Unknown;
     Kind kind = Kind::Unknown;
     bool current = false, peerRelative = false;
+    // The thermocouple type the session started with (its curve): only for Temperature, else Count.
+    ThermocoupleType thermocouple = ThermocoupleType::Count;
     bool valid() const { return function != Function::Unknown && quantity != Quantity::Unknown; }
     static Quantity quantityOf(Function function);
     static Function family(Function function); // mV -> V, mA -> A (each coupling kept).
-    // The reading's function decides (Type K: the caller's Temperature); false without one.
-    static bool of(const Result &result, Function function, LogContext &out);
-    bool same(const Result &result, Function function) const;
-    LogStatus classify(const Result &result, Function function) const;
+    // The reading's function decides (thermocouple: the caller's Temperature); false without one.
+    // The thermocouple type is the meter's setting; it only matters for Temperature (another type is another curve).
+    static bool of(const Result &result, Function function, ThermocoupleType thermocouple, LogContext &out);
+    bool same(const Result &result, Function function, ThermocoupleType thermocouple) const;
+    LogStatus classify(const Result &result, Function function, ThermocoupleType thermocouple) const;
     static const char *siUnit(Quantity quantity); // "V", "A", "Ohm", "F", "Hz", "degC".
 };
 // A row of the session file. Times are microseconds since the session start.
@@ -104,7 +108,7 @@ public:
     static constexpr uint64_t SilenceUs = 2000000;
     bool begin(const LogSettings &settings, const LogContext &context, uint64_t startUs);
     // A decoded reading at its own timestamp (the time it arrived). Older than the last one: ignored.
-    void observe(const Result &result, Function function, Sink &sink);
+    void observe(const Result &result, Function function, ThermocoupleType thermocouple, Sink &sink);
     // Time passes: intervals end, a silent DMM, the duration. Ends the session at its duration.
     void service(uint64_t nowUs, Sink &sink);
     // Ends the session now (manual, mode change, shutdown): the open record is written up to nowUs.

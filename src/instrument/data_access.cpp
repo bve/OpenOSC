@@ -324,7 +324,10 @@ dmm::Function DataAccess::meterFunction() const {
 bool DataAccess::startMeterSession(const dmm::LogSettings &settings) {
     if (!active_ || stopping_ || measurement_ != MeasurementMode::Multimeter) return false;
     const auto &reading = meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest();
-    return session_.begin(settings, reading, meterFunction(), timeUs_, board::Current::Name);
+    return session_.begin(settings, reading, meterFunction(), thermocoupleType(), timeUs_, board::Current::Name);
+}
+dmm::ThermocoupleType DataAccess::thermocoupleType() const {
+    return meter_.thermocouple() ? meter_.temperatureSettings().type : dmm::ThermocoupleType::Count;
 }
 void DataAccess::serviceDmmClose(uint32_t now) {
     dmm_.service(uart_, meter_.latest(), now);

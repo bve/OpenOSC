@@ -61,6 +61,25 @@ record and must not begin more than 0.5 s after it, so a held record of an earli
 0.5 s before the record. `duty_pct` never comes from the count. With the setting Off, the reply
 never contains `CNT`.
 
+## Multimeter temperature
+
+| Command | Units and choices |
+| --- | --- |
+| `SYST:DMM:TEMP:TYPE[?]` | Thermocouple type: `B`, `E`, `J`, `K`, `N`, `R`, `S` or `T` |
+| `SYST:DMM:TEMP:CJUN[?]` | Manual cold junction in °C, -50 to 100 in steps of 0.1, or `NONE` |
+| `SYST:DMM:TEMP:UNIT[?]` | `C` or `F` on the screen; readings over SCPI are always in °C |
+
+These set the same values as **Measurement → Thermocouple type**, **Manual
+junction** and **Temp units** in the multimeter menu; a `CJUN` value or
+`NONE` also sets **Junction source** to Manual. The type selects the curve
+the temperature reading uses, so a client reading temperature should query
+it. `CJUN` accepts the whole -50 to 100 range for every type. A junction
+outside the window of the selected type (type K -270 to 1372 °C, so any
+`CJUN` value; type B 0 to 100 °C; the others -40 to 100 °C) gives no
+temperature until it is back inside: `MEAS?`, `READ?` and `FETC?` reply `NAN`
+and the error queue reports `-230`. Without a manual junction, `CJUN?` replies `NAN`
+and the error queue reports `-230`.
+
 ## Files
 
 `MMEM:CAT? "FOLDER"[,start]` returns `total,count` followed by `count`

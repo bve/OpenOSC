@@ -105,6 +105,10 @@ keeps the session.
   `held`, or as `other_function` when its REL changes from what it was at the start.
 - Another function, or a reading in another quantity, is recorded as `other_function` without a value.
   Return to the original function to continue the session, or stop it and start a new one.
+- A temperature session keeps the thermocouple type it started with. If the type changes during the
+  session, from the menu or with `SYST:DMM:TEMP:TYPE`, the readings after the change are recorded as
+  `other_function` without a value, because they follow another curve. Set the type back to continue the
+  session, or stop it and start a new one.
 
 ## Statuses
 
@@ -114,7 +118,7 @@ keeps the session.
 | `overload` | OL readings only (rows with values count their OL readings in `overloads`). |
 | `no_reading` | Blank, dashes or an unreadable display. |
 | `held` | The meter's own HOLD froze the reading. |
-| `other_function` | Another function or quantity, or the meter's own REL changed. |
+| `other_function` | Another function or quantity, another thermocouple type, or the meter's own REL changed. |
 | `no_data` | No packet at all. |
 
 When a row without values received several kinds of readings, its status is the first of `overload`,
@@ -137,6 +141,13 @@ index,start_s,end_s,status,trigger,readings,first,last,min,max,avg,overloads
 ...
 # end=manual,elapsed_s=125.4,records=126,readings=371,deviations=0,overloads=0,min=1.2344e+0,max=9.876e+0,avg=1.30144e+0
 ```
+
+A temperature session adds the thermocouple type it started with, a letter from `B`, `E`, `J`, `K`, `N`,
+`R`, `S` and `T`, to the `function` line, which then reads
+`# function=temperature_k,thermocouple=J,quantity=temperature,unit=degC,dmm_relative=0,board=ZT703S`.
+The `function` key stays `temperature_k` for every type; the curve is in `thermocouple=`. Other
+functions, and a temperature the meter reports itself, have no `thermocouple=` key. A file from an
+earlier firmware has none either: it was recorded with type K.
 
 | Column | Meaning |
 | --- | --- |

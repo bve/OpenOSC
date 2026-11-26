@@ -82,11 +82,12 @@ public:
     static constexpr const char *Prefix = "SES";
     static constexpr uint32_t SyncMs = 60000; // As DmmCsvLogger: each sync erases the directory and FAT blocks again.
     explicit DmmSessionRecorder(Filesystem &fs) : file_(fs) {}
-    // A session of `settings` measuring what `latest` (of `function`) measures, from nowUs. False with
-    // nothing started: invalid or unfitting settings (InvalidArgument), no reading of a known function
-    // (NoData), the volume (the file's status: NoSpace, IoError).
-    bool begin(const dmm::LogSettings &settings, const dmm::Result &latest, dmm::Function function, uint64_t nowUs, const char *board);
-    void observe(const dmm::Result &result, dmm::Function function);
+    // A session of `settings` measuring what `latest` (of `function`, with the thermocouple type when it is
+    // Temperature) measures, from nowUs. False with nothing started: invalid or unfitting settings
+    // (InvalidArgument), no reading of a known function (NoData), the volume (the file's status: NoSpace, IoError).
+    bool begin(const dmm::LogSettings &settings, const dmm::Result &latest, dmm::Function function, dmm::ThermocoupleType thermocouple,
+               uint64_t nowUs, const char *board);
+    void observe(const dmm::Result &result, dmm::Function function, dmm::ThermocoupleType thermocouple);
     void service(uint64_t nowUs); // Time (intervals, silence, the duration), the periodic sync, the commit.
     void stop(uint64_t nowUs, dmm::LogEnd end); // The session ends now; its file is committed by service().
     void cancel(bool keep = false);

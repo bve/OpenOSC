@@ -87,24 +87,25 @@ Function LogContext::family(Function f) {
     default: return f;
     }
 }
-bool LogContext::of(const Result &result, Function function, LogContext &out) {
+bool LogContext::of(const Result &result, Function function, ThermocoupleType thermocouple, LogContext &out) {
     LogContext context;
     context.function = function;
     context.quantity = quantityOf(function);
     context.kind = functionKind(result.kind);
     context.current = result.currentInput;
     context.peerRelative = result.peerRelative;
+    if (function == Function::Temperature) context.thermocouple = thermocouple;
     if (!context.valid()) return false;
     out = context;
     return true;
 }
-bool LogContext::same(const Result &r, Function f) const {
-    if (function == Function::Temperature || f == Function::Temperature) return f == function;
+bool LogContext::same(const Result &r, Function f, ThermocoupleType t) const {
+    if (function == Function::Temperature || f == Function::Temperature) return f == function && t == thermocouple;
     if (f != Function::Unknown) return family(f) == family(function);
     return kind != Kind::Unknown && functionKind(r.kind) == kind && r.currentInput == current;
 }
-LogStatus LogContext::classify(const Result &r, Function f) const {
-    if (!same(r, f) || r.peerRelative != peerRelative) return LogStatus::OtherFunction;
+LogStatus LogContext::classify(const Result &r, Function f, ThermocoupleType t) const {
+    if (!same(r, f, t) || r.peerRelative != peerRelative) return LogStatus::OtherFunction;
     if (r.packetHold) return LogStatus::Held;
     if (r.primary.status == DataStatus::Overload) return LogStatus::Overload;
     if (r.primary.valid()) return r.primary.quantity == quantity ? LogStatus::Ok : LogStatus::OtherFunction;
@@ -161,12 +162,12 @@ void SessionLog::emit(LogRecord &record, Sink &sink) {
     if (!sink.record(record)) { active_ = false; if (end_ == LogEnd::None) end_ = LogEnd::Error; return; }
     ++records_;
 }
-void SessionLog::observe(const Result &result, Function function, Sink &sink) {
+void SessionLog::observe(const Result &result, Function function, ThermocoupleType thermocouple, Sink &sink) {
     const uint64_t t = result.timestampUs;
     if (!active_ || t < lastUs_ || t < startUs_) return;
     service(t, sink);
     if (!active_) return;
-    const LogStatus status = context_.classify(result, function);
+    const LogStatus status = context_.classify(result, function, thermocouple);
     const double value = result.primary.si;
     lastUs_ = t;
     if (status == LogStatus::Ok) total_.add(value);
@@ -330,6 +331,9 @@ size_t SessionCsv::metadata(const LogSettings &s, const LogContext &c, const cha
     w.text(",threshold_pct="); w.unsignedNumber(s.thresholdPermille() / 10); w.character('.'); w.unsignedNumber(s.thresholdPermille() % 10);
     w.text(",floor_counts="); w.unsignedNumber(LogSettings::FloorCounts);
     w.text("\r\n# function="); w.text(MeterFunctions[unsigned(c.function)].key);
+    if (c.function == Function::Temperature && c.thermocouple != ThermocoupleType::Count) {
+        w.text(",thermocouple="); w.text(Thermocouple::letter(c.thermocouple));
+    }
     w.text(",quantity="); w.text(Csv::quantity(c.quantity));
     w.text(",unit="); w.text(LogContext::siUnit(c.quantity));
     w.text(",dmm_relative="); w.unsignedNumber(c.peerRelative);
