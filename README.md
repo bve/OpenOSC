@@ -453,13 +453,16 @@ If the computer still has the USB drive mounted, Recovery first asks **DISCONNEC
 Confirm it and Recovery detaches the drive itself; the cable can stay connected. The drive
 reconnects when you return to the Recovery menu.
 
-From a running OpenOSC firmware you can skip the drive and the keys: `python3 scripts/scpi_flash.py <CDC port> <file.OSC>` (needs pyserial)
-sends the file with `MMEMory:UPLoad:DATA "<name>",<offset>,#<n><length><bytes>` (512 bytes at a time) into
-`/openosc/UPDATE/`, checks its size and CRC-32 with `MMEMory:UPLoad:END?`, then `SYSTem:RECovery:INSTall "<name>"`
-restarts into Recovery, which installs that file and starts the firmware without a key pressed. If the
-install fails, Recovery stays on the error message. Installing without keys needs a Recovery from this
-version or newer (repeat step 1 once); an older Recovery stops in its menu, with the file already in
-`/openosc/UPDATE/`.
+From a running OpenOSC firmware you can skip the drive and the keys:
+`python3 scripts/scpi_flash.py <CDC port> <file.OSC>` (needs pyserial) sends the file with
+`MMEMory:UPLoad:DATA "<name>",<offset>,#<n><length><bytes>` (512 bytes at a time) into `/openosc/UPDATE/`,
+has `MMEMory:UPLoad:END?` check it as Recovery would (an invalid file is dropped and the old one stays)
+and report its size and CRC-32, then `SYSTem:RECovery:INSTall "<name>"` restarts into Recovery, which
+installs that file and starts the firmware without a key pressed. The script then waits up to 30 s for
+the restarted firmware and succeeds only when `*IDN?` reports the version stored in the .OSC header. If
+the install fails, Recovery stays on the error message. Installing without keys needs a Recovery from
+this version or newer (repeat step 1 once); an older Recovery stops in its menu, with the file already
+in `/openosc/UPDATE/`.
 
 Recovery checks the board model, CRC and vector table of the image before erasing anything.
 An image for another model is rejected. Later updates of the main firmware use step 2 only.
