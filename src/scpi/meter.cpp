@@ -102,7 +102,7 @@ bool Engine::meterCommand(const Command &c) {
             if (argument(c, value)) {
                 const double deciC = std::round(value * 10);
                 if (!std::isfinite(deciC) || deciC < dmm::TemperatureSettings::Minimum || deciC > dmm::TemperatureSettings::Maximum ||
-                    std::fabs(value * 10 - deciC) > 1e-8 || !dmm::Thermocouple::junctionInRange(settings.type, value)) error(-222);
+                    std::fabs(value * 10 - deciC) > 1e-8) error(-222);
                 else {
                     settings.junctionDeciC = int32_t(deciC);
                     settings.source = dmm::JunctionSource::Manual;
@@ -119,6 +119,20 @@ bool Engine::meterCommand(const Command &c) {
             settings.fahrenheit = Header::word(c.argument, "F");
             if (!backend_.meterTemperature(settings)) error(-221);
         } else error(-224);
+        return true;
+    }
+    if (match("SYSTem:DMM:TEMPerature:TYPE")) {
+        auto settings = backend_.meterTemperature();
+        if (c.query) reply("%s", dmm::Thermocouple::letter(settings.type));
+        else {
+            unsigned index = 0;
+            while (index < unsigned(dmm::ThermocoupleType::Count) && !Header::word(c.argument, dmm::Thermocouple::letter(dmm::ThermocoupleType(index)))) ++index;
+            if (index == unsigned(dmm::ThermocoupleType::Count)) error(-224);
+            else {
+                settings.type = dmm::ThermocoupleType(index);
+                if (!backend_.meterTemperature(settings)) error(-221);
+            }
+        }
         return true;
     }
     if (match("SYSTem:DMM:PACKet")) { // The newest raw packet in hex, for decoding annunciators.

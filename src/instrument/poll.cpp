@@ -93,7 +93,7 @@ void DataAccess::poll(uint32_t now) {
                 status_ = meter_.latest().primary.status;
                 const auto &reading = meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest();
                 if (logger_.active()) logger_.append(reading, meter_.userHeld());
-                session_.observe(reading, meterFunction());
+                session_.observe(reading, meterFunction(), thermocoupleType());
             }
         }
         meter_.service(timeUs_); // The hold mode's countdown and freshness, with or without packets.

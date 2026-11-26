@@ -60,12 +60,7 @@ void MeterProperties::optionName(unsigned row, unsigned index, char *output, siz
     case Display: std::snprintf(output, capacity, "%s", displays[index < MeterPreferences::Displays ? index : 0]); break;
     case Colors: std::snprintf(output, capacity, "%s", MeterStyles::paletteName(index)); break;
     case Digits: std::snprintf(output, capacity, "%s", MeterStyles::faceName(index)); break;
-    case ThermocoupleType: {
-        static constexpr const char *types[] = {"B", "E", "J", "K", "N", "R", "S", "T"};
-        static_assert(sizeof types / sizeof *types == unsigned(dmm::ThermocoupleType::Count), "a name per thermocouple type");
-        std::snprintf(output, capacity, "%s", index < options(row) ? types[index] : "");
-        break;
-    }
+    case ThermocoupleType: std::snprintf(output, capacity, "%s", dmm::Thermocouple::letter(dmm::ThermocoupleType(index))); break;
     case JunctionSource: {
         static constexpr const char *sources[] = {"Manual", "MCU at startup", "MCU live"};
         std::snprintf(output, capacity, "%s", index < options(row) ? sources[index] : "");

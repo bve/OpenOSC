@@ -27,15 +27,19 @@ LICENSE:
     GNU General Public License for more details.
 
     Ported from the original library into OpenOSC, with these changes:
-    - corrected to match Mosaic's tables: the type B 250-700 degC segment's p3 sign,
-      the type T 200-400 degC segment's q3, and the type K upper limit, 54.886 mV
-      (the end of the NIST table);
-    - the cold junction EMF is computed from degree-6 least-squares fits of the NIST ITS-90
-      reference functions over -40..150 degC (type B from 0 degC) instead of Mosaic's rational
-      fits, which have poles inside the junction range; the same coefficients as in the kiln
-      controller firmware;
-    - a cold junction temperature window per type (-40..100 degC, type B 0..100 degC), outside
-      which a conversion is refused.
+    - corrected to match Mosaic's tables: the type B 250-700 degC segment's p3 sign and the type T
+      200-400 degC segment's q3;
+    - type K is not converted with Mosaic's segments: it keeps the NIST ITS-90 emf polynomial and
+      its inversion (TypeK in temperature.hpp) the multimeter used before the other types were added,
+      with the cold junction EMF from the same polynomial; its cold junction window is that
+      polynomial's whole range, -270..1372 degC, so a manual junction is limited only by the
+      setting's own -50..100 degC (TemperatureSettings), as before;
+    - for the other types, the cold junction EMF is computed from degree-6 least-squares fits of the
+      NIST ITS-90 reference functions over -40..150 degC (type B from 0 degC) instead of Mosaic's
+      rational fits, which have poles inside the junction range; the same coefficients as in the
+      kiln controller firmware;
+    - a cold junction temperature window per type (-40..100 degC, type B 0..100 degC, type K as
+      above), outside which a conversion is refused.
 
 *************************************************************************/
 #pragma once
@@ -49,6 +53,8 @@ struct JunctionWindow { int from, to; };
 
 class Thermocouple {
 public:
+    // The type's letter: "B", "E", "J", "K", "N", "R", "S" or "T"; "" for no type. The menu, SCPI and the session file use it.
+    static const char *letter(ThermocoupleType type);
     static JunctionWindow junctionWindow(ThermocoupleType type);
     // Whether the cold junction temperature is within the type's window (junctionWindow).
     static bool junctionInRange(ThermocoupleType type, double junctionCelsius);

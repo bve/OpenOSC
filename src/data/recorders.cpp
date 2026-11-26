@@ -195,12 +195,12 @@ void DmmCsvLogger::cancel(bool keep) {
     active_ = finishing_ = false;
 }
 
-bool DmmSessionRecorder::begin(const dmm::LogSettings &settings, const dmm::Result &latest, dmm::Function function, uint64_t nowUs,
-                               const char *board) {
+bool DmmSessionRecorder::begin(const dmm::LogSettings &settings, const dmm::Result &latest, dmm::Function function,
+                               dmm::ThermocoupleType thermocouple, uint64_t nowUs, const char *board) {
     if (active_) return false;
     dmm::LogContext context;
     if (!settings.valid() || !settings.fits()) { status_ = DataStatus::InvalidArgument; return false; }
-    if (!latest.sequence || !dmm::LogContext::of(latest, function, context)) { status_ = DataStatus::NoData; return false; }
+    if (!latest.sequence || !dmm::LogContext::of(latest, function, thermocouple, context)) { status_ = DataStatus::NoData; return false; }
     char line[dmm::SessionCsv::LineBytes * 2];
     const size_t header = dmm::SessionCsv::metadata(settings, context, board, line, sizeof line);
     if (!header) { status_ = DataStatus::InvalidArgument; return false; }
@@ -234,9 +234,9 @@ void DmmSessionRecorder::settle() {
     if (bytes && !write(line, bytes)) return;
     finishing_ = true;
 }
-void DmmSessionRecorder::observe(const dmm::Result &result, dmm::Function function) {
+void DmmSessionRecorder::observe(const dmm::Result &result, dmm::Function function, dmm::ThermocoupleType thermocouple) {
     if (!recording()) return;
-    log_.observe(result, function, *this);
+    log_.observe(result, function, thermocouple, *this);
     settle();
 }
 void DmmSessionRecorder::stop(uint64_t nowUs, dmm::LogEnd end) {
