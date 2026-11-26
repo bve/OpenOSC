@@ -27,8 +27,9 @@ inverted.
 
 Normal and Single re-arm after a rejected candidate. Single holds the first qualified record or an
 explicitly forced capture. Auto can still display an untriggered record after its wait budget, which
-follows the record duration with a 20 ms minimum and a 1 s maximum. At slow timebases, the qualified
-types use finite records. Roll is available with Edge.
+follows the record duration with a 20 ms minimum and a 1 s maximum. At slow timebases up to 20 s/div,
+the qualified types use finite records, and Roll is available with Edge. Past 20 s/div the capture
+only rolls: a qualified type is kept and applies again at 20 s/div or faster.
 
 OpenOSC qualifies these events in the ADC samples around a comparator crossing. The entire pulse or
 transition and the samples needed for noise rejection must fit in the buffered record. A longer
