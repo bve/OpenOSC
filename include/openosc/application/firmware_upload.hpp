@@ -18,7 +18,9 @@ public:
     // Offset 0 starts the upload (replacing a stale .TMP; another session's open upload: -221); any other
     // offset must continue the open upload of the same name where it ended, else it is cancelled (-222).
     int write(const void *owner, const char *name, uint32_t offset, const uint8_t *data, size_t size);
-    // Closes, replaces an existing <name> and reports the bytes written and their CRC-32.
+    // Closes and checks the file as Recovery would before flashing it (-230 when it is not a whole image of
+    // this board; the .TMP is removed and an existing <name> stays), replaces <name> and reports the bytes
+    // written and their CRC-32.
     int end(const void *owner, uint32_t &bytes, uint32_t &crc);
     bool open() const { return open_; }
     void cancel();
@@ -26,6 +28,7 @@ public:
     void detach(const void *owner) { if (open_ && owner_ == owner) { owner_ = nullptr; abandoned_ = true; } }
     void service() { if (abandoned_) cancel(); } // Main loop: closes and removes a detached upload.
 private:
+    static int check(); // temporary_ against its final_ name: 0, -230 (not an image) or -200.
     Filesystem &fs_;
     // The file and the names are static (.bss): the controller holding this object is a local of main(),
     // so its members take stack that the linker's 48 KiB check cannot count. One upload at a time anyway.

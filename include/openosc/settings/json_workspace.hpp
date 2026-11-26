@@ -5,7 +5,8 @@
 #include <new>
 
 namespace openosc {
-// The scratch of the foreground JSON files: settings, theme and scope calibration. Their text
+// The scratch of the foreground JSON files: settings, theme and scope calibration; MMEM:UPL:END? also
+// takes the text buffer while it checks an uploaded image (FirmwareUpload::check). Their text
 // (up to the theme's 10 KiB), ArduinoJson tree (up to the theme's document) and whole themes live here, in
 // SRAM4 on the MCU, never on the DTCM stack: the application controller and LVGL already take most
 // of it, and an 11 KiB settings frame below Reload settings once ran the stack into the end of

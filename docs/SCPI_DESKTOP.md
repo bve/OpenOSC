@@ -100,10 +100,13 @@ malformed or interrupted one `-161`, as for `SOUR:ARB:DATA` (see
 replaces an old `.TMP`. Every other offset must equal the bytes written so
 far, or the upload is canceled with `-222`. While another session's upload
 is open, offset 0 returns `-221`. A block that finds both file transfer
-buffers busy returns `-200`. `MMEM:UPL:END?` closes the file, replaces
-`FILENAME` and returns `bytes,crc32` for the data received, with the CRC-32
-in decimal. An upload is canceled when its session ends or the device shuts
-down.
+buffers busy returns `-200`. `MMEM:UPL:END?` closes the file and checks it
+as Recovery does before flashing (extension `.OSC` or `.BIN`, header, board,
+size, vectors and the CRC of the whole payload). A whole image replaces
+`FILENAME`, and the reply is `bytes,crc32` for the data received, with the
+CRC-32 in decimal. Anything else returns `-230`, removes the `.TMP` and
+keeps the old `FILENAME`. An upload is canceled when its session ends or the
+device shuts down.
 
 `SYST:REC:INST "FILENAME"` restarts into Recovery, which installs
 `/openosc/UPDATE/FILENAME` and starts the new firmware without a key press.
