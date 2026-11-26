@@ -58,46 +58,27 @@ RangeMode Decoder::range(bool autoBit, bool manualBit, const Result &result) {
     return reading && Functions::ranged(function) && result.primary.quantity == Functions::quantity(function) ? RangeMode::Manual
                                                                                                              : RangeMode::Unknown;
 }
-
 bool Decoder::number(const uint8_t *p, unsigned first, unsigned count, char *text, size_t capacity) {
     size_t written = 0;
     if (p[first] & 0x10)
         text[written++] = '-';
-
-    bool hasDigit = false; // Tracks if we have written a significant digit or decimal point
-
     for (unsigned i = 0; i < count; ++i) {
         uint8_t segment = p[first - i];
-        bool hasPoint = i && (segment & 0x10);
-
-        if (hasPoint) {
-            if (!hasDigit) {
-                // Ensure numbers like 0.512 keep one leading zero before the decimal point
-                if (written + 1 >= capacity) return false;
-                text[written++] = '0';
-                hasDigit = true;
-            }
+        if (i && (segment & 0x10)) {
             if (written + 1 >= capacity)
                 return false;
             text[written++] = '.';
         }
-
         char c = character(segment & 0xef);
         if (c != ' ') {
-            // Skip leading zeros before any other digit or decimal point
-            if (c == '0' && !hasDigit && i + 1 < count) {
-                continue;
-            }
             if (written + 1 >= capacity)
                 return false;
             text[written++] = c;
-            hasDigit = true;
         }
     }
     text[written] = 0;
     return true;
 }
-
 bool Decoder::decode(const uint8_t *packet, size_t bytes, Result &output) {
     if (!Packet::valid(packet, bytes))
         return false;
