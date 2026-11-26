@@ -269,8 +269,7 @@ int InstrumentBackend::fileOpen(const char *path, uint32_t &bytes) {
     FILINFO info{};
     if (const FRESULT found = f_stat(path, &info); found != FR_OK || (info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
         return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : found == FR_INVALID_NAME ? -257 : -250; // As MMEM:CAT? lists.
-    const char *dot = std::strrchr(path, '.');
-    const bool screenshot = shots && dot && !strcasecmp(dot, ".BMP");
+    const bool screenshot = shots && screenshot::ImageCatalog::supportedName(info.fname);
     if (screenshot && application_.images_.clearing()) return -221;
     const FRESULT result = f_open(&file_, path, FA_READ);
     if (result != FR_OK) return result == FR_NO_FILE || result == FR_NO_PATH ? -256 : result == FR_INVALID_NAME ? -257 : -250;

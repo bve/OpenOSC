@@ -77,6 +77,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     void scopeTrials(bool trials) { trials_ = trials; }
     void releaseRetained();
     bool restoreHeldScope(const ScopeRequest &request);
+    scope::AcquisitionArena &scopeArena() { return arena_; }
     const scope::AcquisitionArena &scopeArena() const { return arena_; }
     const ScopeRequest &scopeRequest() const { return request_; }
     // The acquisition the current request plans (per-channel points, rate, layout); a frame's own

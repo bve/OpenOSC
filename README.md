@@ -269,7 +269,7 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   bottom, right above the keys
 - Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
   plus custom RGB colors for individual elements. Multimeter looks: Custom and Hybrid
-- BMP screenshots with a built-in viewer
+- Lossless PNG screenshots with a built-in viewer that also opens earlier BMP screenshots
 - Settings and the color theme are stored as JSON files on the external SPI Flash and saved when
   you switch the device off, restart it or enter Recovery. The microcontroller's internal Flash
   holds only the firmware. You can edit the files from a computer; a damaged settings file is
@@ -423,6 +423,7 @@ All dependencies are included in [`vendor/`](vendor):
 
 - STM32CubeH7: CMSIS, HAL and USB Device library (ST)
 - CMSIS-DSP (Arm, Apache-2.0)
+- zlib (zlib License)
 - FatFs (ChaN)
 - LVGL 9.6.0 (MIT)
 - ArduinoJson 6.21.5 (MIT)

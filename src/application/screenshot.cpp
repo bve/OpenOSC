@@ -5,13 +5,17 @@
 namespace openosc {
 void ApplicationController::startScreenshot(uint32_t now) {
     if (screenLease_.busy(now)) { view_.notify(Tooltip::Unavailable, "Screenshot: USB screen transfer in progress",now); return; }
+    if (data_.scopeArena().busy()&scope::AcquisitionArena::Trial) {
+        view_.notify(Tooltip::Unavailable, "Screenshot: acquisition busy",now);
+        return;
+    }
     screenLease_.revoke(); // An idle stream's buffer is taken: its late reads are refused.
     view_.dismissNotice(ApplicationView::Notice::ScreenshotSaved);
     lv_refr_now(nullptr);
     display_.settle(); // The frame just drawn is on screen: front() is it.
     auto *snapshot=screenshot::previewMemory();
     std::memcpy(snapshot,display_.frame(),BmpImage::PixelBytes);
-    if (!shots_.start(snapshot)) {
+    if (!shots_.start(snapshot,data_.scopeArena())) {
         if (imageShowing_) loadImage(now);
         view_.notify(Tooltip::Critical, shots_.error(),now); return;
     }

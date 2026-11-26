@@ -70,6 +70,10 @@ Supported folders are `SCREENSHOTS`, `LOGS`, `CAPTURES`, `DECODE` and
 writer commits them. File transfers hold a reader until the transfer ends
 or is canceled. Deletion while a file is in use returns `-221`.
 
+The instrument saves screenshots as PNG. Use the filename from
+`MMEM:CAT? "SCREENSHOTS"` to download a stored PNG or an earlier BMP.
+`DISP:DATA?` and `HCOP:DATA?` return the live screen as a 320×240 BMP.
+
 ## Idle settings
 
 | Command | Units and choices |

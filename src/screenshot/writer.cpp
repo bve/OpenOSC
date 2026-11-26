@@ -28,15 +28,22 @@ bool ScreenshotWriter::highestNumber(uint32_t& highest) {
     return f_closedir(&directory) == FR_OK && result == FR_OK;
 }
 bool ScreenshotWriter::fail(const char* message) {
-    if (open_) f_close(&file_);
+    image_.cancel();
+    if (open_) {
+        f_close(&file_);
+        f_unlink(temporary_);
+    }
     open_ = false; complete_ = false; error_ = message;
     return false;
 }
-bool ScreenshotWriter::start(const uint16_t* frame) {
+bool ScreenshotWriter::start(const uint16_t* frame, scope::AcquisitionArena &arena) {
     if (open_) return false;
-    complete_ = false; error_ = nullptr; position_ = 0;
+    complete_ = false; error_ = nullptr;
+    constexpr uint32_t Reserve=8192;
     if (!frame || !fs_.mounted() || !fs_.refreshFree()) return fail("STORAGE NOT AVAILABLE");
-    if (fs_.freeBytes() < BmpImage::FileBytes + 8192) return fail("NOT ENOUGH FREE SPACE");
+    if (fs_.freeBytes() <= Reserve) return fail("NOT ENOUGH FREE SPACE");
+    bytesLeft_ = fs_.freeBytes()-Reserve;
+    if (!image_.start(arena,frame)) return fail("SCREENSHOT WORKSPACE BUSY");
     FRESULT result = storage::ensureDirectory(storage::Layout::Screenshots);
     if (result != FR_OK) return fail("CANNOT CREATE SCREENSHOTS DIRECTORY");
     // Start after the highest numbered entry when there is room. Include the pixel CRC in the
@@ -49,7 +56,7 @@ bool ScreenshotWriter::start(const uint16_t* frame) {
     for (uint32_t attempt = 0; attempt < LastId; ++attempt) {
         if (nextId_ > LastId) nextId_ = 1;
         const auto id = static_cast<unsigned long>(nextId_++);
-        std::snprintf(final_, sizeof final_, "%s/SCR%05lu-%08lX.BMP", storage::Layout::Screenshots, id, crc);
+        std::snprintf(final_, sizeof final_, "%s/SCR%05lu-%08lX.PNG", storage::Layout::Screenshots, id, crc);
         std::snprintf(temporary_, sizeof temporary_, "%s/SCR%05lu.TMP", storage::Layout::Screenshots, id);
         FILINFO info{};
         result = f_stat(final_, &info);
@@ -59,30 +66,37 @@ bool ScreenshotWriter::start(const uint16_t* frame) {
         if (result == FR_EXIST) continue;
         if (result != FR_OK) return fail("CANNOT CREATE SCREENSHOT FILE");
         open_ = true;
-        image_ = BmpImage(frame);
         return true;
     }
     return fail("SCREENSHOT NAME LIMIT REACHED");
 }
 void ScreenshotWriter::cancel() {
-    if (!open_) return;
-    f_close(&file_);
-    f_unlink(temporary_);
-    open_ = false; complete_ = false; error_ = "SCREENSHOT CANCELLED";
+    if (open_) fail("SCREENSHOT CANCELLED");
 }
 void ScreenshotWriter::service() {
     if (!open_) return;
-    const size_t chunk = image_.read(position_, buffer_, sizeof buffer_);
-    UINT written = 0;
-    if (f_write(&file_, buffer_, chunk, &written) != FR_OK || written != chunk) {
-        fail("SCREENSHOT WRITE FAILED"); return;
+    size_t chunk=0;
+    if (!image_.service(buffer_,sizeof buffer_,chunk)) { fail("PNG ENCODING FAILED"); return; }
+    if (chunk>bytesLeft_) { fail("NOT ENOUGH FREE SPACE"); return; }
+    if (chunk) {
+        UINT written=0;
+        if (f_write(&file_,buffer_,chunk,&written)!=FR_OK) { fail("SCREENSHOT WRITE FAILED"); return; }
+        if (written!=chunk) { fail("NOT ENOUGH FREE SPACE"); return; }
+        bytesLeft_-=written;
     }
-    position_ += written;
-    if (position_ != BmpImage::FileBytes) return;
+    if (!image_.complete()) return;
     const FRESULT synced = f_sync(&file_), closed = f_close(&file_);
     open_ = false;
-    if (synced != FR_OK || closed != FR_OK) { fail("SCREENSHOT SYNC FAILED"); return; }
-    if (f_rename(temporary_, final_) != FR_OK) { fail("SCREENSHOT FINALIZE FAILED"); return; }
+    if (synced != FR_OK || closed != FR_OK) {
+        f_unlink(temporary_);
+        fail("SCREENSHOT SYNC FAILED");
+        return;
+    }
+    if (f_rename(temporary_, final_) != FR_OK) {
+        f_unlink(temporary_);
+        fail("SCREENSHOT FINALIZE FAILED");
+        return;
+    }
     complete_ = true;
 }
 }

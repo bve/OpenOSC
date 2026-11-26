@@ -1,15 +1,10 @@
 #include "openosc/storage/open_readers.hpp"
 #include "openosc/screenshot/catalog.hpp"
 #include <cstdio>
-#include <cstring>
 
 namespace openosc::screenshot {
 bool ImageCatalog::image(const FILINFO &info) {
-    if (info.fattrib&(AM_DIR|AM_HID|AM_SYS)) return false;
-    const size_t length=std::strlen(info.fname);
-    if (length<5 || length>=NameBytes || info.fname[length-4]!='.') return false;
-    const auto upper=[](char c) { return c>='a' && c<='z' ? c-'a'+'A' : c; };
-    return upper(info.fname[length-3])=='B' && upper(info.fname[length-2])=='M' && upper(info.fname[length-1])=='P';
+    return !(info.fattrib&(AM_DIR|AM_HID|AM_SYS)) && supportedName(info.fname);
 }
 bool ImageCatalog::fail(const char *message) { error_=message; return false; }
 bool ImageCatalog::scan(unsigned first) {
@@ -66,7 +61,7 @@ bool ImageCatalog::beginClear() {
     if (clearing_) return fail("Image cleanup already in progress");
     if (storage::screenshotReaders) return fail("Image in use over USB");
     erased_=0;
-    // Clear screenshots can start directly from Settings. Count the BMPs on disk before deleting any.
+    // Clear screenshots can start directly from Settings. Count the images before deleting any.
     if (!refresh()) return false;
     if (!count_) return true;
     const auto opened=f_opendir(&directory_,Directory);

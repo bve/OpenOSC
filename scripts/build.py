@@ -45,6 +45,9 @@ if image_kind == "application":
     dsp_root = root / "vendor/cmsis_dsp/Source"
     env.BuildSources(env.subst("$BUILD_DIR/vendor/cmsis_dsp"), str(dsp_root),
                      src_filter=["-<*>"] + [f"+<{p.relative_to(dsp_root).as_posix()}>" for p in cmsis_dsp.SOURCES])
+    zlib_root = root / "vendor/zlib/src"
+    env.Append(CPPPATH=[str(zlib_root)], CPPDEFINES=["Z_SOLO", "NO_GZIP"])
+    env.BuildSources(env.subst("$BUILD_DIR/vendor/zlib"), str(zlib_root))
     env.BoardConfig().update("upload.maximum_size", board.max_payload)
     env.Append(LINKFLAGS=[f"-Wl,--defsym=__openosc_flash_end=0x{board.flash_end:08X}"])
     env.Append(LIBS=["m"])

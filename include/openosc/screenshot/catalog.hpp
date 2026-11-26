@@ -3,6 +3,7 @@
 #include "openosc/storage/layout.hpp"
 #include <cstddef>
 #include <string>
+#include <strings.h>
 
 namespace openosc::screenshot {
 class ImageCatalog {
@@ -11,6 +12,12 @@ public:
     static constexpr const char *Directory=storage::Layout::Screenshots;
     // Directory, '/', a name of up to NameBytes-1 characters and the terminator.
     static constexpr unsigned PathBytes=unsigned(std::char_traits<char>::length(Directory))+1+NameBytes;
+    static bool supportedName(const char *name) {
+        const size_t length=std::char_traits<char>::length(name);
+        if (length<5 || length>=NameBytes) return false;
+        const char *extension=name+length-4;
+        return !strcasecmp(extension,".PNG") || !strcasecmp(extension,".BMP");
+    }
     struct Entry { char name[NameBytes]{}; uint32_t bytes=0; };
     explicit ImageCatalog(Filesystem &fs) : fs_(fs) {}
     ~ImageCatalog() { cancelClear(); }

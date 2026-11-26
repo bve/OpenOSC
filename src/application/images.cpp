@@ -30,7 +30,7 @@ void ApplicationController::loadImage(uint32_t now) {
     if (!images_.path(path,sizeof path)) return;
     if (screenLease_.busy(now)) { showImages(); view_.notify(Tooltip::Unavailable, "Image: USB screen transfer in progress",now); return; }
     screenLease_.revoke();
-    if (!imageReader_.start(path,screenshot::previewMemory(),imageFullSize_)) {
+    if (!imageReader_.start(path,screenshot::previewMemory(),data_.scopeArena(),imageFullSize_)) {
         showImages(); view_.notify(Tooltip::Critical, imageReader_.error(),now); return;
     }
     imageProgress_=0;
@@ -51,7 +51,7 @@ void ApplicationController::imageKeys(uint32_t keys,uint32_t now) {
     const bool viewing=imageShowing_ || imageReader_.busy();
     if (keys&Keypad::F3) {
         imageReader_.cancel();
-        if (images_.count()) confirmOperation(ui::Confirmation("DELETE THIS IMAGE?","Delete selected BMP"),&ApplicationController::deleteImage);
+        if (images_.count()) confirmOperation(ui::Confirmation("DELETE THIS IMAGE?","Delete selected image"),&ApplicationController::deleteImage);
         return;
     }
     const bool previous=keys&(Keypad::Up|Keypad::Left),next=keys&(Keypad::Down|Keypad::Right);
