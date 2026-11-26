@@ -159,6 +159,7 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         serviceBode(now);
         pauseHiddenCapture(now, usb.enumerating(now));
         serviceImages(now);
+        serviceMeterLog(now);
         if (uiReady_ && !shots_.busy()) {
             const uint32_t start = DWT->CYCCNT;
             displayData(now);
@@ -309,6 +310,10 @@ void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
         } else imageKeys(keys,now);
         return;
     }
+    // The saved DMM sessions take every key but MODE, the MENU hold (Settings) and the HOLD hold (a
+    // screenshot of the trend), which act as anywhere; leaving drops the browser (serviceMeterLog).
+    if (panel_ == Panel::Sessions && !((events.shortPress | events.longPress) & Keypad::Mode) &&
+        !(events.longPress & (Keypad::Menu | Keypad::HoldSave))) { sessionKeys(events, keys, now); return; }
     if ((events.shortPress | events.longPress) & Keypad::Mode) { // A tap: the next of three screens; held: heldMode.
         const auto target = events.shortPress & Keypad::Mode ? nextMode(state_.mode) : heldMode(state_.mode);
         if (selectMode(target, now) == ModeChange::Refused) view_.notify(Tooltip::Critical, "Cannot switch measurement hardware",now);

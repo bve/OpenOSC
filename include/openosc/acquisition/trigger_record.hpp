@@ -17,8 +17,12 @@ public:
     // At a comparator event in a paired capture, prefer a nearby edge with two samples on each side.
     // Without an edge: Auto takes the newest `count` points, a forced capture the record placed at
     // `target` as an edge would be (it is not marked triggered), Normal/Single nothing.
+    // Qualified triggers (TriggerSettings::qualified) take the qualified point (TriggerQualifier) in
+    // place of the edge, found in one pass for both windows; their event is a candidate's trigger
+    // point. Auto takes none after a comparator event either: nothing is returned (the capture rearms)
+    // unless `untriggered` (Auto's wait is over), and then the newest points as for its timeout.
     static FrameView select(const FrameView &ring, const TriggerSettings &settings, uint32_t count, uint32_t target,
-                            bool forced = false, bool comparatorEvent = false);
+                            bool forced = false, bool comparatorEvent = false, bool untriggered = true);
     // Points the gate adds before arming and after the post-trigger part of a `count` record in a
     // ring of `capacity` whose `reserved` points are the late freeze's (SamplePlan::headroom): the
     // history select() needs to find an edge that fits on either side of the event. At most

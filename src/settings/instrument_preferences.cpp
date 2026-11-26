@@ -6,7 +6,10 @@
 namespace openosc {
 bool ScopePreferences::valid() const {
     if (!scope::RecordBudget::valid(recordPoints) || (!enabled[0] && !enabled[1]) ||
-        triggerSource > 1 || triggerEdge > 1 || triggerMode > 2 || triggerLevel < -128 || triggerLevel > 127 || triggerPosition>1000 || triggerReject>1 ||
+        triggerSource > 1 || triggerEdge > 1 || triggerMode > 2 || triggerPosition>1000 || triggerReject>1 ||
+        triggerType > 3 || triggerCondition > 4 ||
+        triggerMinimumNs < scope::TriggerSettings::MinimumNs || triggerMinimumNs > scope::TriggerSettings::MaximumNs ||
+        triggerMaximumNs < scope::TriggerSettings::MinimumNs || triggerMaximumNs > scope::TriggerSettings::MaximumNs ||
         !measurements.valid() ||
         runMode>=RunModeCount || rollAuto>1 || longerRecord > 1 || interleave>(board::Current::Features.interleaveControl() ? 2U : 1U) ||
         factoryRecordFormat>3 || !arrangement.valid() || !appearance.valid() || !decoder.valid() || !keys.valid()) return false;

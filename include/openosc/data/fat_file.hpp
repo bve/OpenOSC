@@ -6,6 +6,7 @@
 namespace openosc {
 class FatDataFile {
 public:
+    static constexpr uint32_t FreeHeadroom = 8192;
     explicit FatDataFile(Filesystem &fs) : fs_(fs) {}
     ~FatDataFile();
     bool begin(const char *directory, const char *prefix, const char *extension, uint64_t reserveBytes);

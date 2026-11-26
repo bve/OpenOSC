@@ -16,4 +16,23 @@ void ApplicationView::imagePreview(const char *name,const uint16_t *pixels, bool
     lv_obj_set_style_border_width(menu_,fullSize ? 0 : 1,0);
     imageBrowser_.preview(menu_,menuPalette_,name,pixels,fullSize,keys);
 }
+void ApplicationView::sessions(const ui::ImageList &list) {
+    menuFrame("DMM SESSIONS");
+    imageBrowser_.list(menu_,menuPalette_,list);
+}
+void ApplicationView::sessionTrend(const char *name, ui::SessionTrendView &view, const ui::SessionTrendData &data, bool rebuild) {
+    if (rebuild || !sessionTrendLive_ || sessionTrend_ != &view || lv_obj_is_hidden(menu_)) {
+        menuFrame(name);
+        view.create(menu_, menuPalette_);
+        sessionTrend_ = &view;
+        sessionTrendLive_ = true;
+    }
+    view.show(data);
+    if (toastShowing()) lv_obj_move_foreground(toast_);
+}
+void ApplicationView::sessionsClosed() {
+    if (sessionTrendLive_ && sessionTrend_) sessionTrend_->destroy();
+    sessionTrendLive_ = false;
+    sessionTrend_ = nullptr;
+}
 } // namespace openosc

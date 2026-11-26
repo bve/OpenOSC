@@ -18,12 +18,12 @@ void ImageBrowserView::list(lv_obj_t *parent,const MenuPalette &palette,const Im
     auto *counter=text(parent,count,230,7,62);
     lv_obj_set_style_text_align(counter,LV_TEXT_ALIGN_RIGHT,0);
     if (!images.total) {
-        text(parent,"No screenshots",12,66,280);
-        text(parent,storage::Layout::Screenshots,12,92,280);
+        text(parent,images.empty,12,66,280);
+        text(parent,images.location ? images.location : storage::Layout::Screenshots,12,92,280);
         return;
     }
     for (unsigned i=0;i<images.visible && i<ImageList::Rows;++i)
-        MenuRow(parent,32+i*26,24,images.names[i],"",images.first+i==images.selected,palette); // Five within the menu (ScreenLayout::MenuHeight).
+        MenuRow(parent,32+i*26,24,images.names[i],images.values[i] ? images.values[i] : "",images.first+i==images.selected,palette); // Five within the menu (ScreenLayout::MenuHeight).
 }
 void ImageBrowserView::preview(lv_obj_t *parent,const MenuPalette &palette,const char *name,const uint16_t *pixels, bool fullSize, const char *keys) {
     lv_obj_clean(parent);

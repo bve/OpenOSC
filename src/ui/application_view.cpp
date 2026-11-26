@@ -13,7 +13,7 @@ namespace openosc {
 void ApplicationView::build(const Theme &theme) {
     host_.clear(); battery_.clear();
     if (menu_) lv_obj_delete(menu_);
-    menuContent_.reset(); menuRetained_=false; draftPreviewObject_=nullptr; menuUptime_=nullptr;
+    menuContent_.reset(); menuRetained_=false; draftPreviewObject_=nullptr; menuUptime_=nullptr; sessionTrendLive_=false;
     if (toast_) lv_obj_delete(toast_);
     if (generatorIndicator_) lv_obj_delete(generatorIndicator_);
     if (usbIndicator_) lv_obj_delete(usbIndicator_);
@@ -221,15 +221,17 @@ void ApplicationView::refreshTriggerColors(unsigned channel) {
     lv_obj_invalidate(channelTag_);
 }
 void ApplicationView::scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel) {
+    const auto threshold = trigger.comparatorLevel();
     char level[24];
     if (!channel.calibrated || !channel.probeDenominator ||
-        !plot::Format::quantity(scope::TriggerLevel::shownVolts(trigger.level, channel), "V", level, sizeof level, 3))
-        std::snprintf(level, sizeof level, "%d", trigger.level);
+        !plot::Format::quantity(scope::TriggerLevel::shownVolts(threshold, channel), "V", level, sizeof level, 3))
+        std::snprintf(level, sizeof level, "%d", threshold);
     if (!trigger_ || !edge_) return;
+    scope_.triggerType(trigger.type);
     if (std::strcmp(lv_label_get_text(trigger_), level)) { lv_label_set_text(trigger_, level); placeFps(); }
     refreshTriggerColors(unsigned(trigger.channel));
     static const lv_point_precise_t rising[] = {{0, 9}, {3, 9}, {3, 1}, {7, 1}}, falling[] = {{0, 1}, {3, 1}, {3, 9}, {7, 9}};
-    const auto *points = trigger.edge == scope::Edge::Rising ? rising : falling;
+    const auto *points = trigger.comparatorEdge() == scope::Edge::Rising ? rising : falling;
     if (lv_line_get_points(edge_) != points) lv_line_set_points(edge_, points, 4);
 }
 void ApplicationView::fps(bool visible, uint32_t value) {

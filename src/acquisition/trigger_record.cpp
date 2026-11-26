@@ -1,5 +1,6 @@
 #include "openosc/acquisition/trigger_record.hpp"
 #include "openosc/acquisition/record_depths.hpp"
+#include "openosc/acquisition/trigger_qualifier.hpp"
 #include <algorithm>
 
 namespace openosc::scope {
@@ -25,7 +26,7 @@ bool nearestIn(const FrameView &ring,const TriggerSettings &settings,uint32_t ta
 }
 } // namespace
 FrameView TriggerRecord::select(const FrameView &ring, const TriggerSettings &settings, uint32_t count, uint32_t target,
-                               bool forced, bool comparatorEvent) {
+                               bool forced, bool comparatorEvent, bool untriggered) {
     if (!ring.valid() || ring.metadata().rolling || !settings.valid() || count<RecordDepth::Minimum || count>RecordDepth::Maximum || ring.metadata().samples<4) return {};
     const uint32_t samples=ring.metadata().samples;
     count=std::min(count,samples);
@@ -39,6 +40,23 @@ FrameView TriggerRecord::select(const FrameView &ring, const TriggerSettings &se
     const uint32_t fitEnd = samples - count + pre;
     const uint32_t highest = automatic && comparatorEvent ? std::min(fitEnd, target + reach) : fitEnd;
     uint32_t index=0;
+    if (settings.qualified()) { // One pass for both windows: the record's fit and, for a fallback, the whole ring.
+        TriggerQualifier::Window windows[2] = {{lowest, highest}, {1, samples - 1}};
+        TriggerQualifier::nearest(ring, settings, target, windows, automatic ? 1 : 2);
+        if (windows[0].found) {
+            index = windows[0].index;
+            return ring.slice(index - pre, count).withTrigger(true, pre, settings.tag()).withPretrigger(pre);
+        }
+        // Auto: a comparator event no candidate qualified at is not the trigger. The capture rearms
+        // (nothing returned) until `untriggered` says Auto's wait is over; its timeout always shows.
+        if (automatic) return comparatorEvent && !untriggered ? FrameView{}
+                                                              : ring.slice(samples - count, count).withTrigger(false, 0).withPretrigger(pre);
+        if (!windows[1].found && !forced) return {};
+        const uint32_t at = windows[1].found ? windows[1].index : target;
+        const uint32_t first = std::min(at > pre ? at - pre : 0, samples - count);
+        if (!windows[1].found) return ring.slice(first, count).withTrigger(false, 0).withPretrigger(pre);
+        return ring.slice(first, count).withShiftedTrigger(at - first, int32_t(int64_t(at - first) - pre), settings.tag()).withPretrigger(pre);
+    }
     // The two ADCs can resolve ringing around one event into short recrossings. Prefer a
     // crossing supported by both ADCs on each side, close to the comparator's DMA cursor.
     // The ordinary search still accepts isolated/narrow pulses when that stronger edge is absent.

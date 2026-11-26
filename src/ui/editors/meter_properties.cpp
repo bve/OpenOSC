@@ -14,14 +14,14 @@ PropertyKind MeterProperties::kind(unsigned row) const {
     case Range: case Display: case Colors: case Digits: case JunctionSource: case TemperatureUnit: return PropertyKind::Choice;
     case ColdJunction: return PropertyKind::Number;
     case ResetStatistics: return PropertyKind::Action;
-    case Appearance: case Layout: case Hold: return PropertyKind::Page; // Own lists (MeterAppearance/MeterHold/ArrangementProperties).
+    case Appearance: case Layout: case Hold: case SessionLog: return PropertyKind::Page; // Own lists (MeterAppearance/MeterHold/MeterLog/ArrangementProperties).
     default: return PropertyKind::Toggle;
     }
 }
 void MeterProperties::name(unsigned row, char *output, size_t capacity) const {
     static constexpr const char *names[] = {"Range", "Display", "Base colors", "Base digits", "Appearance", "Layout", "Statistics", "Bar graph",
                                             "Bar scale unit", "Relative",
-                                            "Hold", "Reset statistics", "CSV logging", "Junction source", "Manual junction", "Temp units", "Serial 115200"};
+                                            "Hold", "Reset statistics", "CSV logging", "Session log", "Junction source", "Manual junction", "Temp units", "Serial 115200"};
     std::snprintf(output, capacity, "%s", row < Count ? names[row] : "");
 }
 unsigned MeterProperties::options(unsigned row) const {
@@ -72,6 +72,7 @@ void MeterProperties::value(unsigned row, char *output, size_t capacity) const {
     else if (row == Range && result_.range == dmm::RangeMode::Unknown) std::snprintf(output, capacity, "Unknown");
     else if (row == SerialOutput && jackBusy_) std::snprintf(output, capacity, "GEN on");
     else if (row == Hold) std::snprintf(output, capacity, "%s", dmm::HoldSettings::name(hold_));
+    else if (row == SessionLog) std::snprintf(output, capacity, "%s", session_ ? "REC" : "");
     else if (row == JunctionSource && temperature_.source != dmm::JunctionSource::Manual) {
         const char *source = temperature_.source == dmm::JunctionSource::McuStartup ? "Startup" : "Live";
         char value[16];

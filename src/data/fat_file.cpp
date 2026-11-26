@@ -34,7 +34,7 @@ bool FatDataFile::begin(const char *directory, const char *prefix, const char *e
         return fail(DataStatus::InvalidArgument);
     if (!fs_.mounted() || !fs_.refreshFree())
         return fail(DataStatus::IoError);
-    if (fs_.freeBytes() < 8192 || reserve > fs_.freeBytes() - 8192)
+    if (fs_.freeBytes() < FreeHeadroom || reserve > fs_.freeBytes() - FreeHeadroom)
         return fail(DataStatus::NoSpace);
     if (storage::ensureDirectory(directory) != FR_OK) // The branch again if it went missing after the mount.
         return fail(DataStatus::IoError);

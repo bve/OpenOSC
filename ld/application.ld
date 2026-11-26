@@ -64,6 +64,8 @@ SECTIONS {
     .bode (NOLOAD) : { . = ALIGN(8); _sbode = .; KEEP(*(.bode)) . = ALIGN(8); _ebode = .; } > ITCM
     /* SCPI: WAV:MEAS? RECord's one record-readouts job (any session) and two MMEM:DATA? 512 B stages; zeroed at reset. */
     .scpi_measure (NOLOAD) : { . = ALIGN(8); _sscpi_measure = .; KEEP(*(.scpi_measure)) . = ALIGN(8); _escpi_measure = .; } > ITCM
+    /* The DMM session recorder (GitHub #144: its file, record and accumulators), zeroed at reset, built in place on first use. */
+    .dmm_log (NOLOAD) : { . = ALIGN(8); _sdmm_log = .; KEEP(*(.dmm_log)) . = ALIGN(8); _edmm_log = .; } > ITCM
     /DISCARD/ : { *(.comment) *(.note*) }
     ASSERT(_ebss + 49152 < _estack, "Application leaves less than 48 KiB stack")
     ASSERT(ADDR(.runtime_vectors) == ORIGIN(RAM) && SIZEOF(.runtime_vectors) == 1024, "Runtime vectors must open DTCM")
@@ -74,8 +76,8 @@ SECTIONS {
     ASSERT(SIZEOF(.capture_arena) == 393216, "Record banks 1-3 must be 384 KiB of AXI SRAM")
     ASSERT(SIZEOF(.acquisition) == 131072, "Record bank 0 must be the 128 KiB AHB SRAM")
     ASSERT(SIZEOF(.decode_workspace) <= 40960, "Decoder workspace exceeds its 40 KiB plan")
-    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) + SIZEOF(.scope_glow) + SIZEOF(.bode) + SIZEOF(.scpi_measure) <= LENGTH(ITCM),
-           "ITCM: decoder, trace ring, Glow silhouette, Bode session and SCPI measure exceed usable RAM")
+    ASSERT(SIZEOF(.decode_workspace) + SIZEOF(.usb_trace) + SIZEOF(.scope_glow) + SIZEOF(.bode) + SIZEOF(.scpi_measure) + SIZEOF(.dmm_log) <= LENGTH(ITCM),
+           "ITCM: decoder, trace ring, Glow silhouette, Bode session, SCPI measure and DMM session recorder exceed usable RAM")
     ASSERT(SIZEOF(.capture_trial) == 16384, "The AutoSetup trial area must be AXI SRAM")
     ASSERT(SIZEOF(.capture_nodes) == 960, "MDMA history nodes must be AXI SRAM")
     ASSERT(LOADADDR(.dma_data) + SIZEOF(.dma_data) <= __openosc_flash_end, "Application exceeds Flash reservation")

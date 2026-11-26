@@ -85,7 +85,8 @@ ui::MeterProperties ApplicationController::meterProperties() const {
         meter.relative().active() || meter.latest().peerRelative,
         data_.meterLogger().active(),data_.meterSerial().enabled(),data_.generator().enabled(),
         prefs_.meter.shownFace(), prefs_.meter.shownPalette(), &themes_.theme(), prefs_.meter.hold.mode)
-        .barGraph(prefs_.meter.bar).barUnit(prefs_.meter.barUnit).temperature(prefs_.meter.temperature).mcuJunction(meter.mcuJunction());
+        .barGraph(prefs_.meter.bar).barUnit(prefs_.meter.barUnit).temperature(prefs_.meter.temperature).mcuJunction(meter.mcuJunction())
+        .session(data_.meterSession().recording());
 }
 // The open DMM panel after the instrument changed on its own (output stopped, logging ended, new function).
 void ApplicationController::refreshMeterPanel() {
@@ -99,6 +100,7 @@ void ApplicationController::meterPanelKeys(uint32_t keys, uint32_t now) {
     const auto outcome = navigator_.keys(keys, meterEditor_);
     if (outcome == Outcome::Back) { closePanel(); return; }
     if (outcome == Outcome::Open && navigator_.row() == ui::MeterProperties::Layout) { openMeterLayout(); return; }
+    if (outcome == Outcome::Open && navigator_.row() == ui::MeterProperties::SessionLog) { openMeterLog(); return; }
     if (outcome == Outcome::Open && navigator_.row() == ui::MeterProperties::Hold) {
         holdEditor_ = ui::MeterHoldProperties(prefs_.meter.hold);
         openPanel(Panel::MeterHold, holdEditor_);

@@ -1,4 +1,5 @@
 #include "openosc/acquisition/analysis.hpp"
+#include "openosc/acquisition/trigger_qualifier.hpp"
 #include <algorithm>
 
 namespace openosc::scope {
@@ -60,7 +61,7 @@ bool scan(const FrameView &frame, const TriggerSettings &s, uint32_t first, uint
 bool TriggerSearch::nearestStablePair(const FrameView &frame, const TriggerSettings &settings, uint32_t target,
                                       uint32_t first, uint32_t last, uint32_t &index) {
     const uint32_t samples = frame.metadata().samples;
-    if (!settings.valid() || !frame.valid() || samples < 4) return false;
+    if (!settings.valid() || settings.qualified() || !frame.valid() || samples < 4) return false; // Edges only.
     first = std::max<uint32_t>(first, 2);
     last = std::min(last, samples - 2);
     uint32_t distance = UINT32_MAX;
@@ -68,6 +69,7 @@ bool TriggerSearch::nearestStablePair(const FrameView &frame, const TriggerSetti
 }
 bool TriggerSearch::find(const FrameView &frame, const TriggerSettings &settings, uint32_t &index) {
     if (!settings.valid() || !frame.valid() || frame.metadata().samples < 2) return false;
+    if (settings.qualified()) return TriggerQualifier::find(frame, settings, index);
     uint32_t distance = UINT32_MAX;
     return scan(frame, settings, 1, frame.metadata().samples - 1, 1, index, distance, true); // Stops at the first edge.
 }
@@ -84,6 +86,12 @@ bool TriggerSearch::nearest(const FrameView &frame, const TriggerSettings &setti
     if (!settings.valid() || !frame.valid()) return false;
     const uint32_t samples = frame.metadata().samples;
     if (samples < 2) return false;
+    if (settings.qualified()) { // One pass from the record's start: a candidate begins before its point.
+        TriggerQualifier::Window window{first, last};
+        TriggerQualifier::nearest(frame, settings, target, &window, 1);
+        if (window.found) index = window.index;
+        return window.found;
+    }
     first = std::max<uint32_t>(first, 1); last = std::min(last, samples - 1); // Edge i: samples i-1 -> i.
     if (first > last) return false;
     target = std::clamp(target, first, last);

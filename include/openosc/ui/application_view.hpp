@@ -16,6 +16,7 @@
 #include "openosc/ui/components/battery_indicator.hpp"
 #include "openosc/ui/components/record_overview.hpp"
 #include "openosc/ui/images/browser.hpp"
+#include "openosc/ui/components/session_trend.hpp"
 #include "openosc/ui/components/menu_content.hpp"
 #include "openosc/ui/components/power_hold_overlay.hpp"
 
@@ -116,6 +117,13 @@ public:
     void information(const ui::SettingsMenu &menu, const DeviceInfo &info);
     void images(const ui::ImageList &images);
     void imagePreview(const char *name,const uint16_t *pixels, bool fullSize = false, const char *keys = "");
+    // The saved DMM sessions (GitHub #144): their list, and one's trend in the menu box, titled with
+    // its file, drawn by `view` (the caller's, outside this object). Built once (rebuild, or after
+    // another menu) and then only redrawn; sessionsClosed() deletes its object before `view` goes.
+    void sessions(const ui::ImageList &list);
+    void sessionTrend(const char *name, ui::SessionTrendView &view, const ui::SessionTrendData &data, bool rebuild = false);
+    void sessionsClosed();
+    const ui::SessionTrendView *sessionTrendView() const { return sessionTrendLive_ ? sessionTrend_ : nullptr; } // Tests.
     // Notice: which notice is on show, for the screenshot's own (dismissed before the next capture).
     enum class Notice : uint8_t { None, General, ScreenshotSaved };
     // A transient notice of its kind (GitHub #108): nothing at all when Settings hides that kind.
@@ -174,6 +182,8 @@ private:
     ui::ScreenHost host_;
     ui::BatteryIndicator battery_;
     ui::ImageBrowserView imageBrowser_;
+    ui::SessionTrendView *sessionTrend_ = nullptr;
+    bool sessionTrendLive_ = false; // Its object is in the menu box now (any other menu cleans it away).
     ui::ScopeScreen scope_;
     ui::MeterScreen meter_;
     ui::GeneratorScreen generator_;

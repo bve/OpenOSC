@@ -39,6 +39,8 @@ struct ChannelMetadata {
     Coupling coupling = Coupling::Dc;
     int16_t analogPosition = 80; // Screen line 0..160 the analog zero was set to for this record.
     bool enabled = true, calibrated = false;
+    // A signed code at the probe tip: (code - zero) * volts per code * probe; false uncalibrated.
+    bool volts(int16_t code, double &output) const;
 };
 // The edge a record's triggerIndex was found for: its source, slope and level code (GitHub #34: a view
 // places the crossing between triggerIndex - 1 and triggerIndex on the curve it draws, TriggerPhase).

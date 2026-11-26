@@ -25,7 +25,8 @@ bool ApplicationController::servicePower(uint32_t keys,uint32_t now) {
     // BatteryState::external) does not keep it on. PC9 is not proven VBUS: on a ZT703S it stayed HIGH on
     // battery after the cable was pulled (GitHub #23), and it then held the idle timer forever (#104).
     const bool inhibited=remote_ || (usb_ && usb_->connected()) || data_.generator().enabled() ||
-        autoBusy() || data_.zeroBusy() || shots_.busy() || imageReader_.busy() || images_.clearing() || data_.scopeRecording() || data_.meterLogger().active() || data_.meterSerial().enabled();
+        autoBusy() || data_.zeroBusy() || shots_.busy() || imageReader_.busy() || images_.clearing() || data_.scopeRecording() || data_.meterLogger().active() || data_.meterSession().active() ||
+        data_.meterSerial().enabled();
     const auto state=idle_.poll(now,inhibited);
     if (state.dimmed!=dimmed_) {
         dimmed_=state.dimmed;

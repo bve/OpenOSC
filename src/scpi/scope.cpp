@@ -99,8 +99,48 @@ bool Engine::scopeCommand(const Command &c) {
     } else if (match("ACQuire:SRATe")) {
         if (!c.query) error(-108);
         else { const auto *m = backend_.configuration(); if (m) number(m->samplesPerSecond.value()); else error(-230, true); }
-    } else if (match("TRIGger:MODE")) {
-        if (c.query) reply("EDGE"); else if (!Header::word(c.argument, "EDGE")) error(-224);
+    } else if (match("TRIGger:MODE")) { // The trigger type (GitHub #133): EDGE, PULSe width, RUNT, SLOPe (rise/fall time).
+        static constexpr const char *Words[] = {"EDGE", "PULSe", "RUNT", "SLOPe"}, *Replies[] = {"EDGE", "PULS", "RUNT", "SLOP"};
+        if (c.query) reply("%s", Replies[unsigned(request.trigger.type)]);
+        else { unsigned t = 0; while (t < 4 && !Header::word(c.argument, Words[t])) ++t;
+            if (t == 4) error(-224); else { request.trigger.type = scope::TriggerType(t); apply(request); } }
+    } else if (match("TRIGger:POLarity")) { // The qualified trigger's polarity: the edge slope's field.
+        if (c.query) reply("%s", request.trigger.edge == scope::Edge::Rising ? "POS" : "NEG");
+        else { if (Header::word(c.argument, "POSitive")) request.trigger.edge = scope::Edge::Rising;
+            else if (Header::word(c.argument, "NEGative")) request.trigger.edge = scope::Edge::Falling;
+            else { error(-224); return true; } apply(request); }
+    } else if (match("TRIGger:WHEN")) {
+        static constexpr const char *Words[] = {"ANY", "LESS", "GREater", "INSide", "OUTSide"}, *Replies[] = {"ANY", "LESS", "GRE", "INS", "OUTS"};
+        if (c.query) reply("%s", Replies[unsigned(request.trigger.condition)]);
+        else { unsigned w = 0; while (w < 5 && !Header::word(c.argument, Words[w])) ++w;
+            if (w == 5) error(-224); else { request.trigger.condition = scope::TriggerCondition(w); apply(request); } }
+    } else if (match("TRIGger:TIME:LOWer") || match("TRIGger:TIME:UPPer")) {
+        uint32_t &limit = match("TRIGger:TIME:LOWer") ? request.trigger.minimumNs : request.trigger.maximumNs;
+        if (c.query) number(limit / 1e9);
+        else { double value; if (argument(c, value, Header::Unit::Time)) {
+            const double ns = std::round(value * 1e9);
+            if (!(ns >= scope::TriggerSettings::MinimumNs && ns <= scope::TriggerSettings::MaximumNs)) error(-222);
+            else { limit = uint32_t(ns); apply(request); } } }
+    } else if (match("TRIGger:LEVel:HIGH") || match("TRIGger:LEVel:LOW")) { // The band of RUNT and SLOPe.
+        const bool high = match("TRIGger:LEVel:HIGH");
+        const bool primaryHigh = request.trigger.level >= request.trigger.level2;
+        const bool primary = high == primaryHigh; // `level` is the band's end named: the keys' level.
+        int16_t &field = primary ? request.trigger.level : request.trigger.level2;
+        const int other = primary ? request.trigger.level2 : request.trigger.level;
+        const auto *metadata = backend_.configuration();
+        if (!metadata || !metadata->channels[unsigned(request.trigger.channel)].calibrated) error(-230, c.query);
+        else { const auto &ch = metadata->channels[unsigned(request.trigger.channel)];
+            const double scale = ch.voltsPerCode * ch.probeNumerator / ch.probeDenominator;
+            if (c.query) number((field - ch.zeroCode) * scale);
+            else { double value; if (argument(c, value, Header::Unit::Voltage)) {
+                const double code = value / scale + ch.zeroCode;
+                if (!(code >= -128 && code <= 127)) error(-222);
+                else {
+                    const auto rounded = int16_t(std::lround(code));
+                    if (high ? rounded < other : rounded > other) error(-222);
+                    else { field = rounded; apply(request, primary); }
+                }
+            } } }
     } else if (match("TRIGger:SWEep") || match("TRIGger:EDGE:SWEep")) {
         if (c.query) reply("%s", request.trigger.mode == scope::TriggerMode::Auto ? "AUTO" : request.trigger.mode == scope::TriggerMode::Normal ? "NORM" : "SING");
         else { if (Header::word(c.argument, "AUTO")) request.trigger.mode = scope::TriggerMode::Auto;

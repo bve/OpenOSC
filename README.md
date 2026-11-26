@@ -165,6 +165,7 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - Two channels, 20 mV/div to 10 V/div, timebase from 10 ns/div to 20 s/div
 - Trigger modes Auto, Normal and Single, with adjustable pre/post-trigger position and Center trigger.
   Tap **F3** to select Trigger and use Left/Right to adjust pretrigger. Tap **F3** again to cycle modes.
+  The Trigger menu supports Edge, Pulse width, Runt and Rise/fall time. [Trigger setup](docs/SCOPE_TRIGGERS.md)
   Hold **F3** to set the trigger level to the signal midpoint and pretrigger to 50%. Pan with **F2**
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
 - Record memory from 64K to 512K points across enabled channels. The record overview shows the
@@ -196,12 +197,14 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   X-Y (CH1) and Density. Channel colors, labels and markers keep full contrast
 - FFT up to 2048 points with four window functions, dBFS or linear scale
 - Protocol decoders (**Analyze → Decoder**): UART (TTL), RS-232 and RS-485 with autobaud, DMX512, I²C, SPI, LIN, CAN and ISO CAN FD.
-  Waveform with annotations, split or table view, event detail; decoded data saved as CSV
+  Waveform with annotations, split or table view and event detail. **Decoder → Save CSV** exports the
+  completed decode to `/openosc/DECODE`.
 
   Select the RX channel and use DC coupling. **UART (TTL)** defaults to high idle with a 1.65 V
   threshold and also works on the logic side of an RS-232 transceiver. **RS-232** uses negative
-  idle and a separate threshold that defaults to 0 V. Both modes share the baud rate, data bits,
-  parity, stop bits and bit order.
+  idle and a separate threshold that defaults to 0 V. At that threshold, Auto hysteresis is at
+  least 3 V wide (±1.5 V), which rejects noise near 0 V on an idle or unconnected input. Both modes
+  share the baud rate, data bits, parity, stop bits and bit order.
 
   **RS-485** and **DMX512** decode the pair as CH1 − CH2 (Data+ on CH1, Data− on CH2, both DC
   coupled) against their own threshold, 0 V by default, with a Polarity choice for a pair wired
@@ -221,7 +224,8 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   Its Auto mode follows the MKR rule: CH1 alone at 10 or 25 ns/div on the 200 and 280 MHz profiles,
   except in Roll or while the generator streams from the DAC. On interleaves CH1 alone at every timebase
   and profile. The ZT703S defaults to Off and the ZT706S to Auto (the stock rule)
-- Save waveforms as RAW or CSV
+- Save waveforms to `/openosc/CAPTURES` with **Analyze → Save waveform RAW** or **Save waveform CSV**. If the CSV
+  size estimate exceeds the free space, OpenOSC counts the actual formatted rows before rejecting the save.
 
 **Multimeter**
 
@@ -231,6 +235,11 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 - HOLD modes (**MENU → Measurement → Hold**): Manual, Delayed (after a countdown), Stable (waits
   for a stable reading) and Auto (holds every new stable reading)
 - Statistics, trend chart and CSV logging
+- Session logging without a PC (**MENU → Measurement → Session log**): interval rows (count, min, max
+  and average of the readings in each interval) or event records (a new record whenever the reading
+  leaves a percentage band), stopped manually, at a set duration or when you leave the multimeter.
+  Saved sessions open on the device as a trend with a cursor, zoom and pan, and stay CSV files in
+  `/openosc/LOGS`. See [DMM session logging](docs/DMM_SESSION_LOGGING.md)
 - Ampere-hour counter in DC current (A and mA): the signed charge since the function was selected,
   shown as mAh or Ah beside the range. It counts while the readings are valid and arrive at most 2 s
   apart (an overload, the meter's own HOLD or REL, a lost or corrupted reading, or a longer gap pauses

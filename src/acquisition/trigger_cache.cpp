@@ -8,8 +8,7 @@ bool TriggerCache::matches(const FrameView &frame, const TriggerSettings &s) con
     const auto &m = frame.metadata();
     return valid_ && timestamp_ == m.timestampUs && sequence_ == m.sequence && samples_ == m.samples &&
            origin_ == m.origin && ring_ == m.ring && layout_ == m.layout && channels_ == enabledChannels(m) &&
-           settings_.channel == s.channel && settings_.edge == s.edge && settings_.mode == s.mode && settings_.level == s.level &&
-           settings_.reject == s.reject;
+           settings_.sameSearch(s) && settings_.mode == s.mode;
 }
 void TriggerCache::remember(const FrameView &frame, const TriggerSettings &s, bool found, uint32_t index) {
     if (!frame.valid() || !s.valid()) { valid_ = false; return; }

@@ -13,7 +13,8 @@ struct ScopeRequest {
     uint32_t probeNumerator[2] = {1, 1}, probeDenominator[2] = {1, 1};
     bool rollAuto=true;
     bool longerRecord = true;
-    bool rolling() const { return rollAuto && timebaseNs>=200000000 && trigger.mode==scope::TriggerMode::Auto; }
+    // A qualified trigger needs a bounded record with the history around its candidate.
+    bool rolling() const { return rollAuto && timebaseNs>=200000000 && trigger.mode==scope::TriggerMode::Auto && !trigger.qualified(); }
     unsigned channels() const { return scope::RecordBudget::channels(frontend.enabled[0], frontend.enabled[1]); }
     uint32_t depth() const { return scope::RecordBudget::perChannel(recordPoints, channels()); } // Points per channel.
     // At a fixed timebase, depth beyond the default budget can extend the captured time.
@@ -35,9 +36,7 @@ struct ScopeRequest {
     bool same(const ScopeRequest &other) const {
         if (timebaseNs != other.timebaseNs || recordPoints != other.recordPoints || rollAuto!=other.rollAuto ||
             longerRecord != other.longerRecord ||
-            trigger.channel != other.trigger.channel || trigger.edge != other.trigger.edge ||
-            trigger.mode != other.trigger.mode || trigger.level != other.trigger.level || trigger.position!=other.trigger.position ||
-            trigger.reject != other.trigger.reject) return false;
+            trigger != other.trigger) return false;
         for (unsigned c = 0; c < 2; ++c)
             if (frontend.range[c] != other.frontend.range[c] || frontend.position[c] != other.frontend.position[c] ||
                 frontend.coupling[c] != other.frontend.coupling[c] || frontend.enabled[c] != other.frontend.enabled[c] ||

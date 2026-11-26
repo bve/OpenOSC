@@ -10,6 +10,7 @@ void AutoSetup::begin(const ScopeRequest &request,unsigned channel,uint32_t now)
     channel_=source<2 && request.frontend.enabled[source] ? source
            : channel<2 && request.frontend.enabled[channel] ? channel : request.frontend.enabled[0] ? 0 : 1;
     trial_.trigger.mode=TriggerMode::Auto;
+    trial_.trigger.type=TriggerType::Edge; // AUTO finds an edge trigger, whatever qualified one was set.
     trial_.trigger.channel=Channel(channel_); trial_.trigger.edge=Edge::Rising; trial_.trigger.level=0;
     // Start independently of a previous20s/div or10ns/div window.
     // Trials keep the record budget: DataAccess captures them into its own trial area at a fixed

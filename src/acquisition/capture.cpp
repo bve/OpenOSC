@@ -189,6 +189,8 @@ bool CaptureDma::start(FrameMetadata metadata, const FrontendSettings &settings,
     rolling_=rolling; gated_=gated; frozen_=false; forced_=false;
     requestedSamples_=metadata.samples;
     if (gated_) { metadata.ring=buffer.ringPoints(); trigger_=*trigger; } // Pre/post history rings through the buffer.
+    if (!gated_ || !trigger_.qualified() || trigger_.mode!=TriggerMode::Auto) autoWaiting_=false;
+    else if (!autoWaiting_) { autoWaiting_=true; autoSince_=began; }
     metadata_ = metadata;
     buffer_ = buffer;
     for (auto &cycle:cycles_) cycle=0;
@@ -325,7 +327,7 @@ bool CaptureDma::stop(bool stopClock) {
             pending.release();
     }
     active_ = nullptr;
-    rolling_=gated_=false; frozen_=false;
+    rolling_=gated_=false; frozen_=false; autoWaiting_=false;
     historyLease_.release();
     lease_.release();
     return true;

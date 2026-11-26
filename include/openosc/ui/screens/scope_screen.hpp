@@ -33,6 +33,11 @@ public:
         triggerMode_ = mode; waiting_ = waiting; status(health_, statusHeld_);
         if (label) cards();
     }
+    void triggerType(scope::TriggerType type) {
+        if (triggerType_ == type) return;
+        triggerType_ = type;
+        cards();
+    }
 
 private:
     scope::FrameMetadata next_; // The acquisition settings of the next capture.
@@ -48,6 +53,7 @@ private:
     void zoomNote(); // Zoom & Pan's factor and arrows in the plot's note (the GEN note returns on the next pass).
     const char *status_ = nullptr;
     scope::TriggerMode triggerMode_ = scope::TriggerMode::Auto;
+    scope::TriggerType triggerType_ = scope::TriggerType::Edge;
     DataStatus health_ = DataStatus::NoData;
     bool waiting_ = false, statusHeld_ = false,automatic_=false,calibrating_=false;
     static constexpr uint32_t TrigdHoldMs = 500;

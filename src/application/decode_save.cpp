@@ -1,5 +1,6 @@
 #include "openosc/application/controller.hpp"
 #include "openosc/application/decode_csv_file.hpp"
+#include "openosc/decode/table_text.hpp"
 #include <cstdio>
 
 // The decoded result to /openosc/DECODE (plan §9 stage 7): the menu's Save CSV and DECode:SAVE. The
@@ -16,8 +17,17 @@ int16_t ApplicationController::saveDecoderCsv(uint32_t now) {
     const auto *result = decoder_.results().published();
     const uint32_t ticket = csv.begin(decoding::CsvExport::Owner::File, decoder_.results(), decoder_.settings(), "OpenOSC " OPENOSC_VERSION);
     if (!ticket) {
-        if (uiReady_) view_.notify(Tooltip::Unavailable, csv.refusal() == decoding::CsvExport::Refusal::Busy ? "Decoded CSV busy: an export runs" : "No finished decode to save", now);
-        return csv.refusal() == decoding::CsvExport::Refusal::Busy ? -200 : -230;
+        const auto refusal = csv.refusal();
+        if (uiReady_) {
+            // Why nothing was saved: the result's own state (the table's empty line), never a storage word.
+            char text[96];
+            if (refusal == decoding::CsvExport::Refusal::Busy) std::snprintf(text, sizeof text, "Decoded CSV busy: an export runs");
+            else if (refusal == decoding::CsvExport::Refusal::Format) std::snprintf(text, sizeof text, "Decoded result unreadable: not saved");
+            else if (!prefs_.scope.decoder.enabled) std::snprintf(text, sizeof text, "Decoder off: no decode to save");
+            else std::snprintf(text, sizeof text, "No complete decode to save\n%s", decoding::TableText::empty(result, decoder_.running()));
+            view_.notify(Tooltip::Unavailable, text, now);
+        }
+        return refusal == decoding::CsvExport::Refusal::Busy ? -200 : -230;
     }
     if (!file.start(csv, ticket, fs_)) { // It ended the export.
         if (uiReady_) view_.notify(Tooltip::Critical, file.error(), now);

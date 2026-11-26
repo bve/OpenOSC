@@ -50,6 +50,12 @@ public:
     DataStatus status() const { return status_; }
     const FrameMetadata &metadata() const { return metadata_; }
     uint32_t completed() const { return completed_; }
+    // Candidates of a qualified trigger the freeze found unqualified (TriggerQualifier): each capture
+    // that ended so, without a record, and rearms. Counted for the trigger status (DataAccess).
+    uint32_t misses() const { return misses_; }
+    // Auto with a qualified trigger rearms after an unqualified candidate until no record came for its
+    // timeout (TriggerGate: the record's time, 20 ms to 1 s), counted from the first capture of the wait.
+    static uint32_t autoWaitMs(uint32_t samples, Rational rate);
     // The last published frame had no trigger edge anywhere in the ring it was cut from, for the
     // settings returned: a search of that frame with them finds nothing (TriggerCache::remember).
     bool edgeless(const FrameMetadata &frame, TriggerSettings &settings) const {
@@ -110,6 +116,8 @@ private:
     uint32_t requestedSamples_=0;
     uint32_t slack_=0; // Points the gate keeps on each side of the event (TriggerRecord::slack).
     uint64_t eventCursor_=0;
+    uint32_t misses_=0, autoSince_=0;
+    bool autoWaiting_=false; // A qualified Auto wait runs since autoSince_ (start, until a record or stop()).
     bool edgeless_=false;
     uint32_t edgelessSequence_=0;
     uint64_t edgelessTimestamp_=0;

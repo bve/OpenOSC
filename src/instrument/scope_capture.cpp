@@ -406,8 +406,11 @@ scope::TriggerSettings DataAccess::triggerForFrame(const scope::FrameMetadata &m
     if (!factoryInterleave() && metadata.layout == scope::Layout::InterleavedCh1 && trigger.channel == scope::Channel::Ch1) {
         const auto &channel = metadata.channels[0];
         const auto logical = scopeChannelFor(request_, 0);
-        const double level = scope::TriggerLevel::inFrame(trigger.level, logical, channel);
-        trigger.level = int16_t(std::lround(std::clamp(level, -128.0, 127.0)));
+        const auto convert = [&](int16_t code) {
+            return int16_t(std::lround(std::clamp(scope::TriggerLevel::inFrame(code, logical, channel), -128.0, 127.0)));
+        };
+        trigger.level = convert(trigger.level);
+        trigger.level2 = convert(trigger.level2);
     }
     return trigger;
 }
@@ -496,7 +499,7 @@ bool DataAccess::activateScope() {
     if (scopeHeld_) {
         auto frontend = appliedFrontend(request_);
         if (!factoryInterleave()) frontend.rangeBoost = false;
-        if (!frontend_.scope(frontend, request_.trigger.level)) { active_=false; status_=DataStatus::Uncalibrated; return false; }
+        if (!frontend_.scope(frontend, request_.trigger.comparatorLevel())) { active_=false; status_=DataStatus::Uncalibrated; return false; }
         if (!zeroBusy()) counters_.start();
         return true;
     }
@@ -580,7 +583,7 @@ bool DataAccess::startCapture() {
     }
 #endif
     usbtrace::mark(usbtrace::Tag::CaptureBegin);
-    const bool captureStarted = capture_.start(metadata, frontend, buffer, rolling, trigger.level, zeroTrial() ? nullptr : &trigger);
+    const bool captureStarted = capture_.start(metadata, frontend, buffer, rolling, trigger.comparatorLevel(), zeroTrial() ? nullptr : &trigger);
     usbtrace::mark(usbtrace::Tag::CaptureEnd);
     if (!captureStarted) { // Nothing was written: CaptureDma refuses before its first DMA transfer.
         arena_.release(captureRegion_); captureRegion_ = 0;
@@ -732,6 +735,12 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
 void DataAccess::followTriggerWait(uint32_t now) {
     const bool armed = request_.trigger.mode != scope::TriggerMode::Auto && active_ && !stopping_ && !scopeHeld_ &&
                        measurement_ == MeasurementMode::Oscilloscope && !internalCapture() && capture_.awaitingTrigger();
+    const uint32_t misses = capture_.misses();
+    if (misses != missesSeen_) { // Candidates rearmed since the last pass: waiting, once that lasts.
+        missesSeen_ = misses;
+        if (request_.trigger.mode != scope::TriggerMode::Auto && !scopeHeld_ && uint32_t(now - acceptedAt_) >= TriggerWaitMs)
+            triggerWaiting_ = true;
+    }
     if (!armed) { armedSeen_ = false; return; }
     const uint32_t sequence = capture_.metadata().sequence;
     if (!armedSeen_ || armedSequence_ != sequence) { armedSeen_ = true; armedSequence_ = sequence; armedAt_ = now; return; }

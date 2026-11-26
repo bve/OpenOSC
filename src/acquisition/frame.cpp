@@ -220,10 +220,12 @@ bool FrameView::volts(Channel channel, size_t index, double &output) const {
     int16_t raw;
     if (!signedCode(channel, index, raw))
         return false;
-    const auto &c = metadata_.channels[static_cast<unsigned>(channel)];
-    if (!c.calibrated)
+    return metadata_.channels[static_cast<unsigned>(channel)].volts(raw, output);
+}
+bool ChannelMetadata::volts(int16_t code, double &output) const {
+    if (!calibrated)
         return false;
-    output = (raw - c.zeroCode) * c.voltsPerCode * c.probeNumerator / c.probeDenominator;
+    output = (code - zeroCode) * voltsPerCode * probeNumerator / probeDenominator;
     return std::isfinite(output);
 }
 namespace {

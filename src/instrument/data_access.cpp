@@ -21,7 +21,12 @@ void attachBus(generator::ModuleOutput &, generator::BusClient &) {}
 } // namespace
 DataAccess::DataAccess(Filesystem &fs)
     : resources_(PeripheralResources::StorageDma), zeroFile_(fs),pwmFile_(fs,calibration_),gainFile_(fs,calibration_),interleaveFile_(fs,calibration_),zeroOperation_(*this), frontend_(scopeCalibration_), capture_(resources_, frontend_), counters_(resources_), uart_(resources_),
-      generator_(resources_), serial_(resources_), recorder_(fs), logger_(fs) {
+      generator_(resources_), serial_(resources_), recorder_(fs), logger_(fs),
+#ifdef OPENOSC_APPLICATION
+      session_(dmmSessionRecorder(fs)) {
+#else
+      session_(fs) {
+#endif
     attachBus(generator_, *this);
     StorageAdmission::attach(this); // NOR SPI transfers ask the capture to yield first.
 }
@@ -105,6 +110,7 @@ bool DataAccess::activate(MeasurementMode view) {
     framer_.reset();
     captureFailed_ = false;
     measurement_ = view;
+    if (view != MeasurementMode::Multimeter) session_.stop(timeUs_, dmm::LogEnd::ModeChange); // Committed by poll().
     if (view == MeasurementMode::Multimeter) meter_.expire(timeUs_); // A reading from before is not current.
     uint32_t remainingMs = 0;
     if (view != MeasurementMode::Multimeter) watchdog_.deactivate();
@@ -309,6 +315,15 @@ void DataAccess::beginShutdown() {
     heldFrame_.release();
     recordPending_ = false;
     logger_.finish();
+    session_.stop(timeUs_, dmm::LogEnd::Shutdown);
+}
+dmm::Function DataAccess::meterFunction() const {
+    return meter_.typeK() ? dmm::Function::Temperature : dmm::Functions::identify(meter_.latest());
+}
+bool DataAccess::startMeterSession(const dmm::LogSettings &settings) {
+    if (!active_ || stopping_ || measurement_ != MeasurementMode::Multimeter) return false;
+    const auto &reading = meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest();
+    return session_.begin(settings, reading, meterFunction(), timeUs_, board::Current::Name);
 }
 void DataAccess::serviceDmmClose(uint32_t now) {
     dmm_.service(uart_, meter_.latest(), now);

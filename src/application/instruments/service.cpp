@@ -1,4 +1,5 @@
 #include "openosc/application/controller.hpp"
+#include "openosc/data/fat_file.hpp"
 #include <cstdio>
 #include "openosc/application/meter_range_memory.hpp"
 
@@ -67,9 +68,11 @@ void ApplicationController::serviceInstruments(uint32_t now) {
     }
     if (recordWatched_ && !data_.scopeRecording()) {
         const auto status = data_.scopeRecordStatus();
-        if (visible) view_.notify(status == DataStatus::Ok ? Tooltip::Done : Tooltip::Critical, status == DataStatus::Ok ? data_.scopeRecorder().path() :
-                     status == DataStatus::NoSpace ? "Not enough free space for this record" :
-                     "Waveform save failed / no completed capture", now);
+        if (visible) {
+            char text[96];
+            recordResult(status, text, sizeof text);
+            view_.notify(status == DataStatus::Ok ? Tooltip::Done : Tooltip::Critical, text, now);
+        }
         recordWatched_ = false;
     }
     auto &logger = data_.meterLogger();
@@ -79,5 +82,23 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         loggerWatched_ = false;
         if (visible) refreshMeterPanel();
     }
+}
+// Analyze -> Save RAW / Save CSV, the waveform (never the decoder's CSV): the file, or why there is none.
+// No space: what the record needs (ScopeRecorder::required: RAW exact, CSV counted row by row) with the
+// volume's headroom, and what is free, in KiB rounded up and down so they never look equal while one does not fit.
+void ApplicationController::recordResult(DataStatus status, char *text, size_t capacity) {
+    const auto &recorder = data_.scopeRecorder();
+    const bool csv = recorder.format() == ScopeRecorder::Format::Csv;
+    if (status == DataStatus::Ok) { std::snprintf(text, capacity, "%s", recorder.path()); return; }
+    if (status == DataStatus::NoSpace && recorder.required()) {
+        const auto needed = static_cast<unsigned long>((recorder.required() + FatDataFile::FreeHeadroom + 1023) / 1024);
+        const auto free = static_cast<unsigned long>(fs_.freeBytes() / 1024);
+        std::snprintf(text, capacity, "Waveform %s needs %lu KiB, %lu KiB free%s",
+                      csv ? "CSV" : "RAW", needed, free, csv ? "\nTry RAW or a shorter record." : "");
+        return;
+    }
+    std::snprintf(text, capacity, "%s", status == DataStatus::NoSpace ? "Not enough free space for this waveform"
+                                       : status == DataStatus::IoError ? "Waveform save failed: storage error"
+                                       : "Waveform save failed / no completed capture");
 }
 } // namespace openosc

@@ -43,7 +43,8 @@ void ApplicationController::showTrigger(const scope::FrameMetadata *shown) {
     const auto &trigger = data_.scopeRequest().trigger;
     const unsigned source = unsigned(trigger.channel);
     const auto &settings = data_.scopeMetadata().channels[source];
-    view_.waveform().trigger(trigger.channel, shown ? scope::TriggerLevel::inFrame(trigger.level, settings, shown->channels[source]) : double(trigger.level));
+    const auto threshold = trigger.comparatorLevel();
+    view_.waveform().trigger(trigger.channel, shown ? scope::TriggerLevel::inFrame(threshold, settings, shown->channels[source]) : double(threshold));
     // Each refresh and frame: a new source, mode, invert or scale (also staged in HOLD) leaves the limit.
     view_.waveform().triggerLimit(triggerLimit(data_.scopeRequest()));
     view_.scopeTrigger(trigger, settings);
@@ -74,6 +75,7 @@ void ApplicationController::refreshSoftKeys() {
         keys.keys[3] = {"Exit", "Bode", true};
     }
     else if (panel_ == Panel::Images) keys = imageSoftKeys();
+    else if (panel_ == Panel::Sessions) keys = sessionSoftKeys();
     else if (panel_ == Panel::Generator || panel_ == Panel::Frequency) {
         using Generator = ui::GeneratorKeys::Panel;
         ui::GeneratorKeys generator;
@@ -85,7 +87,7 @@ void ApplicationController::refreshSoftKeys() {
     else if (decoderScreen()) { // Plan §4.4: Protocol, View, Jump (HOLD only), back to the Scope or Detail back.
         static constexpr const char *views[] = {"Wave+Ann", "Split", "Table"};
         const auto &d = prefs_.scope.decoder;
-        keys.keys[0] = {"Proto", decoding::Protocols::name(d.protocol), true};
+        keys.keys[0] = {"Protocol", decoding::Protocols::name(d.protocol), true};
         keys.keys[1] = {"View", views[unsigned(d.view) < 3 ? unsigned(d.view) : 0], true};
         keys.keys[2] = {"Jump", data_.scopeHeld() ? "HOLD" : "HOLD only", data_.scopeHeld()};
         keys.keys[3] = decoderDetail_ ? ui::SoftKey{"Back", "Table", true} : ui::SoftKey{"Scope", "", true};
@@ -181,7 +183,7 @@ void ApplicationController::displayData(uint32_t now) {
                               : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
     // Bode (#72): the sweep's own service takes its records; no readouts, no decoder, no trace meanwhile.
-    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::GainMatch ||
+    if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Sessions || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::GainMatch ||
         panel_==Panel::Bode) {
         readouts_.suspend(data_); // Not serviced while this lasts: no background lease is kept.
         dataAt_ = now;
@@ -291,7 +293,8 @@ void ApplicationController::displayData(uint32_t now) {
             lastMeterHold_ != meter.holding() || lastMeterStatus_ != status || lastMeterCharge_ != charge) {
             const ui::MeterContext context{&meter.statistics(), &meter.history(), &meter.relative(), prefs_.meter.display,
                                           bool(prefs_.meter.statistics), prefs_.meter.shownFace(), prefs_.meter.shownPalette(),
-                                          &prefs_.meter.shownAppearance(), word, bool(prefs_.meter.bar), data_.meterLogger().active(),
+                                          &prefs_.meter.shownAppearance(), word, bool(prefs_.meter.bar),
+                                          data_.meterLogger().active() || data_.meterSession().recording(),
                                           selecting, &meter.charge(), prefs_.meter.barUnit};
             view_.multimeter(shownReading(meter, selecting), meter.holding(), status, context);
             lastMeterSelecting_ = selecting;

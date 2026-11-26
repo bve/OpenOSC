@@ -279,6 +279,9 @@ void DecoderProperties::optionName(unsigned i, unsigned index, char *output, siz
     case R::Polarity: std::snprintf(output, capacity, "%s", index ? "Inverted (idle low)" : "Normal (idle high)"); break;
     case R::HysteresisMode:
         if (index) std::snprintf(output, capacity, "Manual (mV)");
+        else if (const uint32_t floor = Protocols::autoHysteresisFloorMv(settings_.protocol, settings_.threshold(settings_.channel)))
+            std::snprintf(output, capacity, "Auto (%u %%, min %lu.%lu V)", Protocols::AutoHysteresisPercent, // RS-232's floor.
+                          static_cast<unsigned long>(floor / 1000), static_cast<unsigned long>(floor % 1000 / 100));
         else std::snprintf(output, capacity, "Auto (%u %% of swing)", Protocols::AutoHysteresisPercent);
         break;
     default: if (capacity) output[0] = 0; break;

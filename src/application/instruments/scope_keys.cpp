@@ -280,20 +280,21 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         if (!direction) return;
         auto request = data_.scopeRequest();
         const auto bounds = triggerBounds(request);
-        const auto before = request.trigger.level;
+        const auto before = request.trigger.comparatorLevel();
+        const auto intent = request.trigger.comparatorUsesLevel2() ? LevelIntent::Follow : LevelIntent::Set;
         const int step = triggerStep(direction, fine);
         const bool invert = view_.waveform().options().channels[unsigned(request.trigger.channel)].invert;
         const int delta = invert ? -step : step;
-        request.trigger.level = bounds.clamp(bounds.clamp(before) + delta);
-        if (request.trigger.level == before) {
+        request.trigger.setComparatorLevel(bounds.clamp(bounds.clamp(before) + delta));
+        if (request.trigger.comparatorLevel() == before) {
             if (fine) { // A fresh press at the limit sets the current level as the anchor, without refreshing the plot.
-                triggerFollow_.forget();
+                if (intent == LevelIntent::Set) triggerFollow_.forget();
                 pulseTriggerLimit(now);
             }
             return;
         }
-        if (!applyEdited(request, now, LevelIntent::Set)) { view_.notify(Tooltip::Unavailable, "Finish data transfer first", now); return; }
-        if (request.trigger.level == (delta > 0 ? bounds.high : bounds.low)) pulseTriggerLimit(now); // Each press against it.
+        if (!applyEdited(request, now, intent)) { view_.notify(Tooltip::Unavailable, "Finish data transfer first", now); return; }
+        if (request.trigger.comparatorLevel() == (delta > 0 ? bounds.high : bounds.low)) pulseTriggerLimit(now);
         return;
     }
     if (focus_ == plot::Focus::Trigger) { movePretrigger(arrows, now, fine); return; } // F2 keeps the pan (issue #123).

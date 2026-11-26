@@ -24,7 +24,8 @@ bool quote(const char *input, size_t limit, char *output, size_t capacity) {
     output[n] = 0;
     return true;
 }
-const char *quantity(Quantity value) {
+} // namespace
+const char *Csv::quantity(Quantity value) {
     switch (value) {
     case Quantity::Voltage:
         return "voltage";
@@ -42,7 +43,6 @@ const char *quantity(Quantity value) {
         return "unknown";
     }
 }
-} // namespace
 size_t Csv::dmm(const dmm::Result &result, bool hold, char *out, size_t capacity) {
     if (!out || !capacity)
         return 0;
@@ -81,6 +81,42 @@ size_t Csv::scope(const scope::FrameView &frame, size_t index, char *out, size_t
     const int n = std::snprintf(out, capacity, "%lu,%s,%s,%s,%s,%s\r\n", static_cast<unsigned long>(index),
                                 time, raw[0], raw[1], volts[0], volts[1]);
     return n > 0 && size_t(n) < capacity ? size_t(n) : 0;
+}
+size_t Csv::scopeRowLimit(const scope::FrameMetadata &m) {
+    if (!m.valid()) // Also samples and the rate.
+        return 0;
+    char text[48];
+    const uint64_t last = uint64_t(m.samples - 1);
+    size_t bytes = Decimal::integer(last, text, sizeof text);
+    // time = index * denominator / numerator: its fraction ends within max(a, b) digits when the
+    // numerator over their common factor is 2^a * 5^b, else Decimal::fraction stops at 12.
+    uint64_t a = m.samplesPerSecond.numerator, b = m.samplesPerSecond.denominator;
+    while (b) { const uint64_t r = a % b; a = b; b = r; }
+    uint64_t rest = m.samplesPerSecond.numerator / a;
+    unsigned twos = 0, fives = 0;
+    while (!(rest % 2)) { rest /= 2; ++twos; }
+    while (!(rest % 5)) { rest /= 5; ++fives; }
+    const unsigned fraction = rest != 1 ? 12 : twos > fives ? (twos > 12 ? 12 : twos) : (fives > 12 ? 12 : fives);
+    const size_t whole = Decimal::integer(last * m.samplesPerSecond.denominator / m.samplesPerSecond.numerator, text, sizeof text);
+    if (!bytes || !whole)
+        return 0;
+    bytes += whole + (fraction ? 1 + fraction : 0);
+    for (unsigned channel = 0; channel < 2; ++channel) {
+        const auto &c = m.channels[channel];
+        if (!c.enabled || (m.layout == scope::Layout::InterleavedCh1 && channel)) continue; // FrameView::code: empty columns.
+        size_t volts = 0;
+        for (int raw = -128; raw < 128; ++raw) {
+            double value;
+            if (!c.volts(int16_t(raw), value))
+                continue;
+            const size_t length = Decimal::number(value, text, sizeof text);
+            if (!length)
+                return 0; // scope() fails on it as well.
+            volts = length > volts ? length : volts;
+        }
+        bytes += 4 + volts; // A signed 8-bit code: "-128" at most.
+    }
+    return bytes + 5 + 2; // Five commas, CRLF.
 }
 size_t Csv::scopeMetadata(const scope::FrameMetadata &m, char *output, size_t capacity) {
     if (!output || !capacity || !m.valid())

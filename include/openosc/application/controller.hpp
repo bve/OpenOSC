@@ -19,6 +19,8 @@
 #include "openosc/ui/editors/meter_properties.hpp"
 #include "openosc/ui/editors/meter_appearance_properties.hpp"
 #include "openosc/ui/editors/meter_hold_properties.hpp"
+#include "openosc/ui/editors/meter_log_properties.hpp"
+#include "openosc/application/session_browser.hpp"
 #include "openosc/ui/editors/arrangement_properties.hpp"
 #include "openosc/ui/editors/scope_appearance_properties.hpp"
 #include "openosc/ui/editors/scope_editor.hpp"
@@ -296,6 +298,25 @@ private:
     // cycle ends, none starts); the same ones change nothing.
     bool meterHoldSettings(const dmm::HoldSettings &settings, uint32_t now);
     bool meterTemperatureSettings(dmm::TemperatureSettings settings, uint32_t now);
+    // Measurement > Session log (GitHub #144, meter_log.cpp): its panel, the start/stop action, the saved
+    // sessions' list and trend. The browser (SessionBrowser) exists only while the list is open: it is
+    // allocated from the LVGL heap then, nothing of it in this object's frame.
+    ui::MeterLogProperties meterLogProperties() const;
+    void openMeterLog(unsigned row = ui::MeterLogProperties::Action);
+    void meterLogKeys(uint32_t keys, uint32_t now);
+    void meterLogAction(uint32_t now);
+    // Out of line, as the other per-pass services' buffers: off run()'s frame (the deepest chain, stack budget).
+    [[gnu::noinline]] void serviceMeterLog(uint32_t now); // The session's end said; the open panel's clock; the browser's reading.
+    void openSessions(uint32_t now);
+    void closeSessions(bool toPanel);   // toPanel: back to Session log on its Saved sessions row.
+    [[gnu::noinline]] void sessionKeys(const KeyEvents &events, uint32_t keys, uint32_t now);
+    void showSessions();
+    void deleteSession(uint32_t now);
+    bool sessionsBrowsing() const { return sessions_ != nullptr; } // The LOGS files are being read (MMEM:DEL waits).
+    ui::SoftKeys sessionSoftKeys() const;
+    SessionBrowser *sessions_ = nullptr;
+    bool sessionWatched_ = false, confirmationSessions_ = false;
+    uint32_t logShownAt_ = 0;
     void serviceMcuTemperature(uint32_t now);
     // The HOLD key in the DMM by the mode (docs/DMM_AUTO_HOLD.md): a manual or the DMM's own HOLD
     // released first; Manual: HOLD now; the others: the cycle armed, or (armed) cancelled.
@@ -323,6 +344,7 @@ private:
     void decoderPanelKeys(uint32_t keys, uint32_t now); // Panel::Decoder (Analyze > Decoder, F1, F2).
     void openDecoder(unsigned row);
     void decoderSummary(); // Save CSV's and Detect baud's values in the panel.
+    void recordResult(DataStatus status, char *text, size_t capacity); // Analyze -> Save RAW / CSV's toast.
     void baudAction(uint32_t now);                         // Detect baud: search the held record, or apply its hint.
     bool baudHintReady() const;                            // A confirmed hint for the settings in force.
     void baudHintText(char *out, size_t capacity) const;
@@ -372,7 +394,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch, GainMatch, Bode };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLog, Sessions, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, Confirmation, Images, Zero, InterleaveMatch, GainMatch, Bode };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;
@@ -425,6 +447,7 @@ private:
     ui::MeterProperties meterEditor_{dmm::Result{}};
     ui::MeterAppearanceProperties appearanceEditor_;
     ui::MeterHoldProperties holdEditor_;
+    ui::MeterLogProperties logEditor_;
     ui::ArrangementProperties<ScopeBlock> scopeLayout_;
     ui::ArrangementProperties<GeneratorBlock> generatorLayout_;
     bool generatorLayoutFromSettings_ = false; // Where Back returns: Settings / Display, or GEN Parameters.

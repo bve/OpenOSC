@@ -32,7 +32,7 @@ bool DataAccess::restoreHeld(const ScopeRequest &request) {
     request_ = request;
     if (!describeNext(configuration_)) describeChannels(configuration_); // The plan of the restored settings.
     // The analog front end returns to the held record's settings, as at a HOLD activation.
-    if (active_ && !frontend_.scope(appliedFrontend(request_), request_.trigger.level)) status_ = DataStatus::Uncalibrated;
+    if (active_ && !frontend_.scope(appliedFrontend(request_), request_.trigger.comparatorLevel())) status_ = DataStatus::Uncalibrated;
     holdScopeCore(true);
     if (!retainedRegion_) return true; // The original HOLD had no completed frame.
     const auto region = retainedRegion_;

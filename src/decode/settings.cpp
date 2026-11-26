@@ -86,5 +86,10 @@ const char *Protocols::viewKey(View v) {
     return unsigned(v) < unsigned(View::Count) ? keys[unsigned(v)] : "";
 }
 const char *Protocols::updateKey(Update u) { return u == Update::Live ? "live" : "complete"; }
+uint32_t Protocols::autoHysteresisFloorMv(Protocol p, int32_t thresholdMv) {
+    if (p != Protocol::Rs232) return 0;
+    const int64_t distance = thresholdMv < 0 ? -int64_t(thresholdMv) : int64_t(thresholdMv);
+    return distance < Rs232ValidLevelMv ? uint32_t(Rs232ValidLevelMv - distance) : 0;
+}
 const char *Protocols::hysteresisKey(Hysteresis h) { return h == Hysteresis::Manual ? "manual" : "auto"; }
 } // namespace openosc::decoding

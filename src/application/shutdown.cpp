@@ -29,7 +29,11 @@ public:
     explicit ShutdownSteps(ApplicationController &a) : a_(a) {}
     // Every background file user ends before the saves and the unmount: an unfinished decoded or FRA CSV
     // is closed and its .TMP removed now (its export ended), so nothing writes the volume after it.
-    void prepare() override { a_.imageReader_.cancel(); a_.images_.cancelClear(); cancelCsvFiles(); }
+    void prepare() override {
+        a_.imageReader_.cancel(); a_.images_.cancelClear();
+        a_.closeSessions(false);
+        cancelCsvFiles();
+    }
     bool screenshotBusy() override { return a_.shots_.busy(); }
     void cancelScreenshot() override { a_.shots_.cancel(); }
     bool saveTheme() override { SettingsStore files(a_); return a_.saves_.flushTheme(files); }
@@ -45,6 +49,7 @@ public:
     bool instrumentsStopped() override { return a_.data_.shutdownReady(); }
     void cancelRecorders() override {
         a_.data_.scopeRecorder().cancel(true); a_.data_.meterLogger().cancel(true); // Out of time: the .TMPs stay.
+        a_.data_.meterSession().cancel(true);
         cancelCsvFiles(); // Already ended in prepare(): idempotent.
     }
     // Finished steps, failed or not (each may end after a NOR timeout): watchdog progress.

@@ -131,8 +131,9 @@ void ScopeScreen::cards() {
     std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
     bar.item(1, "Position", value);
     static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
+    static constexpr const char *types[] = {"Trigger", "Pulse width", "Runt", "Rise/Fall"};
     std::snprintf(value, sizeof value, "CH%u %s", view.number(unsigned(model.triggerChannel())), modes[unsigned(triggerMode_) % 3]);
-    bar.item(2, "Trigger", value);
+    bar.item(2, types[unsigned(triggerType_)], value);
     if (focus_ == plot::Focus::Zoom) { // Zoom & Pan: F4 goes back to the card it came from.
         char factor[16];
         plot::ViewZoom::shownFactor(widget.options(), model, factor, sizeof factor);

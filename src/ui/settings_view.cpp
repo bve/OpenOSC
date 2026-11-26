@@ -39,7 +39,7 @@ void ApplicationView::menuFrame(const char *title, bool instrument, bool retaine
     lv_obj_set_hidden(menu_, false);
     lv_obj_set_style_border_width(menu_,1,0);
     if (!retained || !menuRetained_) {
-        lv_obj_clean(menu_); menuContent_.reset(); choicePopup_.reset(); draftPreviewObject_=nullptr;
+        lv_obj_clean(menu_); menuContent_.reset(); choicePopup_.reset(); draftPreviewObject_=nullptr; sessionTrendLive_=false;
     }
     menuRetained_=retained;
     menuContent_.begin();

@@ -20,7 +20,7 @@ public:
     }
     void name(unsigned row, char *output, size_t capacity) const override {
         static constexpr const char *names[] = {"Display", "Measurements", "Cursors", "Layout", "Colors", "Acquisition", "Decoder",
-            "Rearm Single", "Save RAW", "Save CSV","FFT spectrum", "Center channels", "Reset pan", "Trigger 50%", "Bode (FRA)"};
+            "Rearm Single", "Save waveform RAW", "Save waveform CSV", "FFT spectrum", "Center channels", "Reset pan", "Trigger 50%", "Bode (FRA)"};
         std::snprintf(output, capacity, "%s", row == Spectrum && spectrum_ ? "FFT settings" : row < Count ? names[row] : "");
     }
     unsigned options(unsigned row) const override { return row == Cursors ? 4 : 0; }

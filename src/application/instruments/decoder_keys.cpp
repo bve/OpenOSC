@@ -53,12 +53,14 @@ void ApplicationController::baudHintText(char *out, size_t capacity) const {
     }
     std::snprintf(out, capacity, data_.scopeHeld() ? "MENU: measure" : "HOLD first");
 }
-// Save CSV's value: the published result it would save.
+// Save CSV's value: the published result it would save, else why there is none (its state's word).
 void ApplicationController::decoderSummary() {
     const auto *shown = prefs_.scope.decoder.enabled ? decoder_.results().published() : nullptr;
     char text[24] = "no result";
     if (shown && shown->status == decoding::DecodeStatus::Done)
         std::snprintf(text, sizeof text, "%u ev #%lu", shown->count(), static_cast<unsigned long>(shown->key().sequence));
+    else if (shown) std::snprintf(text, sizeof text, "none: %s", decoding::TableText::statusWord(shown->status, false));
+    else if (prefs_.scope.decoder.enabled && decoder_.running()) std::snprintf(text, sizeof text, "decoding");
     decoderEditor_.result(text);
     baudHintText(text, sizeof text);
     decoderEditor_.baudHint(text);

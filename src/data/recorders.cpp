@@ -3,6 +3,7 @@
 #include "openosc/data/csv.hpp"
 #include "openosc/platform/board.hpp"
 #include <cstring>
+#include <new>
 #include <utility>
 
 namespace openosc {
@@ -13,38 +14,69 @@ bool ScopeRecorder::begin(scope::FrameLease &&lease, Format format) {
     }
     if (busy_ || !lease.valid() || !lease.view().valid())
         return false;
+    required_ = 0;
+    format_ = format;
     if (format == Format::Raw && !stream_.begin(lease.view()))
         return false;
-    const uint64_t reserve =
-        format == Format::Raw ? stream_.size() : uint64_t(lease.view().metadata().samples) * 180 + 1024;
-    if (!file_.begin(storage::Layout::Captures, "CAP", format == Format::Raw ? "RAW" : "CSV", reserve)) {
-        status_ = file_.status();
-        return false;
-    }
+    // Start immediately when even the largest representation fits. If the bound does not fit,
+    // measure the actual record in slices before opening a temporary file.
+    size_t header = 0;
     if (format == Format::Csv) {
-        const auto bytes =
-            Csv::scopeMetadata(lease.view().metadata(), reinterpret_cast<char *>(buffer_), sizeof buffer_);
-        if (!bytes) {
-            file_.cancel();
+        const auto &metadata = lease.view().metadata();
+        const size_t row = Csv::scopeRowLimit(metadata);
+        header = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
+        if (!row || !header) {
             status_ = DataStatus::InvalidArgument;
             return false;
         }
-        if (!file_.write(buffer_, bytes) || !file_.write(Csv::ScopeHeader, std::strlen(Csv::ScopeHeader))) {
-            status_ = file_.status();
-            return false;
-        }
+        required_ = header + std::strlen(Csv::ScopeHeader) + uint64_t(metadata.samples) * row;
+    } else
+        required_ = stream_.size();
+    const bool opened = file_.begin(storage::Layout::Captures, "CAP", format == Format::Raw ? "RAW" : "CSV", required_);
+    measuring_ = !opened && format == Format::Csv && file_.status() == DataStatus::NoSpace;
+    if (!opened && !measuring_) {
+        status_ = file_.status();
+        return false;
     }
+    if (measuring_) required_ = header + std::strlen(Csv::ScopeHeader);
+    else if (format == Format::Csv && !writeCsvHeader(header)) return false;
     lease_ = std::move(lease);
-    format_ = format;
     offset_ = 0;
     finishing_ = false;
     busy_ = true;
     status_ = DataStatus::Busy;
     return true;
 }
+bool ScopeRecorder::writeCsvHeader(size_t bytes) {
+    if (file_.write(buffer_, bytes) && file_.write(Csv::ScopeHeader, std::strlen(Csv::ScopeHeader))) return true;
+    status_ = file_.status();
+    return false;
+}
+void ScopeRecorder::measureCsv() {
+    constexpr unsigned RowsPerService = 96;
+    const auto &frame = lease_.view();
+    const auto &metadata = frame.metadata();
+    for (unsigned i = 0; i < RowsPerService && offset_ < metadata.samples; ++i, ++offset_) {
+        const size_t bytes = Csv::scope(frame, offset_, reinterpret_cast<char *>(buffer_), sizeof buffer_);
+        if (!bytes) { status_ = DataStatus::InvalidArgument; cancel(); return; }
+        required_ += bytes;
+    }
+    if (offset_ < metadata.samples) return;
+    const size_t header = Csv::scopeMetadata(metadata, reinterpret_cast<char *>(buffer_), sizeof buffer_);
+    if (!header) { status_ = DataStatus::InvalidArgument; cancel(); return; }
+    if (!file_.begin(storage::Layout::Captures, "CAP", "CSV", required_)) {
+        status_ = file_.status();
+        cancel();
+        return;
+    }
+    if (!writeCsvHeader(header)) { cancel(); return; }
+    offset_ = 0;
+    measuring_ = false;
+}
 void ScopeRecorder::service() {
     if (!busy_)
         return;
+    if (measuring_) { measureCsv(); return; }
     if (finishing_) {
         const auto result = file_.commitStep();
         if (result == DataStatus::Busy)
@@ -86,7 +118,7 @@ void ScopeRecorder::service() {
 void ScopeRecorder::cancel(bool keep) {
     file_.cancel(keep);
     lease_.release();
-    busy_ = finishing_ = false;
+    busy_ = finishing_ = measuring_ = false;
     if (status_ == DataStatus::Busy)
         status_ = DataStatus::NoData;
 }
@@ -162,4 +194,89 @@ void DmmCsvLogger::cancel(bool keep) {
     file_.cancel(keep);
     active_ = finishing_ = false;
 }
+
+bool DmmSessionRecorder::begin(const dmm::LogSettings &settings, const dmm::Result &latest, dmm::Function function, uint64_t nowUs,
+                               const char *board) {
+    if (active_) return false;
+    dmm::LogContext context;
+    if (!settings.valid() || !settings.fits()) { status_ = DataStatus::InvalidArgument; return false; }
+    if (!latest.sequence || !dmm::LogContext::of(latest, function, context)) { status_ = DataStatus::NoData; return false; }
+    char line[dmm::SessionCsv::LineBytes * 2];
+    const size_t header = dmm::SessionCsv::metadata(settings, context, board, line, sizeof line);
+    if (!header) { status_ = DataStatus::InvalidArgument; return false; }
+    if (!file_.begin(storage::Layout::Logs, Prefix, "CSV", settings.reserveBytes())) { status_ = file_.status(); return false; }
+    if (!file_.write(line, header)) { status_ = file_.status(); return false; }
+    if (!log_.begin(settings, context, nowUs)) { file_.cancel(); status_ = DataStatus::InvalidArgument; return false; }
+    bytes_ = header;
+    syncedAt_ = Board::milliseconds();
+    active_ = true;
+    finishing_ = false;
+    status_ = DataStatus::Busy;
+    return true;
+}
+bool DmmSessionRecorder::write(const char *line, size_t bytes) {
+    if (!file_.write(line, bytes)) { status_ = file_.status(); active_ = finishing_ = false; return false; }
+    bytes_ += bytes;
+    return true;
+}
+// The trailer's room stays free: a record that would leave less ends the session as storage_full.
+bool DmmSessionRecorder::record(const dmm::LogRecord &record) {
+    char line[dmm::SessionCsv::LineBytes];
+    const size_t bytes = dmm::SessionCsv::row(record, line, sizeof line);
+    if (!bytes) { log_.abort(dmm::LogEnd::Error); return false; }
+    if (bytes_ + bytes + dmm::SessionCsv::LineBytes > dmm::LogSettings::MaximumBytes) { log_.abort(dmm::LogEnd::StorageFull); return false; }
+    return write(line, bytes);
+}
+void DmmSessionRecorder::settle() {
+    if (!active_ || finishing_ || log_.active()) return;
+    char line[dmm::SessionCsv::LineBytes];
+    const size_t bytes = dmm::SessionCsv::trailer(log_.summary(), line, sizeof line);
+    if (bytes && !write(line, bytes)) return;
+    finishing_ = true;
+}
+void DmmSessionRecorder::observe(const dmm::Result &result, dmm::Function function) {
+    if (!recording()) return;
+    log_.observe(result, function, *this);
+    settle();
+}
+void DmmSessionRecorder::stop(uint64_t nowUs, dmm::LogEnd end) {
+    if (!recording()) return;
+    log_.finish(nowUs, end, *this);
+    settle();
+}
+void DmmSessionRecorder::service(uint64_t nowUs) {
+    if (!active_) return;
+    if (!finishing_) {
+        log_.service(nowUs, *this);
+        settle();
+        if (!active_) return;
+        const uint32_t now = Board::milliseconds();
+        if (!finishing_ && uint32_t(now - syncedAt_) >= SyncMs) {
+            syncedAt_ = now;
+            if (!file_.sync()) { status_ = file_.status(); active_ = false; return; }
+        }
+        if (!finishing_) return;
+    }
+    const auto result = file_.commitStep();
+    if (result == DataStatus::Busy) return;
+    status_ = result;
+    active_ = finishing_ = false;
+}
+void DmmSessionRecorder::cancel(bool keep) {
+    if (!active_) return;
+    file_.cancel(keep);
+    if (log_.active()) log_.abort(dmm::LogEnd::Error);
+    active_ = finishing_ = false;
+    if (status_ == DataStatus::Busy) status_ = DataStatus::NoData;
+}
+#ifdef OPENOSC_APPLICATION
+namespace {
+alignas(8) __attribute__((section(".dmm_log"))) unsigned char sessionStorage[sizeof(DmmSessionRecorder)];
+DmmSessionRecorder *session = nullptr;
+} // namespace
+DmmSessionRecorder &dmmSessionRecorder(Filesystem &fs) {
+    if (!session) session = new (sessionStorage) DmmSessionRecorder(fs);
+    return *session;
+}
+#endif
 } // namespace openosc

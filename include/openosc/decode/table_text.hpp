@@ -60,6 +60,9 @@ public:
                      Line &out);
     // The empty table's line: why there is no event (no record yet, its status, or none in it).
     static const char *empty(const ResultSet *shown, bool decoding);
+    // A published result's state in the info line's word ("SOURCE OFF", brief "SRC OFF"; WAIT for one
+    // not decoded yet or cancelled), "" for Done: also Save CSV's value when there is nothing to save.
+    static const char *statusWord(DecodeStatus status, bool brief);
     // A value with three significant digits and an SI prefix ("850ns", "12.4us", "100MS/s").
     static void quantity(double value, const char *unit, char *out, unsigned capacity);
     static void millivolts(int64_t mv, char *out, unsigned capacity); // "-1.650V" (any int32 or uint32 mV)

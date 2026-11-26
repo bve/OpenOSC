@@ -5,7 +5,24 @@
 
 namespace openosc::scope {
 bool TriggerSettings::valid() const {
-    return unsigned(channel) < 2 && unsigned(edge) < 2 && unsigned(mode) < 3 && level >= -128 && level <= 127 && position<=1000;
+    return unsigned(channel) < 2 && unsigned(edge) < 2 && unsigned(mode) < 3 && level >= -128 && level <= 127 && position<=1000 &&
+           unsigned(type) < 4 && unsigned(condition) < 5 && level2 >= -128 && level2 <= 127 &&
+           minimumNs >= MinimumNs && minimumNs <= MaximumNs && maximumNs >= MinimumNs && maximumNs <= MaximumNs;
+}
+TriggerEdge TriggerSettings::tag() const {
+    return {comparatorLevel(), channel, comparatorEdge() == Edge::Rising, true};
+}
+bool TriggerSettings::comparatorUsesLevel2() const {
+    if (!twoLevels()) return false;
+    const bool upper = (edge == Edge::Rising) == (type == TriggerType::Transition);
+    return upper ? level2 > level : level2 <= level;
+}
+void TriggerSettings::setComparatorLevel(int16_t code) {
+    if (!twoLevels()) { level = code; return; }
+    const bool upper = (edge == Edge::Rising) == (type == TriggerType::Transition);
+    const bool secondary = comparatorUsesLevel2();
+    const auto other = secondary ? level : level2;
+    (secondary ? level2 : level) = upper ? std::max(code, other) : std::min(code, other);
 }
 int TriggerSettings::armLevel() const {
     if (!reject) return level;

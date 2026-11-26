@@ -3,6 +3,7 @@
 #include "openosc/acquisition/trigger_record.hpp"
 #include "openosc/acquisition/dma_lane_progress.hpp"
 #include "openosc/acquisition/history_schedule.hpp"
+#include "openosc/platform/board.hpp"
 #include "openosc/platform/critical_section.hpp"
 #include "openosc/platform/dma_stream.hpp"
 #include "openosc/platform/usb_trace.hpp"
@@ -58,6 +59,11 @@ bool CaptureDma::splitWindow(const uint64_t (&lanes)[4],const uint32_t (&served)
     captureFault(1U << 19 | (served[0] & 0x1ffU) | (made & 0x1ffU) << 23);
     return false;
 }
+uint32_t CaptureDma::autoWaitMs(uint32_t samples, Rational rate) {
+    if (!rate.valid()) return 1000;
+    const uint64_t ms=uint64_t(samples)*1000*rate.denominator/rate.numerator;
+    return uint32_t(std::clamp<uint64_t>(ms,20,1000));
+}
 bool CaptureDma::force() {
     if (!gated_ || stopFailed_ || mailbox_.state()!=FrameMailbox::State::Capturing) return false;
     if (frozen_) return true; // Past its event: published on the next service().
@@ -88,8 +94,11 @@ void CaptureDma::publishTriggered() {
     const uint16_t *banks[4]={buffer_.lanes[0],buffer_.lanes[1],buffer_.lanes[2],buffer_.lanes[3]};
     const FrameView ring(metadata,banks,buffer_.wordsPerLane(),buffer_.split() ? &split_ : nullptr);
     const uint32_t target=event<=first ? 0 : uint32_t(std::min<uint64_t>(metadata.samples-1,event-first));
-    auto frame=TriggerRecord::select(ring,trigger_,requestedSamples_,target,forced_,comparatorEvent_);
+    const bool waited=!autoWaiting_ ||
+        Board::milliseconds()-autoSince_>=autoWaitMs(requestedSamples_,metadata.samplesPerSecond);
+    auto frame=TriggerRecord::select(ring,trigger_,requestedSamples_,target,forced_,comparatorEvent_,waited);
     if (!frame.valid()) {
+        if (trigger_.qualified()) ++misses_;
         mailbox_.cancel(); status_=DataStatus::NoData; return; // A comparator event must agree with the raw edge.
     }
     // Trace: how late the freeze landed after the record the trigger asked for (bits 0-15, bit 31 when
@@ -110,7 +119,7 @@ void CaptureDma::publishTriggered() {
     edgeless_=!frame.metadata().triggered;
     edgelessSequence_=frame.metadata().sequence; edgelessTimestamp_=frame.metadata().timestampUs;
     __DMB();
-    if (mailbox_.publish(frame)) { ++completed_; status_=DataStatus::Ok; }
+    if (mailbox_.publish(frame)) { ++completed_; status_=DataStatus::Ok; autoWaiting_=false; }
     else { mailbox_.cancel(); status_=DataStatus::InvalidArgument; }
 }
 } // namespace openosc::scope

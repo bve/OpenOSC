@@ -19,16 +19,18 @@ template<class T> bool boolean(JsonObjectConst object, const char *name, T &valu
     value = object[name].as<bool>();
     return true;
 }
-template<size_t N> bool choice(JsonObjectConst object, const char *name, uint32_t &value,
+template<class T, size_t N> bool choice(JsonObjectConst object, const char *name, T &value,
                                const char *const (&names)[N]) {
     if (!object.containsKey(name)) return true;
     if (!object[name].is<const char *>()) return false;
     for (unsigned i = 0; i < N; ++i)
-        if (!std::strcmp(object[name], names[i])) { value = i; return true; }
+        if (!std::strcmp(object[name], names[i])) { value = T(i); return true; }
     return false;
 }
 constexpr const char *couplings[] = {"dc", "ac"}, *edges[] = {"rising", "falling"};
 constexpr const char *triggerModes[] = {"auto", "normal", "single"};
+constexpr const char *triggerTypes[] = {"edge", "width", "runt", "transition"};
+constexpr const char *triggerConditions[] = {"any", "less", "greater", "inside", "outside"};
 constexpr const char *junctionSources[] = {"manual", "startup", "live"};
 constexpr const char *factoryRecordFormats[] = {"auto", "long", "compact", "mkr"}; // FactoryRecordPolicy.
 constexpr const char *displays[] = {"primary", "statistics", "trend", "analog"};
@@ -124,6 +126,22 @@ void hold(JsonObject meter, const dmm::HoldSettings &values) {
     object["delay_ms"] = values.delayMs; object["stable_ms"] = values.stableMs;
     object["band_digits"] = values.bandDigits; object["rearm_digits"] = values.rearmDigits;
     object["min_readings"] = values.minReadings;
+}
+// meter.log (GitHub #144) as [mode, interval_s, duration_s, threshold_permille], mode 0 interval or 1 event:
+// numbers only, the shortest form (the longest file keeps a fifth of the JSON string budget free).
+// Each element stands alone against LogSettings' lists (a value outside them, of another type, missing):
+// that one keeps its default. Absent (files before it) or not an array: the defaults.
+void sessionLog(JsonArrayConst array, dmm::LogSettings &output) {
+    dmm::LogSettings value;
+    if (array[0].is<uint32_t>() && array[0].as<uint32_t>() < unsigned(dmm::LogMode::Count)) value.mode(dmm::LogMode(array[0].as<uint32_t>()));
+    if (array[1].is<uint32_t>()) value.intervalS(array[1].as<uint32_t>());
+    if (array[2].is<uint32_t>()) value.durationS(array[2].as<uint32_t>());
+    if (array[3].is<uint32_t>()) value.thresholdPermille(array[3].as<uint32_t>());
+    output = value;
+}
+void sessionLog(JsonObject meter, const dmm::LogSettings &values) {
+    auto array = meter.createNestedArray("log");
+    array.add(unsigned(values.mode())); array.add(values.intervalS()); array.add(values.durationS()); array.add(values.thresholdPermille());
 }
 // scope.decoder: every field optional; an invalid one (type, name, range) keeps the decoder's
 // defaults whole, never rejects the file (the decoder is not worth losing the Scope's settings).
@@ -337,6 +355,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         look.appearance = MeterAppearance();
     }
     if (meter["hold"].is<JsonObjectConst>()) hold(meter["hold"].as<JsonObjectConst>(), output.meter.hold);
+    if (meter["log"].is<JsonArrayConst>()) sessionLog(meter["log"].as<JsonArrayConst>(), output.meter.log);
     if (const auto temperature = meter["temperature"].as<JsonObjectConst>(); !temperature.isNull()) {
         dmm::TemperatureSettings settings;
         uint32_t fahrenheit = 0, mcuSensor = 0;
@@ -381,7 +400,10 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         const auto trigger = scope["trigger"].as<JsonObjectConst>();
         if (!number(trigger, "source", s.triggerSource) || !number(trigger, "level_codes", s.triggerLevel) ||
             !number(trigger,"position_permille",s.triggerPosition) || !boolean(trigger,"noise_reject",s.triggerReject) ||
-            !choice(trigger, "edge", s.triggerEdge, edges) || !choice(trigger, "mode", s.triggerMode, triggerModes)) return false;
+            !choice(trigger, "edge", s.triggerEdge, edges) || !choice(trigger, "mode", s.triggerMode, triggerModes) ||
+            !choice(trigger, "type", s.triggerType, triggerTypes) || !choice(trigger, "condition", s.triggerCondition, triggerConditions) ||
+            !number(trigger, "level_2_codes", s.triggerLevel2) || !number(trigger, "minimum_ns", s.triggerMinimumNs) ||
+            !number(trigger, "maximum_ns", s.triggerMaximumNs)) return false;
     }
     if (scope.containsKey("measurements")) {
         const auto measurements = scope["measurements"].as<JsonArrayConst>();
@@ -431,6 +453,9 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     trigger["mode"] = triggerModes[s.triggerMode]; trigger["level_codes"] = s.triggerLevel;
     trigger["position_permille"]=s.triggerPosition;
     trigger["noise_reject"]=bool(s.triggerReject);
+    trigger["type"] = triggerTypes[s.triggerType]; trigger["condition"] = triggerConditions[s.triggerCondition];
+    trigger["level_2_codes"] = s.triggerLevel2;
+    trigger["minimum_ns"] = s.triggerMinimumNs; trigger["maximum_ns"] = s.triggerMaximumNs;
     auto measurements = scope.createNestedArray("measurements");
     for (const auto &channel : s.measurements.values) {
         auto row=measurements.createNestedArray();
@@ -454,6 +479,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     if (values.meter.rangeFunction < MeterFunctionCount) meter["range_function"] = MeterFunctions[values.meter.rangeFunction].key;
     appearance(meter, values.meter.appearance);
     hold(meter, values.meter.hold);
+    sessionLog(meter, values.meter.log);
     const auto &temperature = values.meter.temperature;
     if (!(temperature == dmm::TemperatureSettings{})) {
         auto object = meter.createNestedObject("temperature");

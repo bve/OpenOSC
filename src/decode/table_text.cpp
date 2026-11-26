@@ -185,7 +185,12 @@ void levelLine(const ResultSet &set, unsigned n, Writer &w) {
     TableText::millivolts(set.hysteresisMv[c & 1], b, sizeof b);
     if (set.difference) w.add("%s thr %s hyst %s", set.protocol() == Protocol::Can ? "CANH-CANL" : "CH1-CH2", a, b);
     else w.add("CH%u thr %s hyst %s", (c & 1) + 1, a, b);
-    if (set.hysteresisAuto) w.add(" auto%u%%", Protocols::AutoHysteresisPercent);
+    // RS-232: the band may be its floor (Protocols::autoHysteresisFloorMv), wider than the swing's share.
+    const uint32_t floor = Protocols::autoHysteresisFloorMv(set.protocol(), set.thresholdMv[c & 1]);
+    if (set.hysteresisAuto) {
+        if (floor && set.hysteresisMv[c & 1] == floor) w.add(" auto min");
+        else w.add(" auto%u%%", Protocols::AutoHysteresisPercent);
+    }
 }
 // Detail: the result's quality in full (the info line may cap or drop the counts): EVT> (lost
 // descriptors + dropped units), OVR, CLIP points, Fs LOW seen, glitches.
@@ -451,15 +456,8 @@ void TableText::info(const Settings &s, const ResultSet *shown, const ResultSet 
     if (building && building->samples)
         word(Must, building->measuring ? "LEVELS " : "DEC ", building->measuring ? "L" : "D", percentOf(*building), true, true);
     else if (!shown) word(Must, "WAIT", "WAIT");
-    else switch (shown->status) {
-        case DecodeStatus::Done: break; // Said by cov 100% (a result published whole).
-        case DecodeStatus::NoScale: word(Must, "NO SCALE", "NO SCALE"); break;
-        case DecodeStatus::OutOfRange: word(Must, "THR OUT", "THR OUT"); break;
-        case DecodeStatus::ChannelOff: word(Must, "SOURCE OFF", "SRC OFF"); break;
-        case DecodeStatus::Timing: word(Must, "RATE OUT", "RATE OUT"); break;
-        case DecodeStatus::Coupling: word(Must, "AC: USE DC", "AC CPL"); break;
-        default: word(Must, "WAIT", "WAIT"); break;
-        }
+    else if (shown->status != DecodeStatus::Done) // Done: said by cov 100% (a result published whole).
+        word(Must, statusWord(shown->status, false), statusWord(shown->status, true));
     if (c.exporting) word(Must, "EXPORT", "EXP");
     if (shown && shown->samples) word(Must, "cov", "cov", percentOf(*shown), true, true);
     const unsigned qualityFirst = n;
@@ -503,6 +501,17 @@ void TableText::info(const Settings &s, const ResultSet *shown, const ResultSet 
             if (w.used < InfoWidth) w.add("~"); else out[InfoWidth - 1] = '~';
             break;
         }
+}
+const char *TableText::statusWord(DecodeStatus status, bool brief) {
+    switch (status) {
+    case DecodeStatus::Done: return "";
+    case DecodeStatus::NoScale: return "NO SCALE";
+    case DecodeStatus::OutOfRange: return "THR OUT";
+    case DecodeStatus::ChannelOff: return brief ? "SRC OFF" : "SOURCE OFF";
+    case DecodeStatus::Timing: return "RATE OUT";
+    case DecodeStatus::Coupling: return brief ? "AC CPL" : "AC: USE DC";
+    default: return "WAIT";
+    }
 }
 const char *TableText::empty(const ResultSet *shown, bool decoding) {
     if (!shown) return decoding ? "Decoding the record..." : "Waiting for a record";

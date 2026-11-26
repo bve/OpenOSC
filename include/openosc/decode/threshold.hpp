@@ -19,6 +19,13 @@ struct ThresholdCodes {
     // The automatic hysteresis (plan §6.1) of a line whose codes span `swing` (highest - lowest):
     // `percent` of that swing in millivolts at the probe tip, rounded to nearest; 0 without a scale.
     static uint32_t autoHysteresisMv(const scope::ChannelMetadata &channel, uint32_t swing, unsigned percent);
+    // A line's Auto band: `percent` of the swing its codes span in the record (lowest..highest), at
+    // least floorMv (Protocols::autoHysteresisFloorMv), the width used into hysteresisMv. Within the
+    // ADC's codes it is of(). A level the floor puts beyond them is the rail when the record reached
+    // that rail (a clipped signal still decodes), else a code no point has (-129, 128): the line never
+    // takes that level, so the record gives no transition. The threshold itself must be in range.
+    static ThresholdCodes automatic(const scope::ChannelMetadata &channel, int32_t thresholdMv, int32_t lowest, int32_t highest,
+                                    unsigned percent, uint32_t floorMv, uint32_t &hysteresisMv);
 };
 // CANH - CANL (plan §8.5) at the probe tips: each channel's codes through its own zero, scale and
 // probe, once a record (no floating point per point). Both channels must be calibrated. The table's

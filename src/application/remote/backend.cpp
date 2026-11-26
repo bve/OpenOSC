@@ -3,6 +3,7 @@
 #include "openosc/application/scpi_backend.hpp"
 #include "openosc/screenshot/reader.hpp"
 #include <cstring>
+#include <strings.h>
 #include "openosc/application/controller.hpp"
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/input_service.hpp"
@@ -292,6 +293,11 @@ int InstrumentBackend::fileDelete(const char *path) {
     FILINFO info{};
     if (const FRESULT found = f_stat(path, &info); found != FR_OK || (info.fattrib & (AM_DIR | AM_HID | AM_SYS)))
         return found == FR_OK || found == FR_NO_FILE || found == FR_NO_PATH ? -256 : found == FR_INVALID_NAME ? -257 : -250;
+    // A DMM session's file: none while the saved sessions are browsed (one may be read), nor the .TMP being written.
+    const char *recording = a.data_.meterSession().active() ? a.data_.meterSession().path() : nullptr;
+    const size_t length = recording ? std::strlen(recording) : 0;
+    const bool written = length > 3 && std::strlen(path) == length && !strncasecmp(path, recording, length - 3);
+    if (written || (a.sessionsBrowsing() && !strncasecmp(path, storage::Layout::Logs, std::strlen(storage::Layout::Logs)))) return -221;
     if (storage::openReaders || (shots && (a.imageReader_.busy() || a.images_.clearing() || a.panel_ == ApplicationController::Panel::Images ||
         (a.panel_ == ApplicationController::Panel::Confirmation && a.confirmationImages_)))) return -221; // Being read or browsed.
     const FRESULT result = f_unlink(path);

@@ -7,6 +7,7 @@
 namespace openosc {
 void ApplicationController::confirmOperation(const ui::Confirmation &question,ConfirmHandler handler) {
     confirmationImages_=panel_==Panel::Images;
+    confirmationSessions_=panel_==Panel::Sessions; // Its browser stays allocated until the answer.
     confirmationZero_=panel_==Panel::Zero;
     confirmationSettings_=state_.settingsOpen;
     cancelAuto(HAL_GetTick()); confirmation_=question; confirmationHandler_=handler;
@@ -27,6 +28,7 @@ void ApplicationController::confirmationKeys(uint32_t keys, uint32_t now) {
 void ApplicationController::leaveConfirmation(uint32_t now) {
     confirmationHandler_=nullptr;
     if (confirmationImages_) { panel_=Panel::Images; imageShowing_=false; showImages(); }
+    else if (confirmationSessions_ && sessions_) { confirmationSessions_=false; panel_=Panel::Sessions; showSessions(); }
     else if (confirmationZero_ && data_.zeroBusy()) { panel_=Panel::Zero; zeroProgress_=UINT32_MAX; serviceZeroUi(now); }
     else if (confirmationSettings_) { panel_=Panel::None; state_.settingsOpen=true; navigator_.reset(settingsMenu_.selected()); showSettings(); }
     else closePanel();

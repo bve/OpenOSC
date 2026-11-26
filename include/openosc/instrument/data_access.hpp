@@ -182,6 +182,14 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     bool scopeRecording() const { return recordPending_ || recorder_.busy(); }
     DataStatus scopeRecordStatus() const { return recordStatus_; }
     DmmCsvLogger &meterLogger() { return logger_; }
+    // DMM session logging (GitHub #144): starts on the DMM's current reading (its function, the
+    // DMM's own REL) at nowUs(); every later decoded packet goes to it, as to the per-packet log. It
+    // ends on stop, its duration, leaving the DMM (activate) and at shutdown (beginShutdown), each
+    // committed by poll(). False: not in the DMM, no reading, or the recorder's status() says why.
+    bool startMeterSession(const dmm::LogSettings &settings);
+    void stopMeterSession() { session_.stop(timeUs_, dmm::LogEnd::Manual); }
+    const DmmSessionRecorder &meterSession() const { return session_; }
+    DmmSessionRecorder &meterSession() { return session_; }
     uint32_t scopeCaptures() const { return capture_.completed(); }
     // The newest frame a reader is given (acquireScope's rule): finite records and Roll snapshots
     // alike, once serviceScopeFrames accepted them (Auto, an edge, forced). Takes no lease.
@@ -309,7 +317,8 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     // The ZT706S module's OFF frame goes out first (bounded: ModuleLink::ExchangeMs). Ready also
     // when it was not acknowledged: power off, restart and Recovery do not hang on the module;
     // generatorOffConfirmed() says which, and the next boot sends OFF again.
-    bool shutdownReady() const { return stopping_ && !dmmClosing_ && !recorder_.busy() && !logger_.active() && !generator_.busy(); }
+    bool shutdownReady() const { return stopping_ && !dmmClosing_ && !recorder_.busy() && !logger_.active() && !session_.active() &&
+                                         !generator_.busy(); }
     bool generatorOffConfirmed() const { return generator_.offConfirmed(); }
     DataStatus status() const { return status_; }
     uint64_t nowUs() const { return timeUs_; }
@@ -474,6 +483,12 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     dmm::MeterCommands dmm_; // Every DMM command on uart_ (selector, keys, range, the AUTO/RANGE stroke).
     ScopeRecorder recorder_;
     DmmCsvLogger logger_;
+#ifdef OPENOSC_APPLICATION
+    DmmSessionRecorder &session_; // ITCM (dmmSessionRecorder): not in main()'s frame.
+#else
+    DmmSessionRecorder session_;
+#endif
+    dmm::Function meterFunction() const; // The function a reading is of (Type K: Temperature).
     scope::FrameLease heldFrame_;
     scope::HeldTrigger heldTrigger_;
     scope::InterleaveTracker interleave_; // ZT706S: CH1's frequency, range correction and gain (InterleaveTracker).
@@ -526,6 +541,9 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     static constexpr uint32_t TriggerWaitMs = 250;
     uint32_t armedSequence_ = 0, armedAt_ = 0;
     bool armedSeen_ = false;
+    // A qualified trigger's unqualified candidates rearm a new capture each (CaptureDma::misses): Armed
+    // never lasts, so WAIT follows TriggerWaitMs of them without an accepted record.
+    uint32_t missesSeen_ = 0;
     bool usbQuiet_ = false; // quietCapture(true): no fast capture starts.
 };
 } // namespace openosc

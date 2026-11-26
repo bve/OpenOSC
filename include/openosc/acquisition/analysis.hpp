@@ -4,6 +4,17 @@
 namespace openosc::scope {
 enum class TriggerMode : uint8_t { Auto, Normal, Single };
 enum class Edge : uint8_t { Rising, Falling };
+// What the trigger looks for (GitHub #133). Edge: a crossing of `level`. Width: a complete pulse
+// beyond `level` (positive: above it, Rising; negative: below it, Falling) whose width meets the time
+// condition, triggered at its trailing edge. Runt: a pulse that crosses one level of the band between
+// `level` and `level2` and returns over it without crossing the other one (positive: starts at the
+// low level, Rising; negative: at the high level, Falling), triggered where it returns. Transition:
+// a rise (Rising) from the low level to the high one or a fall (Falling) from the high to the low,
+// whose time meets the condition, triggered where it crosses the second level.
+enum class TriggerType : uint8_t { Edge, Width, Runt, Transition };
+// The time condition of a qualified trigger: Any (none), Less: t < maximumNs, Greater: t > minimumNs,
+// Inside: minimumNs < t < maximumNs, Outside: t < minimumNs or t > maximumNs.
+enum class TriggerCondition : uint8_t { Any, Less, Greater, Inside, Outside };
 struct TriggerSettings {
     Channel channel = Channel::Ch1;
     Edge edge = Edge::Rising;
@@ -17,12 +28,41 @@ struct TriggerSettings {
     // also for files without it); a bare TriggerSettings (internal trials, tests) counts every crossing.
     bool reject = false;
     static constexpr int RejectCodes = 4;
+    // Qualified triggers (TriggerType). `edge` is their polarity; Runt and Transition use the band
+    // between `level` and `level2` in either order. Times in nanoseconds, MinimumNs..MaximumNs.
+    TriggerType type = TriggerType::Edge;
+    TriggerCondition condition = TriggerCondition::Greater;
+    int16_t level2 = -20;
+    uint32_t minimumNs = 1000, maximumNs = 10000;
+    static constexpr uint32_t MinimumNs = 1, MaximumNs = 1000000000;
     bool valid() const;
-    // What an index found with these settings is tagged with (FrameMetadata::triggerEdge).
-    TriggerEdge tag() const { return {level, channel, edge == Edge::Rising, true}; }
+    bool qualified() const { return type != TriggerType::Edge; }
+    bool twoLevels() const { return type == TriggerType::Runt || type == TriggerType::Transition; }
+    int lowLevel() const { return twoLevels() && level2 < level ? level2 : level; }
+    int highLevel() const { return twoLevels() && level2 > level ? level2 : level; }
+    // What an index found with these settings is tagged with (FrameMetadata::triggerEdge): the crossing
+    // it is at. Edge: `level` and `edge`. Width and Runt: the trailing edge, back over the level the
+    // pulse started from (positive: falling); Transition: the second level, crossed the same way.
+    TriggerEdge tag() const;
+    // The comparator watches that same crossing: its event is a candidate's trigger point, and the
+    // ring before it holds the candidate's start (TriggerQualifier qualifies it at the freeze).
+    int16_t comparatorLevel() const { return comparatorUsesLevel2() ? level2 : level; }
+    Edge comparatorEdge() const {
+        if (type != TriggerType::Width && type != TriggerType::Runt) return edge;
+        return edge == Edge::Rising ? Edge::Falling : Edge::Rising;
+    }
+    bool comparatorUsesLevel2() const;
+    void setComparatorLevel(int16_t code);
     // The code a rising (falling) edge must have come from at or below (above): the level itself
     // without reject, else RejectCodes beyond it, within the ADC's codes.
     int armLevel() const;
+    // The same search: every field a found index depends on (not the mode's or pretrigger's use of it).
+    bool sameSearch(const TriggerSettings &o) const {
+        return channel == o.channel && edge == o.edge && level == o.level && reject == o.reject && type == o.type &&
+               condition == o.condition && level2 == o.level2 && minimumNs == o.minimumNs && maximumNs == o.maximumNs;
+    }
+    bool operator==(const TriggerSettings &o) const { return sameSearch(o) && mode == o.mode && position == o.position; }
+    bool operator!=(const TriggerSettings &o) const { return !(*this == o); }
 };
 // Edges of one channel of a record: sample i-1 on or below (above) the level, sample i above
 // (below), and, with reject, armed (TriggerSettings::armLevel) within the run on the starting side

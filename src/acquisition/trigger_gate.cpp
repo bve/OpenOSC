@@ -45,8 +45,9 @@ void TriggerGate::configureLines() {
     SYSCFG->EXTICR[0]=(SYSCFG->EXTICR[0]&~15U)|4U; // PE0, CH2
     SYSCFG->EXTICR[3]&=~(15U<<12); // PA15, CH1
     EXTI->IMR1&=~Lines;
-    // Factory mapping is inverted at the comparator pad: analog rising -> GPIO falling.
-    if (settings_.edge==Edge::Rising) { EXTI->RTSR1&=~Lines; EXTI->FTSR1=(EXTI->FTSR1&~Lines)|line_; }
+    // Factory mapping is inverted at the comparator pad: analog rising -> GPIO falling. A qualified
+    // trigger's comparator watches its candidates' trigger point (TriggerSettings::comparatorEdge).
+    if (settings_.comparatorEdge()==Edge::Rising) { EXTI->RTSR1&=~Lines; EXTI->FTSR1=(EXTI->FTSR1&~Lines)|line_; }
     else { EXTI->FTSR1&=~Lines; EXTI->RTSR1=(EXTI->RTSR1&~Lines)|line_; }
     EXTI->PR1=Lines; // W1C: no request left from an earlier capture.
     // The mask arming writes back with the line set: a write, no read, then. This cached full write

@@ -13,7 +13,7 @@ class MeterProperties final : public PropertyList {
 public:
     // Hold: its own list (MeterHoldProperties), the mode as its value.
     enum Row { Range, Display, Colors, Digits, Appearance, Layout, Statistics, BarGraph, BarUnit, Relative, Hold, ResetStatistics,
-               Logging, JunctionSource, ColdJunction, TemperatureUnit, SerialOutput, Count };
+               Logging, SessionLog, JunctionSource, ColdJunction, TemperatureUnit, SerialOutput, Count };
     static constexpr unsigned VisibleRows = board::Current::Features.dmmSerialOutput ? Count : SerialOutput;
     explicit MeterProperties(const dmm::Result &result, unsigned display = 0, bool statistics = true,
                              bool relative = false, bool logging = false, bool serial=false, bool jackBusy=false,
@@ -32,6 +32,7 @@ public:
     bool relative() const { return relative_; }
     bool automatic() const { return result_.range == dmm::RangeMode::Auto; }
     bool logging() const { return logging_; }
+    MeterProperties &session(bool recording) { session_ = recording; return *this; } // Session log's value: REC.
     bool serial() const { return serial_; }
     dmm::TemperatureSettings temperature() const { return temperature_; }
     MeterProperties &temperature(dmm::TemperatureSettings settings) { temperature_ = settings; return *this; }
@@ -59,7 +60,7 @@ private:
     bool ranged() const; // The function shown has ranges (dmm::Ranges::selectable): else Range is Info, "None".
     dmm::Result result_;
     unsigned display_, face_, palette_;
-    bool statistics_, relative_, logging_,serial_,jackBusy_, bar_ = true, barUnit_ = true;
+    bool statistics_, relative_, logging_,serial_,jackBusy_, bar_ = true, barUnit_ = true, session_ = false;
     const Theme *theme_;
     dmm::HoldMode hold_;
     dmm::TemperatureSettings temperature_;

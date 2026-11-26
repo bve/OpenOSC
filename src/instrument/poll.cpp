@@ -91,8 +91,9 @@ void DataAccess::poll(uint32_t now) {
             watchdog_.packet(timeUs_);
             if (meter_.accept(packet, sizeof packet, timeUs_)) {
                 status_ = meter_.latest().primary.status;
-                if (logger_.active())
-                    logger_.append(meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest(), meter_.userHeld());
+                const auto &reading = meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest();
+                if (logger_.active()) logger_.append(reading, meter_.userHeld());
+                session_.observe(reading, meterFunction());
             }
         }
         meter_.service(timeUs_); // The hold mode's countdown and freshness, with or without packets.
@@ -113,6 +114,7 @@ void DataAccess::poll(uint32_t now) {
     recorder_.service();
     if (recording && !recorder_.busy()) recordStatus_ = recorder_.status();
     logger_.service();
+    session_.service(timeUs_); // Time and the commit, also while stopping (beginShutdown ended it).
     if (active_ && !stopping_ && measurement_==MeasurementMode::Multimeter) serial_.service(meter_.latest(),now);
     serviceZero(now);
     serviceScopeCapture(now);

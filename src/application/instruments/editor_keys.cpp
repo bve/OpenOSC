@@ -67,16 +67,16 @@ void ApplicationController::triggerKeys(uint32_t keys, uint32_t now, bool fine) 
     auto request = data_.scopeRequest();
     request.trigger = triggerEditor_.settings();
     const auto bounds = triggerBounds(request);
-    const bool editing = navigator_.row() == ui::TriggerEditor::Level && navigator_.mode() == ui::PropertyNavigator::Mode::Number;
+    const bool editing = triggerEditor_.levelRow(navigator_.row()) && navigator_.mode() == ui::PropertyNavigator::Mode::Number;
     const int vertical = (keys & Keypad::Up ? 1 : 0) - (keys & Keypad::Down ? 1 : 0);
     triggerEditor_.levelEdit(bounds, editing && vertical ? std::abs(triggerStep(vertical, fine)) : 1);
     const auto key = fieldKeys(keys, triggerEditor_, now);
     if (key == FieldKey::Action) {
-        if (navigator_.row() == ui::TriggerEditor::Center) centerTrigger(now);
+        if (triggerEditor_.field(navigator_.row()) == ui::TriggerEditor::Center) centerTrigger(now);
         else triggerMidpoint(now);
         triggerEditor_.begin(data_.scopeRequest().trigger);
         view_.properties(triggerEditor_, navigator_);
-    } else if (key == FieldKey::Committed) commitTrigger(now, navigator_.row() == ui::TriggerEditor::Level);
+    } else if (key == FieldKey::Committed) commitTrigger(now, triggerEditor_.keysLevel(navigator_.row()));
     // The draft, a new source or a committed level at either end: the Level row's mark follows.
     if (panel_ == Panel::Trigger && markTriggerEditor()) view_.properties(triggerEditor_, navigator_);
 }

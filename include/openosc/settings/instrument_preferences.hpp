@@ -1,8 +1,10 @@
 #pragma once
 #include "openosc/measurement/meter_function.hpp"
 #include "openosc/measurement/dmm/hold.hpp"
+#include "openosc/measurement/dmm/log_settings.hpp"
 #include "openosc/measurement/dmm/temperature.hpp"
 #include <cstdint>
+#include "openosc/acquisition/analysis.hpp"
 #include "openosc/acquisition/readouts.hpp"
 #include "openosc/acquisition/record_depths.hpp"
 #include "openosc/settings/meter_appearance.hpp"
@@ -17,10 +19,14 @@ struct ScopePreferences {
     uint32_t recordPoints = scope::RecordBudget::Default; // Total of the enabled channels.
     uint32_t enabled[2] = {1, 1}, coupling[2] = {0, 0}, position[2] = {80, 80};
     uint32_t probeNumerator[2] = {1, 1}, probeDenominator[2] = {1, 1};
-    uint32_t triggerSource = 0, triggerEdge = 0, triggerMode = 0;
-    int32_t triggerLevel = 0;
-    uint32_t triggerPosition=250;
-    uint32_t triggerReject=1; // TriggerSettings::reject; files without it: on.
+    // The qualified triggers (GitHub #133, TriggerSettings): files without them read an edge trigger
+    // with these defaults. Keep ADC codes, fractions and small choices at their natural widths.
+    uint32_t triggerMinimumNs = scope::TriggerSettings{}.minimumNs, triggerMaximumNs = scope::TriggerSettings{}.maximumNs;
+    uint16_t triggerPosition = 250;
+    int8_t triggerLevel = 0, triggerLevel2 = scope::TriggerSettings{}.level2;
+    uint8_t triggerSource = 0, triggerEdge = 0, triggerMode = 0;
+    uint8_t triggerReject = 1; // TriggerSettings::reject; files without it: on.
+    uint8_t triggerType = 0, triggerCondition = uint8_t(scope::TriggerCondition::Greater);
     scope::ReadoutSelection measurements;
     uint32_t runMode = 0; // Index into RunModes.
     uint32_t rollAuto=1;
@@ -52,6 +58,10 @@ struct MeterPreferences {
     // Per-element overrides over palette and face (Measurement > Appearance); none: the base look.
     // The reading's font override, when set, is the reading's face; Default: `face`.
     MeterAppearance appearance;
+    // Measurement > Session log (GitHub #144): the next session's mode, interval, duration and event
+    // band, in the two bytes after `appearance` (dmm::LogSettings). Defaults in files before it; a
+    // session itself never outlives a restart.
+    dmm::LogSettings log;
     // Measurement > Appearance > Preset (GitHub #68). face, palette and appearance above are always the
     // user's one Custom look; Hybrid shows MeterAppearanceCatalog's constant instead and keeps them, so
     // Custom brings them back. A manual edit while Hybrid shows starts a Custom look from it (custom()).
@@ -82,7 +92,7 @@ struct MeterPreferences {
     bool valid() const {
         return display < Displays && statistics <= 1 && bar <= 1 && automatic <= 1 && range < 8 && face < Faces && palette < Palettes && preset < Presets &&
                rangeFunction <= MeterFunctionCount && appearance.valid() && digitalArrangement.valid() && analogArrangement.valid() &&
-               hold.valid() && temperature.valid();
+               hold.valid() && temperature.valid() && log.valid();
     }
 };
 } // namespace openosc

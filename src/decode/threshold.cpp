@@ -5,13 +5,22 @@
 #include <cstring>
 
 namespace openosc::decoding {
-ThresholdCodes ThresholdCodes::of(const scope::ChannelMetadata &c, int32_t thresholdMv, uint32_t hysteresisMv) {
-    ThresholdCodes codes;
-    if (!c.calibrated || !(c.voltsPerCode > 0) || !c.probeNumerator || !c.probeDenominator) return codes;
+namespace {
+// The band's codes before any range check: a rise at `high` or above, a fall at `low` or below.
+// False without a scale.
+bool band(const scope::ChannelMetadata &c, int32_t thresholdMv, uint32_t hysteresisMv, double &high, double &low) {
+    if (!c.calibrated || !(c.voltsPerCode > 0) || !c.probeNumerator || !c.probeDenominator) return false;
     const double codesPerVolt = double(c.probeDenominator) / (c.voltsPerCode * c.probeNumerator);
     const auto at = [&](double millivolts) { return c.zeroCode + millivolts / 1000.0 * codesPerVolt; };
     const double half = hysteresisMv / 2.0;
-    const double high = std::ceil(at(thresholdMv + half)), low = std::floor(at(thresholdMv - half));
+    high = std::ceil(at(thresholdMv + half)); low = std::floor(at(thresholdMv - half));
+    return true;
+}
+} // namespace
+ThresholdCodes ThresholdCodes::of(const scope::ChannelMetadata &c, int32_t thresholdMv, uint32_t hysteresisMv) {
+    ThresholdCodes codes;
+    double high, low;
+    if (!band(c, thresholdMv, hysteresisMv, high, low)) return codes;
     if (!std::isfinite(high) || !std::isfinite(low) || high > 127 || low < -128) { codes.status = Status::OutOfRange; return codes; }
     codes.low = int16_t(low);
     codes.high = int16_t(high > low ? high : low + 1);
@@ -55,6 +64,23 @@ uint32_t roundedMv(long double mv) {
 uint32_t ThresholdCodes::autoHysteresisMv(const scope::ChannelMetadata &c, uint32_t swing, unsigned percent) {
     if (!c.calibrated || !(c.voltsPerCode > 0) || !c.probeNumerator || !c.probeDenominator) return 0;
     return roundedMv((long double)swing * c.voltsPerCode * c.probeNumerator / c.probeDenominator * 1000.0L * percent / 100.0L);
+}
+ThresholdCodes ThresholdCodes::automatic(const scope::ChannelMetadata &c, int32_t thresholdMv, int32_t lowest, int32_t highest,
+                                         unsigned percent, uint32_t floorMv, uint32_t &hysteresisMv) {
+    const uint32_t swing = highest >= lowest ? uint32_t(int64_t(highest) - lowest) : 0;
+    const uint32_t share = autoHysteresisMv(c, swing, percent);
+    hysteresisMv = share > floorMv ? share : floorMv;
+    ThresholdCodes codes = of(c, thresholdMv, hysteresisMv);
+    if (codes.status != Status::OutOfRange || share >= floorMv || of(c, thresholdMv, share).status != Status::Ok) return codes;
+    // Only the floor left the codes: each level beyond them is the rail (reached) or no code at all.
+    double high, low;
+    if (!band(c, thresholdMv, hysteresisMv, high, low) || !std::isfinite(high) || !std::isfinite(low)) return codes;
+    if (high > 127) high = highest >= 127 ? 127 : 128;
+    if (low < -128) low = lowest <= -128 ? -128 : -129;
+    codes.low = int16_t(low);
+    codes.high = int16_t(high > low ? high : low + 1);
+    codes.status = Status::Ok;
+    return codes;
 }
 uint32_t DifferenceScale::autoHysteresisMv(uint64_t swing, unsigned percent) const {
     // swing * 2^shift uV * percent / 100, in mV (swing < 2^31, shift < 32, percent <= 100).

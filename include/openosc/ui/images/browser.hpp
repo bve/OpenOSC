@@ -4,10 +4,14 @@
 #include "openosc/ui/components/menu_palette.hpp"
 
 namespace openosc::ui {
+// A page of a file list (the screenshots, the DMM sessions): its names, an optional value a row, and
+// what an empty list says.
 struct ImageList {
     static constexpr unsigned Rows=5;
     const char *names[Rows]{};
+    const char *values[Rows]{};
     unsigned visible=0,selected=0,first=0,total=0;
+    const char *empty="No screenshots", *location=nullptr; // location: none, the screenshots' directory.
 };
 class ImageBrowserView {
 public:

@@ -142,6 +142,9 @@ bool ApplicationController::applyFollowing(ScopeRequest request, uint32_t now, S
             proposal=triggerFollow_.propose(place,request.frontend.position[c],request.frontend.range[c],
                                             {before.zeroCode,before.voltsPerCode},{after.zeroCode,after.voltsPerCode},bounds);
             request.trigger.level=proposal.level;
+            // The band's other level keeps its voltage too (to the nearest code, no remainder carried).
+            if (request.trigger.twoLevels())
+                request.trigger.level2=bounds.nearest((request.trigger.level2-before.zeroCode)*before.voltsPerCode/after.voltsPerCode+after.zeroCode);
         }
     }
     if (!applyScope(request,now,mode)) return false;
@@ -198,7 +201,7 @@ int ApplicationController::triggerLimit(const ScopeRequest &request) {
     const unsigned source = unsigned(request.trigger.channel);
     if (source >= 2 || request.rolling() || (options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay)) return 0;
     const auto bounds = triggerBounds(request);
-    const int level = request.trigger.level, end = level >= bounds.high ? 1 : level <= bounds.low ? -1 : 0;
+    const int level = request.trigger.comparatorLevel(), end = level >= bounds.high ? 1 : level <= bounds.low ? -1 : 0;
     return options.channels[source].invert ? -end : end;
 }
 bool ApplicationController::markTriggerEditor() {
@@ -229,14 +232,15 @@ bool ApplicationController::triggerMidpoint(uint32_t now, bool pretrigger) {
     const auto target = data_.scopeChannelFor(request, source);
     const double exact = scope::TriggerLevel::inFrame(midpoint, record, target);
     frame.release(); // Applying restarts capture, which needs every frame lease back.
-    request.trigger.level = triggerBounds(request).nearest(exact);
+    const auto intent = request.trigger.comparatorUsesLevel2() ? LevelIntent::Follow : LevelIntent::Set;
+    request.trigger.setComparatorLevel(triggerBounds(request).nearest(exact));
     const bool applied = pretrigger ? applyScope(request, now, ScopeApply::StageIfHeld)
-                                    : applyEdited(request, now, LevelIntent::Set);
+                                    : applyEdited(request, now, intent);
     if (!applied) { view_.notify(Tooltip::Unavailable, "Finish data transfer first", now); return false; }
     const auto place = triggerPlace(data_.scopeRequest());
-    const double remainder = exact - place.level;
+    const double remainder = exact - data_.scopeRequest().trigger.comparatorLevel();
     const bool limited = std::abs(remainder) > .5;
-    triggerFollow_.anchor(place, remainder, limited);
+    if (intent == LevelIntent::Set) triggerFollow_.anchor(place, remainder, limited);
     if (limited) pulseTriggerLimit(now);
     if (pretrigger) view_.notify(Tooltip::Done, "Trigger level and pretrigger 50%", now);
     return true;
@@ -274,6 +278,8 @@ void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     case Panel::Meter: meterPanelKeys(keys, now); break;
     case Panel::MeterAppearance: meterAppearanceKeys(keys, now); break;
     case Panel::MeterHold: meterHoldKeys(keys, now); break;
+    case Panel::MeterLog: meterLogKeys(keys, now); break;
+    case Panel::Sessions: break; // onKeys hands it its keys (sessionKeys).
     case Panel::MeterLayout: meterLayoutKeys(keys, now); break;
     case Panel::ScopeLayout: scopeLayoutKeys(keys, now); break;
     case Panel::GeneratorLayout: generatorLayoutKeys(keys, now); break;

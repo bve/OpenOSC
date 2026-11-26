@@ -12,6 +12,10 @@ ScopeRequest InstrumentState::scope(const Preferences &p) {
                        scope::TriggerMode(p.scope.triggerMode), int16_t(p.scope.triggerLevel)};
     request.trigger.position=p.scope.triggerPosition;
     request.trigger.reject=p.scope.triggerReject!=0;
+    request.trigger.type = scope::TriggerType(p.scope.triggerType);
+    request.trigger.condition = scope::TriggerCondition(p.scope.triggerCondition);
+    request.trigger.level2 = int16_t(p.scope.triggerLevel2);
+    request.trigger.minimumNs = p.scope.triggerMinimumNs; request.trigger.maximumNs = p.scope.triggerMaximumNs;
     for (unsigned c = 0; c < 2; ++c) {
         scope::AnalogFrontend::rangeForMillivolts(p.millivolts[c], request.frontend.range[c]);
         request.frontend.enabled[c] = p.scope.enabled[c];
@@ -31,6 +35,9 @@ void InstrumentState::capture(const ScopeRequest &r, Preferences &p) {
     p.scope.triggerMode = unsigned(r.trigger.mode); p.scope.triggerLevel = r.trigger.level;
     p.scope.triggerPosition=r.trigger.position;
     p.scope.triggerReject=r.trigger.reject;
+    p.scope.triggerType = unsigned(r.trigger.type); p.scope.triggerCondition = unsigned(r.trigger.condition);
+    p.scope.triggerLevel2 = r.trigger.level2;
+    p.scope.triggerMinimumNs = r.trigger.minimumNs; p.scope.triggerMaximumNs = r.trigger.maximumNs;
     for (unsigned c = 0; c < 2; ++c) {
         p.millivolts[c] = scope::AnalogFrontend::millivoltsForRange(r.frontend.range[c]);
         p.scope.enabled[c] = r.frontend.enabled[c]; p.scope.coupling[c] = unsigned(r.frontend.coupling[c]);

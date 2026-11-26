@@ -141,6 +141,12 @@ struct Protocols {
     static constexpr uint32_t MaximumDataBitrate = 10000000;                    // CAN FD data phase, >= the nominal
     static constexpr uint32_t GapLimitNs = 100000000;
     static constexpr unsigned AutoHysteresisPercent = 10; // Of the line's swing in the record (plan §6.1).
+    // RS-232 (TIA-232-F): a receiver decides a mark below -3 V and a space above +3 V only. Its Auto
+    // hysteresis is at least 3 V less the threshold's distance from 0 V: the band reaches halfway from a
+    // 0 V threshold to either valid level (+-1.5 V) and never beyond them, so a floating or idle input's
+    // noise around 0 V decodes as nothing (GitHub #164). Manual hysteresis and other protocols: 0.
+    static constexpr int32_t Rs232ValidLevelMv = 3000;
+    static uint32_t autoHysteresisFloorMv(Protocol protocol, int32_t thresholdMv);
     static const char *hysteresisKey(Hysteresis hysteresis); // settings.json / CSV: "auto", "manual"
 };
 } // namespace openosc::decoding

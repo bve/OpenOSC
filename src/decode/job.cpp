@@ -105,9 +105,11 @@ DecodeStatus DecodeJob::beginStreams(const scope::FrameMetadata &m, ResultSet &s
     } else {
         for (unsigned line = 0; line < lines_; ++line) {
             const unsigned c = lineChannel_[line];
-            const uint32_t h = automatic ? ThresholdCodes::autoHysteresisMv(m.channels[c], uint32_t(ranges_[line].swing()), percent)
-                                         : settings_.hysteresisMv;
-            const auto codes = ThresholdCodes::of(m.channels[c], settings_.threshold(c), h);
+            const int32_t threshold = settings_.threshold(c);
+            uint32_t h = settings_.hysteresisMv;
+            const auto codes = automatic ? ThresholdCodes::automatic(m.channels[c], threshold, ranges_[line].lowest(), ranges_[line].highest(), percent,
+                                                                     Protocols::autoHysteresisFloorMv(settings_.protocol, threshold), h)
+                                         : ThresholdCodes::of(m.channels[c], threshold, h);
             set.hysteresisMv[c] = h;
             if (codes.status != ThresholdCodes::Status::Ok)
                 return codes.status == ThresholdCodes::Status::NoScale ? DecodeStatus::NoScale : DecodeStatus::OutOfRange;
@@ -240,8 +242,10 @@ bool DecodeJob::stepSearch(const Budget &budget) {
         const unsigned channel = settings_.channel, percent = Protocols::AutoHysteresisPercent;
         if (searchDifference_) searchHysteresisMv_ = difference_.autoHysteresisMv(ranges_[0].swing(), percent);
         else {
-            const uint32_t h = ThresholdCodes::autoHysteresisMv(m.channels[channel], uint32_t(ranges_[0].swing()), percent);
-            searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.threshold(channel), h);
+            const int32_t threshold = settings_.threshold(channel);
+            uint32_t h = 0;
+            searchCodes_ = ThresholdCodes::automatic(m.channels[channel], threshold, ranges_[0].lowest(), ranges_[0].highest(), percent,
+                                                     Protocols::autoHysteresisFloorMv(settings_.protocol, threshold), h);
             if (searchCodes_.status != ThresholdCodes::Status::Ok) { finishSearch(BaudSearch::State::Done); return false; }
         }
         beginSearchStream();
