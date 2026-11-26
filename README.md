@@ -260,10 +260,10 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   `/openosc/LOGS`. See [DMM session logging](docs/DMM_SESSION_LOGGING.md)
 - Ampere-hour counter in DC current (A and mA): the signed charge since the function was selected,
   shown as mAh or Ah beside the range. It counts while the readings are valid and arrive at most 2 s
-  apart (an overload, the meter's own HOLD or REL, a lost or corrupted reading, or a longer gap pauses
-  it, with nothing estimated for the missing time). Manual HOLD and REL change only the display. A
-  confirmed switch to another function or entering the multimeter screen resets it; a range change or
-  a repeated selection of the same function keeps it.
+  apart (an overload, the meter's own HOLD or REL, the first reading after an AUTO range change, a lost
+  or corrupted reading, or a longer gap pauses it, with nothing estimated for the missing time). Manual
+  HOLD and REL change only the display. A confirmed switch to another function or entering the
+  multimeter screen resets it; a range change or a repeated selection of the same function keeps it.
 - Large 72/80 px reading when the bar graph and statistics are off
 - Bar graph labels follow the active range in measurement units. The 2.5 V range runs from 0 to 2.5 V
   in 0.5 V steps. Each notch extends below the bar and lines up with its scale value. The analog dial

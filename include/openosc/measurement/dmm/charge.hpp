@@ -11,7 +11,8 @@ enum class Function : unsigned; // function.hpp
 // consecutive DC current readings of one function, both valid and at most MaximumGapUs apart, adds
 // their mean current times its length (the trapezoid rule). Any other packet ends the run: an
 // overload, no reading, AC, another function, a packet of an unconfirmed selection, the DMM's own
-// HOLD or REL (their values are not the current), or a gap longer than MaximumGapUs; so does every
+// HOLD or REL (their values are not the current), the first reading after an AUTO range change (a
+// false value, Session's RangeSettle), or a gap longer than MaximumGapUs; so does every
 // known loss of readings, however short (interrupt(): a UART error or restart, a rejected or
 // undecodable packet, readings expired): no current is assumed where none was read, and the charge
 // stays. Only a confirmed packet of another function or input resets it, and leaving or entering the
