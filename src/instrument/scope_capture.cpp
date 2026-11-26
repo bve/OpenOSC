@@ -681,6 +681,10 @@ void DataAccess::holdScopeCore(bool hold) {
         heldFrame_.release();
         return;
     }
+    // A trend's record ends with its open point (TrendBuffer::stop) and replaces the frame on show now
+    // (finishTrend): HOLD holds that one.
+    trend_.stop();
+    finishTrend(Board::milliseconds());
     if (!heldFrame_.valid()) store_.acquireLatest(heldFrame_);
     // With one slot (compact, 512 KiB) the frame on show was handed to the running capture: let that
     // capture finish into HOLD instead of holding nothing, for a bounded time. The same wait when the
@@ -726,8 +730,12 @@ void DataAccess::serviceScopeFrames(uint32_t now) {
             stopCapture(false); heldFrame_ = std::move(inspected_);
         }
     }
-    if (!zeroBusy() && !zeroBlocked_ && scopeHeld_ && !heldFrame_.valid())
-        store_.acquireLatest(heldFrame_);
+    if (!zeroBusy() && !zeroBlocked_ && scopeHeld_ && !heldFrame_.valid() && store_.acquireLatest(heldFrame_)) {
+        // A trend's record published at STOP (finishTrend) is accepted when HOLD takes it: ACQ:FRAM?
+        // names the record a reader is given, not the last one before STOP.
+        const auto &m = heldFrame_.view().metadata();
+        if (m.rolling && int32_t(m.sequence - acceptedSequence_) > 0) { acceptedSequence_ = m.sequence; acceptedAt_ = now; }
+    }
     // A pending HOLD holds the next record its captures deliver before holdDeadline_. A capture that
     // fails (a recoverable fault: HardwareError, Timeout, Overflow) is retried after CaptureRetryMs
     // within that time (serviceScopeCapture), never past it; a staged change waits for RUN instead,

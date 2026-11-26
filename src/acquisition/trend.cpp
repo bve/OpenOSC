@@ -42,7 +42,7 @@ bool TrendView::values(const FrameMetadata &metadata, uint32_t index, float (&ou
         if (!channel.enabled || !channel.calibrated) continue;
         const double scale = channel.voltsPerCode * channel.probeNumerator / channel.probeDenominator;
         value[0] = float((points->low[c][index] - channel.zeroCode) * scale);
-        value[1] = float((double(points->sum[c][index]) / perPoint - channel.zeroCode) * scale);
+        value[1] = float((double(points->sum[c][index]) / adcPoints(index, index + 1) - channel.zeroCode) * scale);
         value[2] = float((points->high[c][index] - channel.zeroCode) * scale);
     }
     const bool reading = points->dmmCount[index];
@@ -63,6 +63,13 @@ unsigned TrendView::before(unsigned width) const {
     while (count < width && (column(count, width, first, last), first >= last)) ++count;
     return count;
 }
+uint64_t TrendView::adcPoints(uint32_t first, uint32_t end) const {
+    if (first >= end) return 0;
+    return uint64_t(end - first) * perPoint - (end == size ? perPoint - last : 0);
+}
+double TrendView::seconds() const {
+    return double(adcPoints(0, size)) / (double(perPoint) * rate.value());
+}
 TrendBuffer::TrendBuffer(uint16_t *memory) : memory_(new (memory) Memory) {
     static_assert(sizeof(Memory) <= AcquisitionArena::BankBytes, "A trend and its copy fit one record bank");
     shown_.points = &memory_->shown;
@@ -70,8 +77,8 @@ TrendBuffer::TrendBuffer(uint16_t *memory) : memory_(new (memory) Memory) {
 void TrendBuffer::reset(Quantity quantity) {
     active_ = true; started_ = false; copyAll_ = true;
     size_ = shownSize_ = pending_ = 0;
-    perPoint_ = 1;
-    full_ = false;
+    perPoint_ = last_ = 1;
+    full_ = stopped_ = behind_ = false;
     sum_[0] = sum_[1] = 0; low_[0] = low_[1] = high_[0] = high_[1] = 0;
     dmmSum_ = 0; dmmLow_ = dmmHigh_ = 0; dmmCount_ = dmmMissing_ = 0;
     quantity_ = quantity;
@@ -85,7 +92,8 @@ bool TrendBuffer::append(const FrameView &frame) {
     if (!active_ || full_) return true;
     const auto &metadata = frame.metadata();
     if (!started_) { startUs_ = metadata.timestampUs; started_ = true; }
-    for (size_t i = 0; i < metadata.samples; ++i) {
+    // A record full at its last point takes nothing more: its STOP finds no open point to store.
+    for (size_t i = 0; i < metadata.samples && !full_; ++i) {
         for (unsigned c = 0; c < 2; ++c) {
             uint8_t raw;
             if (!metadata.channels[c].enabled) continue;
@@ -99,7 +107,7 @@ bool TrendBuffer::append(const FrameView &frame) {
     }
     return true;
 }
-void TrendBuffer::close() {
+void TrendBuffer::store() {
     auto &live = memory().live;
     const uint32_t index = size_;
     uint8_t mean[2];
@@ -107,7 +115,7 @@ void TrendBuffer::close() {
         live.sum[c][index] = sum_[c];
         live.low[c][index] = low_[c];
         live.high[c][index] = high_[c];
-        mean[c] = meanCode(sum_[c], perPoint_);
+        mean[c] = meanCode(sum_[c], pending_);
         sum_[c] = 0; low_[c] = high_[c] = 0;
     }
     memory().means[index] = uint16_t(mean[0] | mean[1] << 8);
@@ -117,12 +125,23 @@ void TrendBuffer::close() {
     live.dmmLow[index] = dmmCount_ ? dmmLow_ : 0;
     live.dmmHigh[index] = dmmCount_ ? dmmHigh_ : 0;
     dmmSum_ = 0; dmmLow_ = dmmHigh_ = 0; dmmCount_ = dmmMissing_ = 0;
+    last_ = pending_;
     pending_ = 0;
     ++size_;
-    ++revision_;
+    behind_ = true;
+}
+// A point of perPoint_ samples, stored: a record it fills merges, or at MaximumPerPoint is full.
+void TrendBuffer::close() {
+    store();
     if (size_ < Capacity) return;
     if (perPoint_ < MaximumPerPoint) halve();
     else full_ = true;
+}
+// A point holds samples only after the first merge (one sample closes a point before it), so the record
+// has Capacity / 2 points or more then, and room for this one: a full record has no open point.
+void TrendBuffer::stop() {
+    if (active_ && pending_) store();
+    stopped_ = true;
 }
 // Every pair of points becomes one covering twice the samples: the sums add, the extremes combine,
 // the DMM means weigh by their readings and the counts add (a point's readings fit 32 bits: the DMM's
@@ -152,13 +171,13 @@ void TrendBuffer::halve() {
         live.dmmMean[i] = average; live.dmmLow[i] = low; live.dmmHigh[i] = high;
         live.dmmCount[i] = count; live.dmmMissing[i] = saturate(missing);
     }
-    perPoint_ = points;
+    perPoint_ = last_ = points; // Merged from full points only (close).
     size_ = Capacity / 2;
     copyAll_ = true;
 }
 // The reading joins the point open when it arrives (up to one point span late).
 void TrendBuffer::reading(float value) {
-    if (!active_) return;
+    if (!active_ || stopped_) return;
     if (value != value) { dmmMissing_ = saturate(uint32_t(dmmMissing_) + 1); return; }
     if (!dmmCount_ || value < dmmLow_) dmmLow_ = value;
     if (!dmmCount_ || value > dmmHigh_) dmmHigh_ = value;
@@ -166,17 +185,17 @@ void TrendBuffer::reading(float value) {
     ++dmmCount_;
 }
 void TrendBuffer::meterGap() {
-    if (active_) dmmMissing_ = saturate(uint32_t(dmmMissing_) + 1);
+    if (active_ && !stopped_) dmmMissing_ = saturate(uint32_t(dmmMissing_) + 1);
 }
 void TrendBuffer::restartMeter(Quantity quantity) {
-    if (!active_) return;
+    if (!active_ || stopped_) return;
     auto &live = memory().live;
     std::memset(live.dmmCount, 0, size_ * sizeof *live.dmmCount);
     std::memset(live.dmmMissing, 0, size_ * sizeof *live.dmmMissing);
     dmmSum_ = 0; dmmLow_ = dmmHigh_ = 0; dmmCount_ = dmmMissing_ = 0;
     quantity_ = quantity;
     copyAll_ = true;
-    ++revision_;
+    behind_ = true;
 }
 FrameView TrendBuffer::snapshot(const FrameMetadata &base) const {
     const Rational rate = pointRate(base.samplesPerSecond, perPoint_);
@@ -216,9 +235,10 @@ void TrendBuffer::publish(const FrameMetadata &published) {
     std::memcpy(shown.dmmCount + first, live.dmmCount + first, count * sizeof *live.dmmCount);
     std::memcpy(shown.dmmMissing + first, live.dmmMissing + first, count * sizeof *live.dmmMissing);
     shownSize_ = size_;
-    copyAll_ = false;
+    copyAll_ = behind_ = false;
     shown_.size = size_;
     shown_.perPoint = perPoint_;
+    shown_.last = last_;
     shown_.window = published.ring;
     shown_.rate = published.samplesPerSecond;
     shown_.timestampUs = published.timestampUs;

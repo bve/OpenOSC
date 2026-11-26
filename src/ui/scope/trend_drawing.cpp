@@ -43,7 +43,7 @@ void Painter::trendTrace(unsigned channel, uint32_t color, uint8_t opacity, unsi
             high = std::max<int>(high, trend_->points->high[channel][i]);
             sum += trend_->points->sum[channel][i];
         }
-        const double mean = double(sum) / (double(trend_->perPoint) * (last - first));
+        const double mean = double(sum) / double(trend_->adcPoints(first, last)); // A last point STOP cut short holds fewer.
         // A higher code is a smaller y: the band runs from the pixel of the high to that of the low.
         band.vertex(x, axis.pixel(high * 256));
         band.vertex(x, axis.pixel(low * 256) + 1);

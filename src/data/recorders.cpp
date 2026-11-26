@@ -112,7 +112,7 @@ size_t ScopeRecorder::csvHeader(const scope::FrameMetadata &metadata) {
         bytes = line ? bytes + line : 0;
     }
     if (bytes && trend_) {
-        const size_t line = Csv::scopeTrend(trend_->perPoint, reinterpret_cast<char *>(buffer_ + bytes), sizeof buffer_ - bytes);
+        const size_t line = Csv::scopeTrend(trend_->perPoint, trend_->last, reinterpret_cast<char *>(buffer_ + bytes), sizeof buffer_ - bytes);
         bytes = line ? bytes + line : 0;
     }
     return bytes;

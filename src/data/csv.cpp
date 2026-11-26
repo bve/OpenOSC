@@ -104,9 +104,17 @@ size_t Csv::trend(const scope::FrameMetadata &metadata, const scope::TrendView &
                   char *out, size_t capacity) {
     float values[9];
     if (!out || !capacity || !view.values(metadata, uint32_t(index), values)) return 0;
+    // The time is the middle of the row's ADC points, from the first row's (the header's timestamp): a row per
+    // point at the copy's rate. A last point STOP cut short holds only the first view.last of its perPoint, so
+    // its middle comes (perPoint - last) / 2 of them earlier; to the microsecond (trendRowLimit's six digits).
     char time[48];
-    if (!Decimal::fraction(uint64_t(index) * view.rate.denominator, view.rate.numerator, time, sizeof time))
-        return 0;
+    const uint32_t cut = view.perPoint - uint32_t(view.adcPoints(uint32_t(index), uint32_t(index) + 1));
+    if (!cut) {
+        if (!Decimal::fraction(uint64_t(index) * view.rate.denominator, view.rate.numerator, time, sizeof time)) return 0;
+    } else {
+        const double seconds = (double(index) - cut / (2.0 * view.perPoint)) / view.rate.value();
+        if (!Decimal::fraction(uint64_t(std::llround(seconds * 1e6)), 1000000, time, sizeof time, 6)) return 0;
+    }
     int length = std::snprintf(out, capacity, "%lu,%s", static_cast<unsigned long>(index), time);
     // A float's seven digits: more would print its binary rounding.
     for (unsigned i = 0; i < (meter ? 9U : 6U) && length > 0 && size_t(length) < capacity; ++i) {
@@ -117,9 +125,10 @@ size_t Csv::trend(const scope::FrameMetadata &metadata, const scope::TrendView &
     if (length > 0 && size_t(length) < capacity) length += std::snprintf(out + length, capacity - length, "\r\n");
     return length > 0 && size_t(length) < capacity ? size_t(length) : 0;
 }
-size_t Csv::scopeTrend(uint32_t samplesPerPoint, char *out, size_t capacity) {
+size_t Csv::scopeTrend(uint32_t samplesPerPoint, uint32_t lastPointSamples, char *out, size_t capacity) {
     if (!out || !capacity) return 0;
-    const int n = std::snprintf(out, capacity, "# trend: samples_per_point=%lu\r\n", static_cast<unsigned long>(samplesPerPoint));
+    const int n = std::snprintf(out, capacity, "# trend: samples_per_point=%lu,last_point_samples=%lu\r\n",
+                                static_cast<unsigned long>(samplesPerPoint), static_cast<unsigned long>(lastPointSamples));
     return n > 0 && size_t(n) < capacity ? size_t(n) : 0;
 }
 size_t Csv::scopeMeter(const char *function, Quantity value, char *out, size_t capacity) {
@@ -130,8 +139,9 @@ size_t Csv::scopeMeter(const char *function, Quantity value, char *out, size_t c
     return n > 0 && size_t(n) < capacity ? size_t(n) : 0;
 }
 namespace {
-// The widest index and time fields of rows 0 to m.samples - 1 at m's rate, 0 when they cannot be written.
-size_t indexTimeLimit(const scope::FrameMetadata &m) {
+// The widest index and time fields of rows 0 to m.samples - 1 at m's rate, the time's fraction at least
+// `fractionAtLeast` digits, 0 when they cannot be written.
+size_t indexTimeLimit(const scope::FrameMetadata &m, unsigned fractionAtLeast = 0) {
     char text[48];
     const uint64_t last = uint64_t(m.samples - 1);
     size_t bytes = Decimal::integer(last, text, sizeof text);
@@ -143,7 +153,8 @@ size_t indexTimeLimit(const scope::FrameMetadata &m) {
     unsigned twos = 0, fives = 0;
     while (!(rest % 2)) { rest /= 2; ++twos; }
     while (!(rest % 5)) { rest /= 5; ++fives; }
-    const unsigned fraction = rest != 1 ? 12 : twos > fives ? (twos > 12 ? 12 : twos) : (fives > 12 ? 12 : fives);
+    const unsigned digits = rest != 1 ? 12 : twos > fives ? (twos > 12 ? 12 : twos) : (fives > 12 ? 12 : fives);
+    const unsigned fraction = digits > fractionAtLeast ? digits : fractionAtLeast;
     const size_t whole = Decimal::integer(last * m.samplesPerSecond.denominator / m.samplesPerSecond.numerator, text, sizeof text);
     if (!bytes || !whole)
         return 0;
@@ -178,7 +189,7 @@ size_t Csv::scopeRowLimit(const scope::FrameMetadata &m, bool meter) {
 size_t Csv::trendRowLimit(const scope::FrameMetadata &m, bool meter) {
     if (!m.valid())
         return 0;
-    const size_t bytes = indexTimeLimit(m);
+    const size_t bytes = indexTimeLimit(m, 6); // Six: the microseconds of a last point STOP cut short (trend()).
     // The comma after the index, then a comma and a float at trend()'s seven digits ("-1.234567e-45") for
     // the min, mean and max of each channel and of the DMM, CRLF.
     return bytes ? bytes + 1 + (meter ? 9 : 6) * (1 + 13) + 2 : 0;

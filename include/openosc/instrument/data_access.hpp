@@ -448,6 +448,10 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     uint32_t configuredAt_ = 0xffff0000U; // Far from boot time: the first change is never a burst.
     bool findTrigger(const scope::FrameView &frame,uint32_t &index);
     void serviceRolling(uint32_t now);
+    void publishRolling(bool trend, uint32_t now);
+    void finishTrend(uint32_t now);
+    // The record a STOP ended is not on show yet (finishTrend): readers wait for it.
+    bool trendOwed() const { return scopeHeld_ && trend_.owed(); }
     bool validateScope(const ScopeRequest &request) const;
     bool requestDmmKey(dmm::KeyCommand::Action action);
     // Shutdown with a stroke still owed (beginShutdown): its 21 goes before the UART stops, within

@@ -145,7 +145,7 @@ bool DataAccess::findTrigger(const scope::FrameView &frame,uint32_t &index) {
     return triggerCache_.find(frame,triggerForFrame(frame.metadata()),index);
 }
 bool DataAccess::acquireScope(scope::FrameLease &lease, bool consume) {
-    if (zeroBusy() || zeroBlocked_) return false;
+    if (zeroBusy() || zeroBlocked_ || trendOwed()) return false; // The frame on show is from before the STOP.
     if (!store_.acquireLatest(lease, consume))
         return false;
     if (lease.view().metadata().rolling) { lease.annotateTrigger(false,0); return true; }

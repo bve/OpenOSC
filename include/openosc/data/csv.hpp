@@ -27,16 +27,18 @@ public:
     // and with `meter` the dmm field's widest reading.
     // The bound the waveform CSV's free-space check reserves a row (GitHub #164).
     static size_t scopeRowLimit(const scope::FrameMetadata &metadata, bool meter = false);
-    // Row `index` of a trend copy, its time from the copy's own rate; `metadata`: the channels' scales.
-    // `meter`: with the dmm columns; a value without a number (a channel that is off, a point without a
-    // reading) is left empty.
+    // Row `index` of a trend copy, its time the middle of its ADC points at the copy's own rate (a last point
+    // STOP cut short: to the microsecond); `metadata`: the channels' scales. `meter`: with the dmm columns; a
+    // value without a number (a channel that is off, a point without a reading) is left empty.
     static size_t trend(const scope::FrameMetadata &metadata, const scope::TrendView &view, size_t index, bool meter,
                         char *output, size_t capacity);
     // The longest row trend() gives for `metadata`'s samples at its rate, CRLF included, 0 for metadata it
-    // cannot write: scopeRowLimit's index and time, and a float at seven digits for each value.
+    // cannot write: scopeRowLimit's index and time (its fraction six digits at least), and a float at seven
+    // digits for each value.
     static size_t trendRowLimit(const scope::FrameMetadata &metadata, bool meter);
-    // "# trend: samples_per_point=N": the ADC points each row covers.
-    static size_t scopeTrend(uint32_t samplesPerPoint, char *output, size_t capacity);
+    // "# trend: samples_per_point=N,last_point_samples=M": the ADC points each row covers, and the last row's
+    // (fewer than N when STOP ended the record within that point).
+    static size_t scopeTrend(uint32_t samplesPerPoint, uint32_t lastPointSamples, char *output, size_t capacity);
     static size_t scopeMetadata(const scope::FrameMetadata &metadata, char *output, size_t capacity);
     // "# dmm: function=...,quantity=...,unit=..." of the dmm column; function is MeterFunctions' key.
     static size_t scopeMeter(const char *function, Quantity quantity, char *output, size_t capacity);

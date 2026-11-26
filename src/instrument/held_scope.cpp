@@ -33,7 +33,13 @@ bool DataAccess::restoreHeld(const ScopeRequest &request) {
     if (!describeNext(configuration_)) describeChannels(configuration_); // The plan of the restored settings.
     // The analog front end returns to the held record's settings, as at a HOLD activation.
     if (active_ && !frontend_.scope(appliedFrontend(request_), request_.trigger.comparatorLevel())) status_ = DataStatus::Uncalibrated;
+    // A running trend AutoSetup interrupted (or a STOP's record not on show yet): the STOP below ends its
+    // record, which replaces the frame retained.
+    trend_.stop();
+    const bool trend = trend_.owed();
+    if (trend) releaseRetained();
     holdScopeCore(true);
+    if (trend) { status_ = DataStatus::Ok; return true; }
     if (!retainedRegion_) return true; // The original HOLD had no completed frame.
     const auto region = retainedRegion_;
     retainedRegion_ = 0;
