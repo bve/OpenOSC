@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <new>
+#include <numeric>
 
 namespace openosc::scope {
 // Record bank 3: the means (the DMA source of the published frame), the live record, the copy on show.
@@ -12,11 +13,25 @@ struct TrendBuffer::Memory {
     TrendPoints live, shown;
 };
 namespace {
-// The mean of `n` points summing to `sum`, rounded half away from zero as RollingBuffer does.
+// The mean of `n` points summing to `sum`, rounded half away from zero as RollingBuffer does; in 64 bits,
+// as the rounding takes a sum of MaximumPerPoint codes of -128 (-2^31) below the int32 range.
 uint8_t meanCode(int32_t sum, uint32_t n) {
-    return uint8_t(int8_t((sum < 0 ? sum - int32_t(n / 2) : sum + int32_t(n / 2)) / int32_t(n)));
+    const int64_t half = n / 2;
+    return uint8_t(int8_t((sum < 0 ? sum - half : sum + half) / int64_t(n)));
 }
 uint16_t saturate(uint32_t value) { return uint16_t(std::min<uint32_t>(value, UINT16_MAX)); }
+// `base` per `perPoint`: exact while it fits 32 bits, else (a record of months: the denominator passes
+// 32 bits) numerator and denominator halve together until both fit, which keeps the rate within a
+// relative 1 / numerator + 1 / denominator (those of the halved rate) of it.
+Rational pointRate(const Rational &base, uint32_t perPoint) {
+    Rational rate;
+    if (base.scaled(1, perPoint, rate) || !base.valid() || !perPoint) return rate;
+    uint64_t n = base.numerator, d = uint64_t(base.denominator) * perPoint;
+    const uint64_t common = std::gcd(n, d);
+    n /= common; d /= common;
+    while (n > UINT32_MAX || d > UINT32_MAX) { n >>= 1; d >>= 1; }
+    return {uint32_t(n), uint32_t(d)};
+}
 } // namespace
 bool TrendView::values(const FrameMetadata &metadata, uint32_t index, float (&out)[9]) const {
     if (!points || index >= size) return false;
@@ -56,6 +71,7 @@ void TrendBuffer::reset(Quantity quantity) {
     active_ = true; started_ = false; copyAll_ = true;
     size_ = shownSize_ = pending_ = 0;
     perPoint_ = 1;
+    full_ = false;
     sum_[0] = sum_[1] = 0; low_[0] = low_[1] = high_[0] = high_[1] = 0;
     dmmSum_ = 0; dmmLow_ = dmmHigh_ = 0; dmmCount_ = dmmMissing_ = 0;
     quantity_ = quantity;
@@ -66,7 +82,7 @@ void TrendBuffer::forget() {
     shown_.sequence = 0;
 }
 bool TrendBuffer::append(const FrameView &frame) {
-    if (!active_) return true;
+    if (!active_ || full_) return true;
     const auto &metadata = frame.metadata();
     if (!started_) { startUs_ = metadata.timestampUs; started_ = true; }
     for (size_t i = 0; i < metadata.samples; ++i) {
@@ -104,10 +120,14 @@ void TrendBuffer::close() {
     pending_ = 0;
     ++size_;
     ++revision_;
-    if (size_ == Capacity) halve();
+    if (size_ < Capacity) return;
+    if (perPoint_ < MaximumPerPoint) halve();
+    else full_ = true;
 }
 // Every pair of points becomes one covering twice the samples: the sums add, the extremes combine,
-// the DMM means weigh by their readings. In place, upwards: point i reads 2i and 2i + 1 only.
+// the DMM means weigh by their readings and the counts add (a point's readings fit 32 bits: the DMM's
+// 9600-baud UART brings at most 53 a second, a point spans at most MaximumPerPoint samples at the
+// trend's slowest 164 S/s, 102 400 s: 5.5 million). In place, upwards: point i reads 2i and 2i + 1 only.
 void TrendBuffer::halve() {
     auto &live = memory().live;
     const uint32_t points = 2 * perPoint_;
@@ -130,20 +150,20 @@ void TrendBuffer::halve() {
         }
         const uint32_t missing = uint32_t(live.dmmMissing[a]) + live.dmmMissing[b];
         live.dmmMean[i] = average; live.dmmLow[i] = low; live.dmmHigh[i] = high;
-        live.dmmCount[i] = saturate(count); live.dmmMissing[i] = saturate(missing);
+        live.dmmCount[i] = count; live.dmmMissing[i] = saturate(missing);
     }
     perPoint_ = points;
     size_ = Capacity / 2;
     copyAll_ = true;
 }
-// The reading joins the point open when it arrives (up to one point span late). A saturated count
-// stops the mean (a point of 21 000 s or more) and keeps the extremes.
+// The reading joins the point open when it arrives (up to one point span late).
 void TrendBuffer::reading(float value) {
     if (!active_) return;
     if (value != value) { dmmMissing_ = saturate(uint32_t(dmmMissing_) + 1); return; }
     if (!dmmCount_ || value < dmmLow_) dmmLow_ = value;
     if (!dmmCount_ || value > dmmHigh_) dmmHigh_ = value;
-    if (dmmCount_ != UINT16_MAX) { dmmSum_ += value; ++dmmCount_; }
+    dmmSum_ += value;
+    ++dmmCount_;
 }
 void TrendBuffer::meterGap() {
     if (active_) dmmMissing_ = saturate(uint32_t(dmmMissing_) + 1);
@@ -159,8 +179,8 @@ void TrendBuffer::restartMeter(Quantity quantity) {
     ++revision_;
 }
 FrameView TrendBuffer::snapshot(const FrameMetadata &base) const {
-    Rational rate;
-    if (!active_ || !started_ || !size_ || !base.samplesPerSecond.scaled(1, perPoint_, rate)) return {};
+    const Rational rate = pointRate(base.samplesPerSecond, perPoint_);
+    if (!active_ || !started_ || !size_ || !rate.valid()) return {};
     auto metadata = base;
     metadata.layout = Layout::Linear;
     metadata.interleaveOffset = 0;

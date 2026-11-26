@@ -203,6 +203,7 @@ void ApplicationController::displayData(uint32_t now) {
     const unsigned interval = panel_ != Panel::None ? 40 : state_.mode == MeasurementMode::Oscilloscope ? scopeInterval
                               : state_.mode == MeasurementMode::Multimeter ? 10 : 40;
     if (uint32_t(now - dataAt_) < interval) return;
+    if (uiReady_ && data_.takeTrendLimit()) view_.notify(Tooltip::Advisory, "Trend limit reached", now); // Over a menu too.
     // Bode (#72): the sweep's own service takes its records; no readouts, no decoder, no trace meanwhile.
     if (state_.settingsOpen || panel_==Panel::Images || panel_==Panel::Captures || panel_==Panel::Sessions || panel_==Panel::AwgFiles || panel_==Panel::Zero || panel_==Panel::InterleaveMatch || panel_==Panel::GainMatch ||
         panel_==Panel::Bode) {
