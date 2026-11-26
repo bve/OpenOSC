@@ -8,6 +8,7 @@
 #include "openosc/platform/input_service.hpp"
 #include "openosc/platform/clocks.hpp"
 #include <cstdio>
+#include <iterator>
 #include <strings.h>
 #include "openosc/storage/open_readers.hpp"
 
@@ -363,17 +364,19 @@ bool InstrumentBackend::frameKey(char *out, size_t capacity) const {
 bool InstrumentBackend::decodeReport(scpi::DecodeReport &r) const {
     static constexpr const char *statuses[] = {"idle", "decoding", "done", "cancelled", "no_scale", "out_of_range", "channel_off",
                                                "unsupported", "timing"};
-    static constexpr const char *protocols[] = {"OFF", "UART", "I2C", "SPI", "LIN", "CAN"};
+    static constexpr const char *protocols[] = {"OFF", "UART", "I2C", "SPI", "LIN", "CAN", "RS232"};
+    const auto protocol = [](decoding::Protocol p) { return protocols[unsigned(p) < std::size(protocols) ? unsigned(p) : 0]; };
+    static_assert(std::size(protocols) == unsigned(decoding::Protocol::Count));
     const auto &d = application_.prefs_.scope.decoder;
     r.enabled = d.enabled;
-    r.protocol = protocols[unsigned(d.protocol) < 6 ? unsigned(d.protocol) : 0];
+    r.protocol = protocol(d.protocol);
     const auto &results = application_.decoder_.results();
     r.revision = results.revision();
     const auto *set = d.enabled ? results.published() : nullptr;
     r.result = set != nullptr;
     if (!set) return true;
     const auto &k = set->key();
-    r.protocol = protocols[unsigned(set->protocol()) < 6 ? unsigned(set->protocol()) : 0];
+    r.protocol = protocol(set->protocol());
     r.status = statuses[unsigned(set->status) < 9 ? unsigned(set->status) : 0];
     r.events = set->count(); r.lost = set->lost(); r.dropped = set->dropped; r.overflows = set->overflows; r.clipped = set->clipped;
     r.processed = set->processed; r.samples = set->samples;

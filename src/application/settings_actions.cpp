@@ -43,8 +43,8 @@ void ApplicationController::settingsKeys(uint32_t keys, uint32_t now) {
         navigator_.reset(settingsMenu_.selected());
         return true;
     };
-    if (settingsMenu_.information()) { // About, Storage: any of MENU, F4 or Left returns.
-        if ((keys & (Keypad::F4 | Keypad::Menu | (navigator_.repeating(Keypad::Left) ? 0U : uint32_t(Keypad::Left)))) && back()) showSettings();
+    if (settingsMenu_.information()) { // About and Storage also return on MENU.
+        if (((keys & Keypad::Menu) || navigator_.backPressed(keys)) && back()) showSettings();
         return;
     }
     auto rows = settingsRows();
@@ -115,6 +115,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     prefs_.idle = chosen.idle;
     prefs_.generatorStartup = chosen.generatorStartup; // The confirmed state is already followed.
     prefs_.panReverse = chosen.panReverse; prefs_.holdTime = chosen.holdTime;
+    prefs_.menuLeftStep = chosen.menuLeftStep;
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
     // Swap CH1/CH2: relabelled at once, a held record included; no capture, option or readout changes.
     prefs_.swapChannels = chosen.swapChannels; view_.channelView(plot::ChannelView{prefs_.swapChannels != 0});

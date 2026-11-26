@@ -74,6 +74,10 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (!indicators["pan_moves_waveform"].is<bool>()) return false;
         candidate.panReverse = indicators["pan_moves_waveform"].as<bool>();
     }
+    if (indicators.containsKey("menu_left_step")) {
+        if (!indicators["menu_left_step"].is<bool>()) return false;
+        candidate.menuLeftStep = indicators["menu_left_step"].as<bool>();
+    }
     if (root.containsKey("hold_ms")) {
         if (!root["hold_ms"].is<unsigned>()) return false;
         const unsigned ms = root["hold_ms"].as<unsigned>();
@@ -225,6 +229,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["show_fps"] = values.showFps == 1;
     document["display"]["show_sample_rate"] = values.showFps == 2;
     document["display"]["pan_moves_waveform"] = values.panReverse == 1;
+    if (values.menuLeftStep) document["display"]["menu_left_step"] = true;
     document["display"]["tooltips_off"] = unsigned(values.tooltipsHidden); // A bit per kind hidden (Tooltips).
     document["display"]["clock_indicator"] = values.clockIndicator == 1;
     document["display"]["swap_channels"] = values.swapChannels == 1;

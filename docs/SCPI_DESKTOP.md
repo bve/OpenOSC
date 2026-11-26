@@ -74,6 +74,13 @@ The instrument saves screenshots as PNG. Use the filename from
 `MMEM:CAT? "SCREENSHOTS"` to download a stored PNG or an earlier BMP.
 `DISP:DATA?` and `HCOP:DATA?` return the live screen as a 320×240 BMP.
 
+## Serial decoder results
+
+Select **UART (TTL)** or **RS-232** on the instrument under **Analyze → Decoder**.
+`DEC:PROT?` and `DEC:RES?` report `UART` or `RS232`. The CSV returned by
+`DEC:DATA?` uses the protocol names `uart` and `rs232`. Both use the UART
+event kinds `uart_data`, `uart_break` and `uart_fragment`.
+
 ## Idle settings
 
 | Command | Units and choices |

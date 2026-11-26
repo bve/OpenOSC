@@ -29,16 +29,23 @@ bool MeterReading::fits(const char *text, int available, const lv_font_t *font) 
     const char *digits = magnitude(text);
     return sign(font, digits) + width(font, digits) <= available;
 }
-const lv_font_t *MeterReading::font(const char *text, int available, const ReadingFonts &fonts) {
-    for (unsigned i = 0; i < fonts.count; ++i)
-        if (fits(text, available, fonts.fonts[i])) return fonts.fonts[i];
+const lv_font_t *MeterReading::font(const char *text, int available, const ReadingFonts &fonts, bool reserveSign) {
+    for (unsigned i = 0; i < fonts.count; ++i) {
+        const auto *face = fonts.fonts[i];
+        if (reserveSign ? fits(text, available, face) : width(face, text) <= available) return face;
+    }
     return fonts.fonts[fonts.count - 1];
 }
-void MeterReading::show(lv_obj_t *label, const char *text, const lv_font_t *font) {
+void MeterReading::show(lv_obj_t *label, const char *text, const lv_font_t *font, bool reserveSign) {
     if (lv_obj_get_style_text_font(label, LV_PART_MAIN) != font) lv_obj_set_style_text_font(label, font, 0);
-    const int padding = negative(text) ? 0 : sign(font, magnitude(text));
+    const int padding = reserveSign && !negative(text) ? sign(font, text) : 0;
     if (lv_obj_get_style_pad_left(label, LV_PART_MAIN) != padding) lv_obj_set_style_pad_left(label, padding, 0);
     if (std::strcmp(lv_label_get_text(label), text)) lv_label_set_text(label, text);
+}
+void MeterReading::showDigital(lv_obj_t *label, const char *text, const ReadingFonts &fonts, lv_text_align_t alignment) {
+    if (lv_obj_get_style_text_align(label, LV_PART_MAIN) != alignment) lv_obj_set_style_text_align(label, alignment, 0);
+    const bool reserveSign = alignment != LV_TEXT_ALIGN_CENTER;
+    show(label, text, font(text, available(label), fonts, reserveSign), reserveSign);
 }
 int MeterReading::contentWidth(lv_obj_t *label) {
     return lv_obj_get_style_pad_left(label, LV_PART_MAIN) + width(lv_obj_get_style_text_font(label, LV_PART_MAIN), lv_label_get_text(label));

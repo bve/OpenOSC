@@ -38,6 +38,7 @@ struct Preferences {
     uint8_t usbController = 1;
     BodePreferences bode; // Analyze > Bode setup (GitHub #124), in the file's scope object.
     uint32_t generatorShape = 0, generatorDutyPermille = 500;
+    bool menuLeftStep = false; // Settings > Display > Left key in menus. Uses the padding before generatorMillihertz.
     uint64_t generatorMillihertz = 1000000; // uint64: the ZT706S module reaches 10 MHz = 1e10 mHz.
     uint32_t generatorLevel = 0, generatorMinimumCode = 1000, generatorMaximumCode = 3000;
     uint32_t generatorSquareDrive = 0; // generator::SquareDrive (ZT703S Dedicated square): 0 factory, 1 PWM.

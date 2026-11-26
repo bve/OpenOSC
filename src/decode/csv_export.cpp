@@ -16,7 +16,7 @@ exporting::CsvContext CsvExport::context(const ResultSet &set, const Settings &s
         l.hysteresisAuto = set.hysteresisAuto;
     };
     switch (set.protocol()) {
-    case Protocol::Uart: line("RX", set.channel, set.channel); break;
+    case Protocol::Uart: case Protocol::Rs232: line("RX", set.channel, set.channel); break;
     case Protocol::Lin: line("LIN", set.channel, set.channel); break;
     case Protocol::I2c:
         line("SDA", s.i2c.sdaChannel, s.i2c.sdaChannel);

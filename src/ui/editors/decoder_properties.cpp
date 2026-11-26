@@ -64,7 +64,7 @@ uint32_t stepPause(uint32_t v, int steps) {
 }
 const char *lineRole(Protocol p, bool first, const decoding::Settings &s) { // The role of channel 1 (first) or 2.
     switch (p) {
-    case Protocol::Uart: return "RX";
+    case Protocol::Uart: case Protocol::Rs232: return "RX";
     case Protocol::Lin: return "LIN";
     case Protocol::I2c: return (s.i2c.sdaChannel == 0) == first ? "SDA" : "SCL";
     case Protocol::Spi: return (s.spi.clockChannel == 0) == first ? "SCLK" : "Data";
@@ -80,8 +80,9 @@ void DecoderProperties::layout() {
     add(R::Protocol); add(R::View); add(R::Update);
     const auto &s = settings_;
     switch (s.protocol) {
-    case Protocol::Uart:
-        for (R r : {R::Line, R::UartBaud, R::DetectBaud, R::DataBits, R::Parity, R::StopBits, R::BitOrder, R::IdleLevel}) add(r);
+    case Protocol::Uart: case Protocol::Rs232:
+        for (R r : {R::Line, R::UartBaud, R::DetectBaud, R::DataBits, R::Parity, R::StopBits, R::BitOrder}) add(r);
+        if (s.protocol == Protocol::Uart) add(R::IdleLevel);
         break;
     case Protocol::I2c: add(R::Sda); break;
     case Protocol::Spi:
@@ -114,6 +115,7 @@ const char *DecoderProperties::notice() const {
     if (!settings_.enabled) return "Decoder off: the Scope as it is";
     if (settings_.protocol == Protocol::Spi) return "SPI without CS: words from pauses or a manual start";
     if (settings_.protocol == Protocol::Can) return "Classical and ISO CAN FD by FDF; data rate after BRS";
+    if (settings_.protocol == Protocol::Rs232) return "DC coupling; negative idle, threshold near 0 V";
     if (settings_.protocol == Protocol::Uart) return "Baud: Up/Down standard rates, Left/Right fine";
     return "Decodes the record on show, whole";
 }
@@ -340,8 +342,8 @@ int32_t DecoderProperties::number(unsigned i) const {
     case R::LinId: return linId_;
     case R::SamplePoint: return s.can.samplePointPermille;
     case R::DataSamplePoint: return s.can.dataSamplePointPermille;
-    case R::Threshold1: return s.thresholdMv[0];
-    case R::Threshold2: return s.thresholdMv[1];
+    case R::Threshold1: return s.threshold(0);
+    case R::Threshold2: return s.threshold(1);
     case R::Difference: return s.can.differenceMv;
     case R::Hysteresis: return int32_t(s.hysteresisMv);
     case R::MinPulse: return int32_t(s.minPulseNs);
@@ -361,8 +363,11 @@ void DecoderProperties::setNumber(unsigned i, int32_t value) {
     case R::LinId: linId_ = uint8_t(clamp(0, decoding::LinSettings::Ids - 1)); break;
     case R::SamplePoint: s.can.samplePointPermille = uint16_t(clamp(100, 900)); break;
     case R::DataSamplePoint: s.can.dataSamplePointPermille = uint16_t(clamp(100, 900)); break;
-    case R::Threshold1: s.thresholdMv[0] = int32_t(clamp(-Protocols::ThresholdLimitMv, Protocols::ThresholdLimitMv)); break;
-    case R::Threshold2: s.thresholdMv[1] = int32_t(clamp(-Protocols::ThresholdLimitMv, Protocols::ThresholdLimitMv)); break;
+    case R::Threshold1: case R::Threshold2:
+        if (s.protocol == Protocol::Rs232)
+            s.uart.rs232ThresholdMv = int16_t(clamp(-Protocols::Rs232ThresholdLimitMv, Protocols::Rs232ThresholdLimitMv));
+        else s.thresholdMv[row(i) == R::Threshold2] = int32_t(clamp(-Protocols::ThresholdLimitMv, Protocols::ThresholdLimitMv));
+        break;
     case R::Difference: s.can.differenceMv = int32_t(clamp(-Protocols::ThresholdLimitMv, Protocols::ThresholdLimitMv)); break;
     case R::Hysteresis: s.hysteresisMv = uint32_t(clamp(0, Protocols::HysteresisLimitMv)); break;
     case R::MinPulse: s.minPulseNs = uint32_t(clamp(0, Protocols::MinPulseLimitNs)); break;

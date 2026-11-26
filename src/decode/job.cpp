@@ -69,10 +69,11 @@ DecodeStatus DecodeJob::prepare(const scope::FrameMetadata &m, ResultSet &set) {
         for (unsigned c = 0; c < 2; ++c) {
             if (!(sources >> c & 1)) continue;
             // The scale and the threshold itself now (Auto: its band is known once the swing is).
-            const auto codes = ThresholdCodes::of(m.channels[c], settings_.thresholdMv[c], automatic ? 0 : settings_.hysteresisMv);
+            const int32_t threshold = settings_.threshold(c);
+            const auto codes = ThresholdCodes::of(m.channels[c], threshold, automatic ? 0 : settings_.hysteresisMv);
             if (codes.status != ThresholdCodes::Status::Ok)
                 return codes.status == ThresholdCodes::Status::NoScale ? DecodeStatus::NoScale : DecodeStatus::OutOfRange;
-            set.thresholdMv[c] = settings_.thresholdMv[c];
+            set.thresholdMv[c] = threshold;
             lineChannel_[line] = uint8_t(c);
             ranges_[line++].begin(scope::Channel(c));
         }
@@ -98,7 +99,7 @@ DecodeStatus DecodeJob::beginStreams(const scope::FrameMetadata &m, ResultSet &s
             const unsigned c = lineChannel_[line];
             const uint32_t h = automatic ? ThresholdCodes::autoHysteresisMv(m.channels[c], uint32_t(ranges_[line].swing()), percent)
                                          : settings_.hysteresisMv;
-            const auto codes = ThresholdCodes::of(m.channels[c], settings_.thresholdMv[c], h);
+            const auto codes = ThresholdCodes::of(m.channels[c], settings_.threshold(c), h);
             set.hysteresisMv[c] = h;
             if (codes.status != ThresholdCodes::Status::Ok)
                 return codes.status == ThresholdCodes::Status::NoScale ? DecodeStatus::NoScale : DecodeStatus::OutOfRange;
@@ -188,12 +189,12 @@ unsigned DecodeJob::scanBlock(const scope::FrameView &frame, uint32_t n) {
     return k;
 }
 bool DecodeJob::searchBaud(scope::FrameLease &lease) {
-    if (!settings_.enabled || settings_.protocol != Protocol::Uart || lease_.valid() || !lease.valid()) return false;
+    if (!settings_.enabled || !Protocols::uartFraming(settings_.protocol) || lease_.valid() || !lease.valid()) return false;
     const auto &m = lease.view().metadata();
     const unsigned channel = settings_.channel;
     if (!m.channels[channel].enabled || (m.layout == scope::Layout::InterleavedCh1 && channel)) return false;
     const bool automatic = settings_.hysteresis == Hysteresis::Auto; // Auto: the swing first, as a decode.
-    searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.thresholdMv[channel], automatic ? 0 : settings_.hysteresisMv);
+    searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.threshold(channel), automatic ? 0 : settings_.hysteresisMv);
     if (searchCodes_.status != ThresholdCodes::Status::Ok || !m.samplesPerSecond.valid()) return false;
     decoded_.release();
     measuring_ = automatic;
@@ -220,7 +221,7 @@ bool DecodeJob::stepSearch(const Budget &budget) {
         const unsigned channel = settings_.channel;
         const uint32_t h = ThresholdCodes::autoHysteresisMv(m.channels[channel], uint32_t(ranges_[0].swing()),
                                                             Protocols::AutoHysteresisPercent);
-        searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.thresholdMv[channel], h);
+        searchCodes_ = ThresholdCodes::of(m.channels[channel], settings_.threshold(channel), h);
         if (searchCodes_.status != ThresholdCodes::Status::Ok) { finishSearch(BaudSearch::State::Done); return false; }
         streams_[0].begin(searchCodes_, 0, scope::Channel(channel));
         measuring_ = false; position_ = 0;
@@ -241,7 +242,7 @@ bool DecodeJob::stepSearch(const Budget &budget) {
         format.stopHalfBits = settings_.uart.stopHalfBits; format.msbFirst = settings_.uart.msbFirst;
         validator_ = &machine_.validator(); // In place of the estimator: its candidate is kept in q16.
         estimator_ = nullptr;
-        if (!q16 || !validator_->begin(q16, format, settings_.uart.inverted, m.samplesPerSecond)) { finishSearch(BaudSearch::State::Done); return false; }
+        if (!q16 || !validator_->begin(q16, format, settings_.uartInverted(), m.samplesPerSecond)) { finishSearch(BaudSearch::State::Done); return false; }
         streams_[0].begin(searchCodes_, 0, scope::Channel(settings_.channel));
         task_ = Task::Validate; position_ = 0;
         return true;

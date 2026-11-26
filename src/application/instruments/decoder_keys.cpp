@@ -29,14 +29,15 @@ void ApplicationController::baudAction(uint32_t now) {
         const unsigned valid = search.hint.valid, invalid = search.hint.invalid;
         applyDecoder(settings, now); // A new hash: the hint is stale now (never applied twice).
         char text[64];
-        std::snprintf(text, sizeof text, "UART %lu bd applied (%u ok, %u bad)", static_cast<unsigned long>(settings.uart.baud), valid, invalid);
+        const char *mode = settings.protocol == decoding::Protocol::Rs232 ? "RS-232" : "UART";
+        std::snprintf(text, sizeof text, "%s %lu bd applied (%u ok, %u bad)", mode, static_cast<unsigned long>(settings.uart.baud), valid, invalid);
         view_.notify(Tooltip::Done, text, now);
         return;
     }
     if (decoder_.running()) { view_.notify(Tooltip::Unavailable, "Detect baud: decoder busy", now); return; }
     scope::FrameLease held;
     if (!data_.scopeHeld() || !data_.acquireScope(held)) { view_.notify(Tooltip::Unavailable, "Detect baud needs HOLD (the record to measure)", now); return; }
-    if (!decoder_.searchBaud(held)) view_.notify(Tooltip::Unavailable, "Detect baud: no usable UART record (source, scale)", now);
+    if (!decoder_.searchBaud(held)) view_.notify(Tooltip::Unavailable, "Detect baud: check the source and scale", now);
 }
 void ApplicationController::baudHintText(char *out, size_t capacity) const {
     using State = decoding::DecodeJob::BaudSearch::State;

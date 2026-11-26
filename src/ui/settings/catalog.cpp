@@ -17,6 +17,7 @@ constexpr SettingsEntry display[] = {
     {"Battery", Action::BatteryDisplay},
     {"Clock indicator", Action::ClockIndicator}, // The Scope top bar's L/M/H run profile glyph (GitHub #47).
     {"Pan direction", Action::PanDirection},
+    {"Left key in menus", Action::MenuLeftKey},
     {"Swap CH1/CH2", Action::SwapChannels}, // The Scope view's channel labels, colours and slots (plot::ChannelView).
     {"Scope shortcuts", Action::None, Page::ScopeKeys},
     {"Generator layout", Action::GeneratorLayout},

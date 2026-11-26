@@ -188,8 +188,13 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   background on dark and light schemes. Trace brightness also applies to Peak Hold, Persistence, Glow,
   X-Y (CH1) and Density. Channel colors, labels and markers keep full contrast
 - FFT up to 2048 points with four window functions, dBFS or linear scale
-- Protocol decoders (**Analyze → Decoder**): UART with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
+- Protocol decoders (**Analyze → Decoder**): UART (TTL) and RS-232 with autobaud, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view, event detail; decoded data saved as CSV
+
+  Select the RX channel and use DC coupling. **UART (TTL)** defaults to high idle with a 1.65 V
+  threshold and also works on the logic side of an RS-232 transceiver. **RS-232** uses negative
+  idle and a separate threshold that defaults to 0 V. Both modes share the baud rate, data bits,
+  parity, stop bits and bit order.
 - Bode analyzer (**Analyze → Bode (FRA)**): gain and phase of a circuit against frequency with the
   built-in generator, cursors, −3 dB corner `fc` for low-pass and high-pass responses,
   cutoffs `f1` and `f2` with measured center `f0` for band-pass and notch responses,
@@ -267,6 +272,9 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   bottom by default, in the same order as the physical F1–F4 keys
 - The labels above F1–F4 always show what each key does right now; in menus they stay at the
   bottom, right above the keys
+- **Settings → Display → Left key in menus** defaults to Back. Step selects the previous choice
+  or switches a toggle off. In an open choice list, Left and Right move one item without wrapping.
+  F4 goes back or cancels an edit.
 - Oscilloscope color schemes (**Analyze → Colors**): Current, High contrast, Daylight and Amber,
   plus custom RGB colors for individual elements. Multimeter looks: Custom and Hybrid
 - Lossless PNG screenshots with a built-in viewer that also opens earlier BMP screenshots

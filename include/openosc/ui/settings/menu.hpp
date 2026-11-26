@@ -13,7 +13,8 @@ enum class SettingsAction : uint8_t {
     GeneratorStartup, GeneratorLayout, PanDirection, HoldTime, UsbController, Interleave, CalibrateInterleave, CalibrateInterleaveMatch, ClockIndicator,
     GainFactory, MatchGain, AutoKey, ResetHold, ShortcutHold, BatteryGain, BatteryOffset, SwapChannels,
     // Settings > Display > Tooltips (GitHub #108): a row each, in Tooltip order, then the critical ones (always on).
-    TooltipUsage, TooltipUnavailable, TooltipProgress, TooltipDone, TooltipAdvisory, TooltipCritical
+    TooltipUsage, TooltipUnavailable, TooltipProgress, TooltipDone, TooltipAdvisory, TooltipCritical,
+    MenuLeftKey
 };
 struct SettingsEntry {
     const char *name;

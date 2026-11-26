@@ -11,8 +11,8 @@ struct ArrangementRows {
 // LAYOUT (Scope, DMM digital, DMM analog): one Choice row per position, top to bottom under the
 // status bar, each offering every block. Taking block B at position N moves B there and shifts the
 // blocks between (BlockOrder::place), so the other rows show the new order at once and no block
-// is doubled. Taken on MENU (PropertyNavigator, Changed), the owner applies and saves it; F4 and
-// Left leave the list unchanged. No Apply.
+// is doubled. MENU commits a list choice. When browsing, Right steps forward and Left in Step
+// mode steps back. The owner applies the change immediately. F4 cancels an open list.
 template<class Block> class ArrangementProperties final : public PropertyList {
 public:
     using Order = BlockOrder<Block>;

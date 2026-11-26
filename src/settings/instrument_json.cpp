@@ -169,7 +169,8 @@ bool protocolsOf(JsonObjectConst object, decoding::Settings &d) {
     auto uart = part("uart"), i2c = part("i2c"), spi = part("spi"), lin = part("lin"), can = part("can");
     return number(uart, "baud", d.uart.baud) && small(uart, "bits", d.uart.dataBits) && named(uart, "parity", d.uart.parity, parities) &&
            named(uart, "stop", d.uart.stopHalfBits, stops, 2) && flag(uart, "msb_first", d.uart.msbFirst) &&
-           flag(uart, "inverted", d.uart.inverted) && named(i2c, "sda", d.i2c.sdaChannel, channels) &&
+           flag(uart, "inverted", d.uart.inverted) && number(uart, "rs232_threshold_mv", d.uart.rs232ThresholdMv) &&
+           named(i2c, "sda", d.i2c.sdaChannel, channels) &&
            named(spi, "sclk", d.spi.clockChannel, channels) && small(spi, "mode", d.spi.mode) && small(spi, "bits", d.spi.bits) &&
            flag(spi, "msb_first", d.spi.msbFirst) && named(spi, "align", d.spi.manual, aligns) && number(spi, "gap_ns", d.spi.gapNs) &&
            number(spi, "manual_start", d.spi.manualStart) && number(lin, "baud", d.lin.baud) &&
@@ -184,7 +185,7 @@ void decoder(JsonObjectConst object, decoding::Settings &output) {
     uint32_t protocol = uint32_t(d.protocol), view = uint32_t(d.view), update = uint32_t(d.update);
     // A file from before the Auto hysteresis with its hysteresis_mv: that value stays in force (Manual).
     uint32_t hysteresis = uint32_t(object.containsKey("hysteresis_mv") ? decoding::Hysteresis::Manual : d.hysteresis);
-    static constexpr const char *protocols[] = {"off", "uart", "i2c", "spi", "lin", "can"};
+    static constexpr const char *protocols[] = {"off", "uart", "i2c", "spi", "lin", "can", "rs232"};
     static constexpr const char *views[] = {"annotations", "split", "table"}, *updates[] = {"complete", "live"};
     static constexpr const char *hysteresisModes[] = {"auto", "manual"};
     static_assert(sizeof hysteresisModes / sizeof *hysteresisModes == unsigned(decoding::Hysteresis::Count));
@@ -216,6 +217,7 @@ void encodeDecoder(JsonObject scope, const decoding::Settings &d) {
     auto uart = object.createNestedObject("uart");
     uart["baud"] = d.uart.baud; uart["bits"] = d.uart.dataBits; uart["parity"] = parities[d.uart.parity];
     uart["stop"] = stops[d.uart.stopHalfBits - 2]; uart["msb_first"] = bool(d.uart.msbFirst); uart["inverted"] = bool(d.uart.inverted);
+    if (d.uart.rs232ThresholdMv) uart["rs232_threshold_mv"] = d.uart.rs232ThresholdMv;
     object.createNestedObject("i2c")["sda"] = channels[d.i2c.sdaChannel];
     auto spi = object.createNestedObject("spi");
     spi["sclk"] = channels[d.spi.clockChannel]; spi["mode"] = d.spi.mode; spi["bits"] = d.spi.bits;

@@ -14,9 +14,9 @@ bool ProtocolMachine::configure(const Settings &s, const scope::FrameMetadata &m
     protocol_ = s.protocol;
     const auto &fs = m.samplesPerSecond;
     switch (s.protocol) {
-    case Protocol::Uart: {
+    case Protocol::Uart: case Protocol::Rs232: {
         UartOptions o;
-        o.baud = s.uart.baud; o.inverted = s.uart.inverted;
+        o.baud = s.uart.baud; o.inverted = s.uartInverted();
         o.format.dataBits = s.uart.dataBits; o.format.parity = Parity(s.uart.parity);
         o.format.stopHalfBits = s.uart.stopHalfBits; o.format.msbFirst = s.uart.msbFirst;
         o.timingUncertaintyPoints = window(m) - 1; // Four-lane read skew (EdgeScanner::LaneSkewNs); else 0.
@@ -59,7 +59,7 @@ void ProtocolMachine::initialLevel(uint8_t channel, int level) {
 }
 uint32_t ProtocolMachine::dropped() const {
     switch (protocol_) {
-    case Protocol::Uart: return as<UartDecoder>().dropped();
+    case Protocol::Uart: case Protocol::Rs232: return as<UartDecoder>().dropped();
     case Protocol::I2c: return as<I2cDecoder>().dropped();
     case Protocol::Spi: return as<SpiDecoder>().dropped();
     case Protocol::Lin: return as<LinDecoder>().dropped();

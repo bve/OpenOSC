@@ -5,7 +5,7 @@ namespace openosc::decoding {
 // What the Scope's protocol decoder does (docs/SCOPE_PROTOCOL_DECODERS_PLAN.md). Off by default: the
 // Scope is as it was. It is switched on by Analyze > Decoder > Protocol. `enabled` and `protocol` apart:
 // F4 Scope leaves the decoder (enabled 0) and keeps the protocol, view and parameters for the next time.
-enum class Protocol : uint8_t { Off, Uart, I2c, Spi, Lin, Can, Count };
+enum class Protocol : uint8_t { Off, Uart, I2c, Spi, Lin, Can, Rs232, Count };
 enum class View : uint8_t { Annotations, Split, Table, Count };
 // Complete: the record shown is decoded whole (the capture waits for it). Live: a bit snapshot, then
 // the record released; only once its spike and memory owner are accepted (Protocols::liveAvailable).
@@ -20,11 +20,13 @@ struct UartSettings {
     uint32_t baud = 115200;
     uint8_t dataBits = 8, parity = 0, stopHalfBits = 2; // 5..9; None/Even/Odd/Mark/Space; 2/3/4 = 1/1.5/2 stop bits.
     uint8_t msbFirst = 0, inverted = 0;                 // inverted: the line idles low.
+    int16_t rs232ThresholdMv = 0;                       // At the probe tip, for either line. Fits the existing padding.
     bool operator==(const UartSettings &o) const {
         return baud == o.baud && dataBits == o.dataBits && parity == o.parity && stopHalfBits == o.stopHalfBits &&
-               msbFirst == o.msbFirst && inverted == o.inverted;
+               msbFirst == o.msbFirst && inverted == o.inverted && rs232ThresholdMv == o.rs232ThresholdMv;
     }
 };
+static_assert(sizeof(UartSettings) == 12, "UART settings share the Preferences stack budget");
 struct I2cSettings {
     uint8_t sdaChannel = 0; // SCL on the other channel.
     bool operator==(const I2cSettings &o) const { return sdaChannel == o.sdaChannel; }
@@ -74,7 +76,7 @@ struct Settings {
     Protocol protocol = Protocol::Off;  // Off by default; F4 keeps the last protocol (shown Off while not enabled).
     View view = View::Table;            // Decoder only at the first enable (plan §4.4); then the last chosen.
     Update update = Update::Complete;
-    uint32_t channel = 0;               // The line of UART and LIN: 0 CH1, 1 CH2.
+    uint32_t channel = 0;               // The line of UART, RS-232 and LIN: 0 CH1, 1 CH2.
     int32_t thresholdMv[2] = {1650, 1650}; // At the probe tip, per channel.
     Hysteresis hysteresis = Hysteresis::Auto;
     uint32_t hysteresisMv = 200;        // Manual: the total width around the threshold.
@@ -84,6 +86,8 @@ struct Settings {
     SpiSettings spi;
     LinSettings lin;
     CanSettings can;
+    bool uartInverted() const { return protocol == Protocol::Rs232 || uart.inverted; }
+    int32_t threshold(unsigned c) const { return protocol == Protocol::Rs232 ? uart.rs232ThresholdMv : thresholdMv[c]; }
     bool valid() const;
     // The parameters a result depends on (not enabled or view): a cached result is reused for the
     // same record only while this is unchanged.
@@ -95,6 +99,7 @@ struct Settings {
 };
 struct Protocols {
     static bool available(Protocol protocol) { return protocol != Protocol::Off && protocol < Protocol::Count; }
+    static bool uartFraming(Protocol protocol) { return protocol == Protocol::Uart || protocol == Protocol::Rs232; }
     static bool liveAvailable() { return false; } // Until the snapshot spike and its owner are accepted.
     static const char *name(Protocol protocol);
     static const char *key(Protocol protocol); // settings.json value
@@ -102,6 +107,7 @@ struct Protocols {
     static const char *viewKey(View view);
     static const char *updateKey(Update update);
     static constexpr int32_t ThresholdLimitMv = 400000; // 400 V at the probe tip.
+    static constexpr int32_t Rs232ThresholdLimitMv = 25000;
     static constexpr uint32_t HysteresisLimitMv = 100000, MinPulseLimitNs = 1000000;
     static constexpr uint32_t MinimumBaud = 50, MaximumBaud = 20000000;      // UART, LIN
     static constexpr uint32_t MinimumBitrate = 5000, MaximumBitrate = 1000000; // CAN nominal (arbitration) phase

@@ -276,9 +276,8 @@ void ApplicationController::powerOff(uint32_t now) {
 }
 void ApplicationController::onKeys(const KeyEvents& events, uint32_t now) {
     const uint32_t keys = events.shortPress | events.repeat;
-    // A held Right steps a Number but never runs through a Choice (relays, run mode): the navigator
-    // takes the next option on its press only.
     navigator_.repeats(events.repeat & ~events.shortPress);
+    navigator_.leftStep(prefs_.menuLeftStep);
     if (shutdown_ != Shutdown::None || recoveryPending_) return;
     meterRangeKeys(events, now); // KEY5 in the DMM: its own press, release and hold events.
     scopeAutoKeys(events, now);  // KEY5 on the Scope waveform screen: the same events, its own actions.

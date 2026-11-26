@@ -37,7 +37,7 @@ public:
 
 private:
     void feed(const dmm::Result &result, DataStatus status, const dmm::RelativeReading *relative); // Bar or dial target.
-    void reading(const char *text); // The main reading, its sign column reserved (MeterReading).
+    void reading(const char *text, DataStatus state);
     // The DMM's look (palette, face, overrides): resolved and applied only when it changes.
     void style(unsigned face, unsigned palette, const MeterAppearance &appearance);
     void layout(bool analog);

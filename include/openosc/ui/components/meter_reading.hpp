@@ -11,14 +11,15 @@ class MeterReading {
 public:
     static void show(lv_obj_t *label, const char *text, unsigned size) { show(label, text, font(text, available(label), size)); }
     // With a font chosen by the caller (several readings sharing one font and baseline).
-    static void show(lv_obj_t *label, const char *text, const lv_font_t *font);
+    static void show(lv_obj_t *label, const char *text, const lv_font_t *font, bool reserveSign = true);
     // The largest font up to `size` in which the sign column and the magnitude fit `width`.
     static const lv_font_t *font(const char *text, int width, unsigned size);
     // The same from a reading face's fonts (largest first): the first that fits, else the last.
-    static const lv_font_t *font(const char *text, int width, const ReadingFonts &fonts);
+    static const lv_font_t *font(const char *text, int width, const ReadingFonts &fonts, bool reserveSign = true);
     // The sign column and the magnitude fit `width` in `font`.
     static bool fits(const char *text, int width, const lv_font_t *font);
-    static void show(lv_obj_t *label, const char *text, const ReadingFonts &fonts) { show(label, text, font(text, available(label), fonts)); }
+    // Right-aligned digits keep their sign column; a centred overload uses the entire width.
+    static void showDigital(lv_obj_t *label, const char *text, const ReadingFonts &fonts, lv_text_align_t alignment);
     static int available(lv_obj_t *label);
     // The reading and its unit label in `box` (parent coordinates): the largest face font in which
     // the sign column, the reading, `gap` and the unit fit the box's width; the digits, gap and

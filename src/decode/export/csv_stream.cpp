@@ -31,7 +31,6 @@ static_assert(sizeof StopNames / sizeof *StopNames == unsigned(canfd::Stop::Coun
 constexpr const char *FlagName[16] = {"OPEN", "CUT", "CONT", "GLITCH", "AMBIGUOUS", "FS_LOW", "TRUNCATED", "FRAMING",
                                       "PARITY", "CHECK_FAILED", "NOT_CHECKED", "NO_ACK", "STUFF", "SYNC",
                                       "LEN_UNKNOWN", "NOTE"};
-constexpr const char *ProtocolNames[] = {"off", "uart", "i2c", "spi", "lin", "can"};
 constexpr const char *StatusNames[] = {"idle", "decoding", "done", "cancelled", "no_scale", "out_of_range",
                                        "channel_off", "unsupported", "timing"};
 // The I2C summary in aux (i2c.cpp) and the LIN checksum model bits (lin.cpp), as documented in
@@ -83,7 +82,8 @@ bool readable(const ResultSet &set, unsigned index, Protocol protocol) {
     const DecodeEvent &e = set.event(index);
     CanFdView view;
     if (e.kind == CanFrame && !CanFdView::of(set, index, view)) return false; // Count, trailer, fields agree.
-    if (!kindName(e.kind) || protocolOf(e.kind) != unsigned(protocol) || e.first > e.last) return false;
+    const auto family = protocol == Protocol::Rs232 ? Protocol::Uart : protocol; // Both profiles emit UART events.
+    if (!kindName(e.kind) || protocolOf(e.kind) != unsigned(family) || e.first > e.last) return false;
     const unsigned width = formatWidth(e.format);
     if (width > DecodeEvent::Words16) return false;
     if (!e.count) return true;
@@ -242,7 +242,7 @@ bool DecodeCsvStream::metadata() {
         put("\r\n");
         element_ = 0;
         break;
-    case ProtocolLine: keyLine("protocol"); put(ProtocolNames[unsigned(s.protocol())]); put("\r\n"); break;
+    case ProtocolLine: keyLine("protocol"); put(Protocols::key(s.protocol())); put("\r\n"); break;
     case StatusLine: keyLine("decode_status"); put(StatusNames[unsigned(s.status)]); put("\r\n"); break;
     case Generation: keyLine("record_generation"); integer(key.generation); put("\r\n"); break;
     case Sequence: keyLine("record_sequence"); integer(key.sequence); put("\r\n"); break;
@@ -366,7 +366,7 @@ bool DecodeCsvStream::simple(unsigned column, const DecodeEvent &e) {
     case StartS: time(e.first); break;
     case EndS: time(e.last); break;
     case TimeRef: put(trigger_ ? "trigger" : "start"); break;
-    case ProtocolName: put(ProtocolNames[protocol]); break;
+    case ProtocolName: put(Protocols::key(set_->protocol())); break;
     case KindName: put(kindName(e.kind)); break;
     case Status: put(TableText::code(e)); break;
     case FlagsHex: hex(e.flags, 4); break;

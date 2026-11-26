@@ -95,7 +95,9 @@ void ScreenHost::activate(MeasurementMode mode) {
     lv_obj_set_style_bg_color(root_, lv_color_hex(theme.background), 0);
     lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
     elements_.apply(theme.elements[unsigned(mode)]);
-    MeterReading::release(elements_.get(ElementId::Reading)); // The DMM sets its sign column again on activation.
+    auto *reading = elements_.get(ElementId::Reading);
+    MeterReading::release(reading);
+    lv_obj_remove_local_style_prop(reading, LV_STYLE_TEXT_ALIGN, 0);
     // Status is part of the instrument shell, never a hideable body element.
     auto *status = elements_.get(ElementId::Status);
     lv_obj_set_size(status, StatusBarLayout::MaximumStatus, StatusBarLayout::PillHeight);

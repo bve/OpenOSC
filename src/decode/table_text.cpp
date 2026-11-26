@@ -205,7 +205,7 @@ void protocolLine(const ResultSet &set, unsigned index, const Settings &s, unsig
             static constexpr char parity[] = {'N', 'E', 'O', 'M', 'S'};
             static constexpr const char *stops[] = {"1", "1.5", "2"};
             w.add("%lu bd %u%c%s %s%s RX CH%u", static_cast<unsigned long>(s.uart.baud), s.uart.dataBits, parity[s.uart.parity % 5],
-                  stops[(s.uart.stopHalfBits - 2) % 3], s.uart.msbFirst ? "MSB" : "LSB", s.uart.inverted ? " inv" : "", set.channel + 1u);
+                  stops[(s.uart.stopHalfBits - 2) % 3], s.uart.msbFirst ? "MSB" : "LSB", s.uartInverted() ? " inv" : "", set.channel + 1u);
             return;
         }
         case 2:

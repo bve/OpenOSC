@@ -10,19 +10,25 @@ bool PropertyNavigator::cancel(PropertyList &list) {
     mode_ = Mode::Browse;
     return number;
 }
-// The option after the current one, the first after the last (a Toggle: the other one); a value off
-// the list (a legacy one) goes to the first. One option only, or the list refuses it: nothing changes.
-PropertyNavigator::Outcome PropertyNavigator::next(PropertyList &list) const {
+bool PropertyNavigator::backPressed(uint32_t keys) const {
+    return (keys & Keypad::F4) || (!leftStep_ && (keys & Keypad::Left & ~repeated_));
+}
+// Forward wraps. Backward stops at the first option and leaves a legacy value alone.
+PropertyNavigator::Outcome PropertyNavigator::next(PropertyList &list, bool previous) const {
     const unsigned current = list.option(row_);
-    if (list.kind(row_) == PropertyKind::Toggle) return list.choose(row_, current ? 0 : 1) ? Outcome::Changed : Outcome::Refused;
+    if (list.kind(row_) == PropertyKind::Toggle) {
+        if (previous && !current) return Outcome::None;
+        return list.choose(row_, current ? 0 : 1) ? Outcome::Changed : Outcome::Refused;
+    }
     const unsigned options = list.options(row_);
-    if (!options) return Outcome::None;
-    const unsigned next = current < options ? (current + 1) % options : 0;
+    if (!options || (previous && (!current || current >= options))) return Outcome::None;
+    const unsigned next = previous ? current - 1 : current < options ? (current + 1) % options : 0;
     if (next == current) return Outcome::None;
     return list.choose(row_, next) ? Outcome::Changed : Outcome::Refused;
 }
 PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &list) {
-    const uint32_t repeated = repeated_;
+    const bool back = backPressed(keys);
+    const uint32_t pressed = keys & ~repeated_;
     repeated_ = 0; // This call's only.
     const unsigned count = list.count();
     if (!keys) return Outcome::None;
@@ -30,7 +36,6 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     const bool gone = row_ >= count;
     if (gone) row_ = count - 1;
     const auto kind = list.kind(row_);
-    const uint32_t backKeys = Keypad::F4 | (repeated & Keypad::Left ? 0U : uint32_t(Keypad::Left)); // Left on its press only.
     // An open list or edit whose row is gone (or now another kind): the key only closes it.
     if ((mode_ == Mode::Choice && (gone || kind != PropertyKind::Choice)) || (mode_ == Mode::Number && (gone || kind != PropertyKind::Number))) {
         mode_ = Mode::Browse; return Outcome::None;
@@ -39,7 +44,7 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
     case Mode::Choice: {
         const unsigned options = list.options(row_);
         if (!options) { mode_ = Mode::Browse; return Outcome::None; } // The list emptied while open.
-        if (keys & backKeys) { mode_ = Mode::Browse; return Outcome::None; }
+        if (back) { mode_ = Mode::Browse; return Outcome::None; }
         if (draft_ >= options) { draft_ = 0; return Outcome::None; } // It shrank: the key shows its first option, takes none.
         if (keys & Keypad::Menu) { // Wins over a move pressed with it.
             mode_ = Mode::Browse;
@@ -48,6 +53,8 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
         }
         if (keys & Keypad::Up) draft_ = (draft_ + options - 1) % options;
         else if (keys & Keypad::Down) draft_ = (draft_ + 1) % options;
+        else if (leftStep_ && (pressed & Keypad::Left) && draft_) --draft_;
+        else if (leftStep_ && (pressed & Keypad::Right) && draft_ + 1 < options) ++draft_;
         return Outcome::None;
     }
     case Mode::Number:
@@ -60,12 +67,14 @@ PropertyNavigator::Outcome PropertyNavigator::keys(uint32_t keys, PropertyList &
         return Outcome::None;
     case Mode::Browse: break;
     }
-    if (keys & backKeys) return Outcome::Back;
+    if (back) return Outcome::Back;
     if (keys & Keypad::Up) { row_ = (row_ + count - 1) % count; return Outcome::None; }
     if (keys & Keypad::Down) { row_ = (row_ + 1) % count; return Outcome::None; }
     if ((keys & Keypad::Right) && kind == PropertyKind::Page) return Outcome::Open;
-    if ((keys & Keypad::Right) && (kind == PropertyKind::Choice || kind == PropertyKind::Toggle))
-        return repeated & Keypad::Right ? Outcome::None : next(list); // One option per press, never on a held key.
+    if (kind == PropertyKind::Choice || kind == PropertyKind::Toggle) {
+        if (keys & Keypad::Right) return pressed & Keypad::Right ? next(list) : Outcome::None;
+        if (leftStep_ && (pressed & Keypad::Left) && !(keys & Keypad::Menu)) return next(list, true);
+    }
     if (!(keys & Keypad::Menu)) return Outcome::None;
     switch (kind) {
     case PropertyKind::Choice:

@@ -5,9 +5,9 @@
 namespace openosc {
 class PreferencesJson {
 public:
-    // The whole file fits in 4 KiB with compact formatting, including the widest settings
-    // that use custom appearances, decoders and Scope shortcuts. Use compact when pretty does not fit.
-    static constexpr size_t MaxBytes = 4096;
+    // Compact formatting fits the file with all custom appearances, decoders and Scope
+    // shortcuts. Use it when pretty formatting exceeds this limit. Storage uses the shared JSON buffer.
+    static constexpr size_t MaxBytes = 4352;
     // The JSON tree of the largest file: its members/elements (the DMM hold object's 7, the Scope
     // decoder's five protocols, the Bode setup's) and copied strings (keys and values). The longest
     // valid file leaves at least a fifth of both budgets free (settings_layout). The workspace in

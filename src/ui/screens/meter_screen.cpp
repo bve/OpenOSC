@@ -22,7 +22,7 @@ void MeterScreen::activate(const ApplicationState &) {
     style(face_, palette_, appearance_);
     layout(analog_);
     host_.functionIcon().show(dmm::Function::Unknown, false, look_.color(MeterRole::Function));
-    reading("----.--");
+    reading("----.--", DataStatus::NoData);
     host_.elements().text(ElementId::Unit, "");
     host_.elements().text(ElementId::Details, "Waiting");
     host_.elements().text(ElementId::Measurements, "");
@@ -101,6 +101,7 @@ void MeterScreen::layout(bool analog) {
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, MeterSummary::CompactFont), 0);
         lv_obj_set_style_text_align(line, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_style_text_align(unitLabel, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_LEFT, 0);
         lv_obj_set_hidden(value, false);
         host_.buttons(analogSpans_[unsigned(AnalogBlock::Buttons)].y);
     } else {
@@ -137,7 +138,7 @@ void MeterScreen::cards(dmm::Function function, bool beeper, bool currentInput, 
     host_.meterCards().show(function, beeper, currentInput, look_.color(MeterRole::CardActive), look_.color(MeterRole::CardInactive));
     host_.meterCards().visible(true);
 }
-void MeterScreen::reading(const char *text) {
+void MeterScreen::reading(const char *text, DataStatus state) {
     const auto &theme = host_.theme().elements[Mode];
     const auto &box = theme[unsigned(ElementId::Reading)];
     auto &elements = host_.elements();
@@ -146,8 +147,11 @@ void MeterScreen::reading(const char *text) {
     const int font = analog_ || box.font < ScreenLayout::Digits ? box.font : box.font == ScreenLayout::Digits ? digits_ : std::min<int>(box.font, digits_);
     const auto fonts = MeterStyles::reading(look_.face, decltype(box.font)(font));
     const bool changed = std::strcmp(lv_label_get_text(label), text) != 0;
-    if (!analog_) MeterReading::show(label, text, fonts);
-    else {
+    if (!analog_) {
+        const auto alignment = state == DataStatus::Ok ? LV_TEXT_ALIGN_RIGHT
+                             : state == DataStatus::Overload ? LV_TEXT_ALIGN_CENTER : LV_TEXT_ALIGN_LEFT;
+        MeterReading::showDigital(label, text, fonts, alignment);
+    } else {
         const auto &span = analogSpans_[unsigned(AnalogBlock::Reading)];
         const lv_area_t area = {box.x, span.y, box.x + box.width - 1, span.y + span.height - 1};
         MeterReading::showCentred(label, elements.get(ElementId::Unit), text, fonts, area, UnitGap);
@@ -250,7 +254,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     const char *terminals = dmm::Terminals::forFunction(function);
     // The function as its sign; the row says only what the sign cannot: MEAN, RMS, the jacks.
     host_.functionIcon().show(function, result.kind == dmm::Kind::DiodeWithBeeper, look_.color(MeterRole::Function));
-    reading(text);
+    reading(text, MeterText::state(result));
     // AC V.F.C. (the ZT706S's third F1 position) is V AC with its mark, as on the factory screen:
     // "VFC" first on the sign row (digital) or on the dial's marking (analog: the meta row's right
     // slot holds the AC frequency), and on the F1 card's value line.
