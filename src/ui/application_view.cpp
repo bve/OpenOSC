@@ -15,6 +15,7 @@ void ApplicationView::build(const Theme &theme) {
     if (menu_) lv_obj_delete(menu_);
     menuContent_.reset(); menuRetained_=false; draftPreviewObject_=nullptr; menuUptime_=nullptr; sessionTrendLive_=false;
     if (toast_) lv_obj_delete(toast_);
+    if (message_) lv_obj_delete(message_);
     if (generatorIndicator_) lv_obj_delete(generatorIndicator_);
     if (usbIndicator_) lv_obj_delete(usbIndicator_);
     if (fps_) lv_obj_delete(fps_);
@@ -53,6 +54,14 @@ void ApplicationView::build(const Theme &theme) {
     ui::Elements::overlayPanel(toast_, shown());
     lv_obj_set_style_pad_all(toast_, 4, 0);
     lv_obj_set_hidden(toast_, true);
+    message_ = label(screen, "", 0, 0); // As the toast, wrapped to the lines its text takes, centred.
+    lv_obj_set_width(message_, 304);
+    lv_label_set_long_mode(message_, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_font(message_, font(14), 0);
+    ui::Elements::overlayPanel(message_, shown());
+    lv_obj_set_style_pad_all(message_, 6, 0);
+    lv_obj_align(message_, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_hidden(message_, true);
     using Layout = ui::StatusBarLayout;
     generatorIndicator_ = ui::StatusIcons::generator(screen, Layout::Generator.x, 4, theme.generator);
     lv_obj_set_hidden(generatorIndicator_, true);
@@ -104,8 +113,8 @@ void ApplicationView::refreshIndicators() {
     overview_.visible(scope);
     const bool trigger = scope && trigger_ && edge_ && Layout::trigger(statusRight_);
     if (trigger_) lv_obj_set_hidden(trigger_, !trigger);
-    if (edge_) lv_obj_set_hidden(edge_, !trigger);
-    if (channelTag_) lv_obj_set_hidden(channelTag_, !trigger || channelTagChannel_ == NoTriggerChannel);
+    if (edge_) lv_obj_set_hidden(edge_, !trigger || !triggerSource_);
+    if (channelTag_) lv_obj_set_hidden(channelTag_, !trigger || !triggerSource_ || channelTagChannel_ == NoTriggerChannel);
     placeFps();
     placeClock();
 }
@@ -211,24 +220,26 @@ void ApplicationView::refreshTriggerColors(unsigned channel) {
     if (!channelTag_ || channel >= NoTriggerChannel) return;
     const uint32_t color = scopeLook_.trigger(host_.channelView().slot(channel) ? scopeTheme_.channel2 : scopeTheme_.channel1);
     const uint32_t ink = scopeLook_.tagText(color);
-    ui::Elements::textColor(trigger_, color);
+    ui::Elements::textColor(trigger_, triggerSource_ ? color : shown().foreground); // "AUTO" of no channel: neutral.
     if (channel == channelTagChannel_ && color == channelTagColor_ && ink == channelTagInk_) return;
     const bool first = channelTagChannel_ == NoTriggerChannel;
     channelTagChannel_ = channel;
     channelTagColor_ = color;
     channelTagInk_ = ink;
-    if (first) lv_obj_set_hidden(channelTag_, lv_obj_is_hidden(trigger_));
+    if (first) lv_obj_set_hidden(channelTag_, lv_obj_is_hidden(trigger_) || !triggerSource_);
     lv_obj_invalidate(channelTag_);
 }
-void ApplicationView::scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel) {
+void ApplicationView::scopeTrigger(const scope::TriggerSettings &trigger, const scope::ChannelMetadata &channel, bool source) {
     const auto threshold = trigger.comparatorLevel();
     char level[24];
-    if (!channel.calibrated || !channel.probeDenominator ||
+    if (!source) std::snprintf(level, sizeof level, "AUTO");
+    else if (!channel.calibrated || !channel.probeDenominator ||
         !plot::Format::quantity(scope::TriggerLevel::shownVolts(threshold, channel), "V", level, sizeof level, 3))
         std::snprintf(level, sizeof level, "%d", threshold);
     if (!trigger_ || !edge_) return;
     scope_.triggerType(trigger.type);
     if (std::strcmp(lv_label_get_text(trigger_), level)) { lv_label_set_text(trigger_, level); placeFps(); }
+    if (source != triggerSource_) { triggerSource_ = source; refreshIndicators(); }
     refreshTriggerColors(unsigned(trigger.channel));
     static const lv_point_precise_t rising[] = {{0, 9}, {3, 9}, {3, 1}, {7, 1}}, falling[] = {{0, 1}, {3, 1}, {3, 9}, {7, 9}};
     const auto *points = trigger.comparatorEdge() == scope::Edge::Rising ? rising : falling;
@@ -259,6 +270,7 @@ void ApplicationView::paintShell() {
     lv_obj_set_style_bg_color(menu_, lv_color_hex(t.background), 0);
     lv_obj_set_style_border_color(menu_, lv_color_hex(t.grid), 0);
     ui::Elements::overlayPanel(toast_, t);
+    ui::Elements::overlayPanel(message_, t);
     lv_obj_set_style_image_recolor(usbIndicator_, lv_color_hex(t.accent), 0);
     lv_obj_set_style_image_recolor(generatorIndicator_, lv_color_hex(t.generator), 0);
     lv_obj_set_style_line_color(edge_, lv_color_hex(t.muted), 0);
@@ -342,12 +354,26 @@ void ApplicationView::dismissNotice(Notice kind) {
     lv_obj_set_hidden(toast_, true);
     notice_ = Notice::None;
 }
+void ApplicationView::message(const char *text) {
+    if (!message_) return;
+    if (!*text) { dismissMessage(); return; }
+    if (std::strcmp(lv_label_get_text(message_), text)) lv_label_set_text(message_, text);
+    lv_obj_set_hidden(message_, false); // Raised by service().
+}
+bool ApplicationView::dismissMessage() {
+    if (!messageShowing()) return false;
+    lv_obj_set_hidden(message_, true);
+    return true;
+}
 void ApplicationView::service(uint32_t now) {
     host_.waveform().service(now);
     // The overview follows the projection itself, so HOLD pan and zoom move it without a new frame.
     if (mode_ == MeasurementMode::Oscilloscope && !host_.overlayActive()) overview_.update(host_.waveform().model(), host_.channelView());
     if (statusRight_ != host_.statusRight()) refreshIndicators(); // Also catches states set by the screens.
-    // Panels that refresh themselves must not bury a message the user has yet to read.
+    // Panels that refresh themselves must not bury a message the user has yet to read: the remote
+    // message (DISPlay:TEXT), then the notice over it.
+    if (messageShowing() && lv_obj_get_index(message_) + (toastShowing() ? 2 : 1) != int32_t(lv_obj_get_child_count(lv_obj_get_parent(message_))))
+        lv_obj_move_foreground(message_);
     if (toastShowing() && lv_obj_get_index(toast_)+1!=int32_t(lv_obj_get_child_count(lv_obj_get_parent(toast_))))
         lv_obj_move_foreground(toast_);
     if (toastShowing() && int32_t(now - toastUntil_) >= 0) dismissNotice(notice_);

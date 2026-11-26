@@ -14,6 +14,24 @@ const dmm::Result &shownReading(const dmm::Session &meter, dmm::Function selecti
     return selecting != dmm::Function::Unknown ? none : meter.displayed();
 }
 } // namespace
+// The DMM trace, each pass (Y-T and Y-T+FFT), as a channel: its readings to the plot, its readouts over
+// the visible window and its scale to the footer, and the cards while F1/F2 select it.
+void ApplicationController::showMeterTrace() {
+    auto &widget = view_.waveform();
+    const auto &options = widget.options();
+    widget.meterReadings(options.meter.shown ? &data_.meterReadings() : nullptr);
+    plot::MeterReadouts readouts;
+    readouts.shown = options.meter.shown && (options.mode == plot::Mode::Time || options.mode == plot::Mode::SpectrumOverlay);
+    if (readouts.shown) {
+        using F = dmm::Function;
+        const auto function = F(prefs_.meterFunction);
+        readouts.rmsOffered = function != F::VoltageAc && function != F::MillivoltsAc && function != F::CurrentAc && function != F::MilliampsAc;
+        readouts.function = prefs_.meterFunction < MeterFunctionCount ? MeterFunctions[prefs_.meterFunction].name : "";
+        readouts.calculate(data_.meterReadings(), widget.model());
+    }
+    view_.scopeMeter(meterCard());
+    view_.scopeMeterReadouts(readouts);
+}
 // The function a running selection awaits, unless a HOLD keeps a reading.
 dmm::Function ApplicationController::meterSelecting() const {
     const auto &meter = data_.meter();
@@ -47,7 +65,7 @@ void ApplicationController::showTrigger(const scope::FrameMetadata *shown) {
     view_.waveform().trigger(trigger.channel, shown ? scope::TriggerLevel::inFrame(threshold, settings, shown->channels[source]) : double(threshold));
     // Each refresh and frame: a new source, mode, invert or scale (also staged in HOLD) leaves the limit.
     view_.waveform().triggerLimit(triggerLimit(data_.scopeRequest()));
-    view_.scopeTrigger(trigger, settings);
+    view_.scopeTrigger(trigger, settings, channelShown(0) || channelShown(1));
 }
 // One decision for F1-F4's captions, from what the key handlers act on: Remote locks every local
 // key; rows (settings, panels, gain) go Back, or Cancel the field being edited; a confirmation and a
@@ -209,13 +227,22 @@ void ApplicationController::displayData(uint32_t now) {
         }
         options=view_.waveform().options();
         // The next capture's settings do not change what a held record contains.
-        if (!channelShown(options.spectrum.channel)) {
+        if (!channelShown(options.spectrum.channel) && channelShown(options.spectrum.channel ^ 1)) {
             options.spectrum.channel ^= 1;
             view_.waveform().configure(options);
         }
-        if (options.cursors.voltage && !channelShown(options.cursors.channel) && channelShown(options.cursors.channel^1)) {
-            auto cursors=options.cursors; cursors.channel^=1;
-            view_.waveform().cursorLines(cursors); queuePlotSave(now);
+        // Level cursors on a channel or the DMM trace that is no longer shown: on the other channel
+        // shown, else on the DMM trace (no channel shown).
+        if (options.cursors.voltage) {
+            constexpr unsigned Meter = plot::CursorOptions::Meter;
+            const unsigned channel = options.cursors.channel;
+            const bool meter = channel == Meter;
+            const unsigned other = meter ? (channelShown(0) ? 0U : 1U) : channelShown(channel ^ 1) || !options.meter.shown ? channel ^ 1 : Meter;
+            const auto shown = [&](unsigned c) { return c == Meter ? options.meter.shown : channelShown(c); };
+            if (!shown(channel) && shown(other)) {
+                auto cursors = options.cursors; cursors.channel = uint8_t(other);
+                view_.waveform().cursorLines(cursors); queuePlotSave(now);
+            }
         }
         followShownChannel();
         if (options.mode==plot::Mode::XY && (!channelShown(0) || !channelShown(1))) {
@@ -241,9 +268,11 @@ void ApplicationController::displayData(uint32_t now) {
             // read above on its last change (clockMode_), not an RCC read every pass.
             counterText_.update(data_.scopeCounters(), options.counter, text, sizeof text, clockMode_ | counterEpoch_ << 8);
             const unsigned source = options.counter.source ? options.counter.source - 1U : 0;
-            const bool room = options.mode == plot::Mode::Time; // X-Y and FFT label that corner.
+            // X-Y and FFT label that corner; the DMM trace's hidden time axis shows nothing.
+            const bool room = options.mode == plot::Mode::Time && (!options.counter.source || options.meter.axis != source);
             view_.waveform().counter(room ? text : "", view_.waveform().palette().channel(source));
         }
+        showMeterTrace();
         if (!view_.traceDrawn()) { // A menu over the Scope, or Decoder only (plan §4.4).
             // No projection and no readouts without a trace; the decoder still takes the record.
             readouts_.suspend(data_); dataAt_=now;

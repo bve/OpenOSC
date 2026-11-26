@@ -25,6 +25,7 @@ public:
         const char *mark = "";
         unsigned limit = 0; // Significant digits of a bounded value (ReadoutText::form); 0: unbounded.
         int prefer = -1;    // The prefix to keep near its range's edge (Format::quantity).
+        const char *unit = nullptr; // Its value's unit when not the measurement's (the DMM trace's: ReadoutText::form).
     };
     struct Placed {
         ReadoutParts parts;

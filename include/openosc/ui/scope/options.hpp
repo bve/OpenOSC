@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "openosc/acquisition/spectrum.hpp"
+#include "openosc/ui/scope/meter_scale.hpp"
 
 namespace openosc::plot {
 constexpr unsigned MaximumWidth = 320, MaximumHeight = 240, MaximumXYPoints = 640;
@@ -53,6 +54,7 @@ struct ChannelOptions {
     bool graded() const { return grade != Grade::Off; }
 };
 struct CursorOptions {
+    static constexpr uint8_t Meter = 2; // channel: the DMM trace's level cursors, in its units (MeterTraceOptions).
     uint16_t xA = 250, xB = 750, yA = 250, yB = 750;
     uint8_t channel = 0;
     bool time = false, voltage = false;
@@ -64,6 +66,23 @@ struct CounterOptions {
     uint8_t source = 0, average = 1;
     int16_t ppm = 0;
     bool valid() const { return source <= 2 && (average == 1 || average == 3 || average == 10) && ppm >= -1000 && ppm <= 1000; }
+};
+// The Scope's DMM trace (DataAccess::meterReadings, drawn in Y-T and Y-T+FFT): shown or not, where its
+// zero lies, each quantity's units/div (MeterScale steps, in MeterScale's order) and the channel kept
+// only as its time axis.
+struct MeterTraceOptions {
+    // Its zero within the plot, as a channel's: four divisions either way of the middle line.
+    static constexpr int8_t PositionSteps = 20, PositionLimit = 4 * PositionSteps; // Per division.
+    static constexpr uint8_t NoAxis = 2;
+    bool shown = false;
+    int8_t position = 0; // Its zero above the plot's middle line, in 1/PositionSteps of a division.
+    int8_t scales[MeterScale::Quantities] = {MeterScale::Spans[0].initial, MeterScale::Spans[1].initial,
+                                             MeterScale::Spans[2].initial, MeterScale::Spans[3].initial,
+                                             MeterScale::Spans[4].initial, MeterScale::Spans[5].initial};
+    // The last channel switched off while the trace is shown: captured on as the record's time axis,
+    // nothing of it shown (plot::ChannelDisplay); NoAxis: none. Only while the trace is shown.
+    uint8_t axis = NoAxis;
+    bool valid() const;
 };
 struct Options {
     Mode mode = Mode::Time;
@@ -86,19 +105,25 @@ struct Options {
     static constexpr uint8_t MaximumZoomOut = 64;
     bool lockTrigger = true, showTrigger = true, showZero = true, glow = false, peakHold = false,
          showScale = true;
+    bool centerHeldTrigger = false; // View-only override of a held record's original pretrigger.
+    MeterTraceOptions meter; // Bytes, with the flags before heldTimebaseNs: in what was its padding.
     // The time/div a held record is shown at: the next capture's, chosen in HOLD (issue #7), so the
     // held view shows what RUN will use. 0: the record's own. View only, never the record's metadata.
     uint64_t heldTimebaseNs = 0;
-    bool centerHeldTrigger = false; // View-only override of a held record's original pretrigger.
     // A density plane's history (GitHub #85): the persistence's, or DensityHistoryMs with none.
     static constexpr uint16_t DensityHistoryMs = 1000;
     uint16_t densityHistoryMs() const { return persistenceMs ? persistenceMs : DensityHistoryMs; }
     bool graded() const { return (mode == Mode::Time || mode == Mode::SpectrumOverlay) && (channels[0].graded() || channels[1].graded()); }
+    // A channel's trace and its marks drawn: visible, and not the DMM trace's hidden time axis.
+    bool drawn(unsigned channel) const { return channel < 2 && channels[channel].visible && meter.axis != channel; }
     bool valid() const;
     bool sameTransform(const Options &other) const;
     // What HOLD may change to explore one record; a new capture starts from `saved` again.
     void restoreHeldView(const Options &saved);
 };
+// Every Theme holds the plot options, and SRAM4 holds three Themes (JsonWorkspace): on the ZT703S it has
+// 32 bytes to spare, so a field that grows this struct has to be paid for there first.
+static_assert(sizeof(Options) == 96, "plot::Options grew: check the Themes' room in SRAM4");
 struct Point {
     int16_t x = Missing, y = Missing;
 };

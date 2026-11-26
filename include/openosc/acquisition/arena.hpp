@@ -60,7 +60,9 @@ struct CaptureBuffer {
 // reads it.
 // Roll takes the whole arena: its DMA ring in bank 0, the history in bank 1, snapshots in bank 2.
 // AutoSetup trials and zero calibration capture into a separate trial area, which is how a HOLD
-// record survives an AutoSetup and comes back unchanged when it is cancelled or fails.
+// record survives an AutoSetup and comes back unchanged when it is cancelled or fails. While a scope
+// CSV is written (no capture of theirs starts then) it may hold the file's DMM readings instead
+// (DataAccess::meterColumn), claimed as Trial.
 class AcquisitionArena {
 public:
     static constexpr uint32_t BankBytes = 131072, Banks = 4, Bytes = BankBytes * Banks;

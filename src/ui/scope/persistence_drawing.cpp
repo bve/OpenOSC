@@ -53,7 +53,7 @@ void Painter::persistence() {
     const unsigned front=model_.frontChannel(), order[3]={front^1,front,2};
     for (unsigned c : order) {
         if (o.mode==Mode::XY && c!=0) continue;
-        if (c<2 && (!o.channels[c].visible || bitmap.graded(c))) continue; // A density plane: Painter::density.
+        if (c<2 && (!o.drawn(c) || bitmap.graded(c))) continue; // A density plane: Painter::density.
         if (c==2 && (o.math==Math::Off || !infinite)) continue;
         const auto color=c<2 ? traceColor(c) : palette_.math;
         const unsigned opacity=c<2 ? o.channels[c].opacity : 255;

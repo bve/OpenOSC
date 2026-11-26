@@ -62,7 +62,7 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         const unsigned channel = plotControls_.channel;
         constexpr auto VisibleTrace = "Reference needs a visible Y-T channel";
         if ((options.mode != plot::Mode::Time && options.mode != plot::Mode::SpectrumOverlay) ||
-            !options.channels[channel].visible) return refuse(VisibleTrace);
+            !options.drawn(channel)) return refuse(VisibleTrace); // Never the DMM trace's hidden time axis.
         scope::FrameLease frame;
         if (!data_.acquireScopeWait(frame)) return refuse("Reference needs a completed frame");
         widget.setFrame(frame.view());
@@ -78,10 +78,13 @@ bool ApplicationController::applyDisplay(unsigned row, uint32_t now) {
         (!ch1 || !ch2 || !plotControls_.options.channels[0].visible || !plotControls_.options.channels[1].visible)) {
         return refuse("XY needs CH1 + CH2 enabled and visible");
     }
-    if (!plotControls_.enabled[plotControls_.options.spectrum.channel])
+    // Onto the other channel only when that one is shown (as data_display.cpp): with the DMM trace alone
+    // the source stays, drawing nothing.
+    if (!plotControls_.enabled[plotControls_.options.spectrum.channel] && plotControls_.enabled[plotControls_.options.spectrum.channel ^ 1])
         plotControls_.options.spectrum.channel ^= 1;
     if (!changePlotMode(plotControls_.options,view_.waveform().options().mode,now)) return refuse("Finish data transfer first");
     widget.configure(plotControls_.options);
+    if (plotControls_.channel != selectedChannel_) meterSelected_ = false; // A channel chosen here.
     selectedChannel_ = plotControls_.channel;
     plotControls_.options = widget.options(); // As the view took it (X-Y adds its own).
     queuePlotSave(now);

@@ -22,10 +22,11 @@ public:
     static constexpr unsigned Count = 4;
     static constexpr int Radius = StatusBarLayout::PillRadius;
     static constexpr float MinimumContrast = 3.0f; // WCAG ratio for UI text and marks.
-    // The accent of a screen card when selected: the highlight, a channel's colour (the Scope's F1-F3)
-    // or the theme's text colour (neutral). Resolved from the theme at palette(); a context's keys
-    // always take the highlight, so channel colours never reach a menu, popup or the generator.
-    enum class Tint : uint8_t { Highlight, Channel1, Channel2, Neutral };
+    // The accent of a screen card when selected: the highlight, a channel's colour (the Scope's F1-F3),
+    // the theme's text colour (neutral) or the Scope's DMM trace colour (meterTint). Resolved from the
+    // theme at palette(); a context's keys always take the highlight, so channel colours never reach a
+    // menu, popup or the generator.
+    enum class Tint : uint8_t { Highlight, Channel1, Channel2, Neutral, Meter };
     static uint32_t readable(uint32_t color, uint32_t fill); // `color`, or the contrasting ink when too faint on `fill`.
     static uint32_t ink(uint32_t fill);                      // The dark or light ink with the higher contrast.
     static uint32_t faded(uint32_t ink, uint32_t fill);      // A secondary mark on an accent fill: ink part-way to it.
@@ -51,6 +52,8 @@ public:
     // hidden and appears with release(), whenever the screen asks.
     void decorate(lv_obj_t *child, bool visible);
     void tint(unsigned index, Tint tint); // The screen card's accent (kept until untinted()).
+    // Tint::Meter's colour: the Scope appearance's DMM role, which the theme has no field for (before palette()).
+    void meterTint(uint32_t color) { meter_ = color; }
     void untinted();                      // Every screen card back to the highlight.
     void edge(bool bottom);               // The bar stands on the screen's bottom edge.
     uint32_t fill(unsigned index) const { return index < Count ? fills_[index] : background_; } // As painted.
@@ -83,7 +86,7 @@ private:
     bool bottom_ = false;
     uint32_t fills_[Count]{};
     uint32_t background_ = 0, border_ = 0, highlight_ = 0, foreground_ = 0, muted_ = 0;
-    uint32_t channels_[2]{}, neutral_ = 0;
+    uint32_t channels_[2]{}, neutral_ = 0, meter_ = 0;
     uint32_t accent(unsigned index) const; // The selected card's fill.
     bool menuColors_ = false; // The context shows in menu_'s colours.
     MenuPalette menu_;

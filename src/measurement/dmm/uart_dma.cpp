@@ -9,17 +9,16 @@ UartDma *UartDma::active_ = nullptr;
 namespace {
 alignas(32) uint8_t receiveBuffer[64] __attribute__((section(".dma")));
 }
-bool UartDma::start() {
-    if (lease_.valid())
-        return status_ == DataStatus::Ok;
-    if (!resources_.acquire(PeripheralResources::DmmDma, lease_)) {
+bool UartDma::start(Receive receive) {
+    if (running_)
+        return receive == receive_ && status_ == DataStatus::Ok;
+    const bool dma = receive == Receive::Dma;
+    if (dma && !resources_.acquire(PeripheralResources::DmmDma, lease_)) {
         status_ = DataStatus::Busy;
         return false;
     }
     __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_DMA1_CLK_ENABLE();
     __HAL_RCC_UART5_CLK_ENABLE();
-    __HAL_RCC_AHBSRAM1_CLK_ENABLE();
     GPIO_InitTypeDef gpio{};
     gpio.Pin = GPIO_PIN_12 | GPIO_PIN_13;
     gpio.Mode = GPIO_MODE_AF_PP;
@@ -42,34 +41,45 @@ bool UartDma::start() {
     UART5->BRR = (HAL_RCC_GetPCLK1Freq() + 4800) / 9600;
     UART5->ICR = 0xffffffff;
     UART5->RQR = USART_RQR_RXFRQ;
-    DMA1_Stream0->CR &= ~DMA_SxCR_EN;
-    const uint32_t started = Board::milliseconds();
-    while (DMA1_Stream0->CR & DMA_SxCR_EN) {
-        Board::service();
-        if (Board::milliseconds() - started > 10) {
-            lease_.release();
-            status_ = DataStatus::Timeout;
-            return false;
+    if (dma) {
+        __HAL_RCC_DMA1_CLK_ENABLE();
+        __HAL_RCC_AHBSRAM1_CLK_ENABLE();
+        DMA1_Stream0->CR &= ~DMA_SxCR_EN;
+        const uint32_t started = Board::milliseconds();
+        while (DMA1_Stream0->CR & DMA_SxCR_EN) {
+            Board::service();
+            if (Board::milliseconds() - started > 10) {
+                lease_.release();
+                status_ = DataStatus::Timeout;
+                return false;
+            }
         }
+        DMA1->LIFCR = 0x3d;
+        DMAMUX1_Channel0->CCR = DMA_REQUEST_UART5_RX;
+        DMA1_Stream0->PAR = uint32_t(reinterpret_cast<uintptr_t>(&UART5->RDR));
+        DMA1_Stream0->M0AR = uint32_t(reinterpret_cast<uintptr_t>(receiveBuffer));
+        DMA1_Stream0->NDTR = 64;
+        DMA1_Stream0->FCR = DMA_SxFCR_FEIE;
+        DMA1_Stream0->CR = DmaStream::UartProtocol | (1U << 16) | DMA_SxCR_MINC | DMA_SxCR_CIRC | DMA_SxCR_TCIE | DMA_SxCR_HTIE |
+                           DMA_SxCR_TEIE | DMA_SxCR_DMEIE;
     }
-    DMA1->LIFCR = 0x3d;
-    DMAMUX1_Channel0->CCR = DMA_REQUEST_UART5_RX;
-    DMA1_Stream0->PAR = uint32_t(reinterpret_cast<uintptr_t>(&UART5->RDR));
-    DMA1_Stream0->M0AR = uint32_t(reinterpret_cast<uintptr_t>(receiveBuffer));
-    DMA1_Stream0->NDTR = 64;
-    DMA1_Stream0->FCR = DMA_SxFCR_FEIE;
-    DMA1_Stream0->CR = DmaStream::UartProtocol | (1U << 16) | DMA_SxCR_MINC | DMA_SxCR_CIRC | DMA_SxCR_TCIE | DMA_SxCR_HTIE |
-                       DMA_SxCR_TEIE | DMA_SxCR_DMEIE;
     written_ = 0;
     read_ = 0;
     received_ = 0;
     errors_ = overflows_ = 0;
+    receive_ = receive;
+    running_ = true;
     active_ = this;
     Interrupts::attach(UART5_IRQn, uartInterrupt);
-    Interrupts::attach(DMA1_Stream0_IRQn, dmaInterrupt);
-    DMA1_Stream0->CR |= DMA_SxCR_EN;
-    UART5->CR3 = USART_CR3_DMAR | USART_CR3_EIE;
-    UART5->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_IDLEIE | USART_CR1_UE;
+    if (dma) {
+        Interrupts::attach(DMA1_Stream0_IRQn, dmaInterrupt);
+        DMA1_Stream0->CR |= DMA_SxCR_EN;
+        UART5->CR3 = USART_CR3_DMAR | USART_CR3_EIE;
+        UART5->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_IDLEIE | USART_CR1_UE;
+    } else {
+        UART5->CR3 = USART_CR3_EIE;
+        UART5->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_UE;
+    }
     const uint32_t ready = Board::milliseconds();
     while ((UART5->ISR & (USART_ISR_TEACK | USART_ISR_REACK)) != (USART_ISR_TEACK | USART_ISR_REACK)) {
         Board::service();
@@ -84,19 +94,22 @@ bool UartDma::start() {
     return true;
 }
 bool UartDma::stop() {
-    if (!lease_.valid())
+    if (!running_)
         return true;
     UART5->CR1 = 0;
     UART5->CR3 = 0;
-    if (!DmaStream::disable(DMA1_Stream0)) {
-        status_ = DataStatus::HardwareError;
-        return false;
+    if (receive_ == Receive::Dma) {
+        if (!DmaStream::disable(DMA1_Stream0)) {
+            status_ = DataStatus::HardwareError;
+            return false;
+        }
+        Interrupts::detach(DMA1_Stream0_IRQn);
+        DMA1->LIFCR = 0x3d;
     }
     Interrupts::detach(UART5_IRQn);
-    Interrupts::detach(DMA1_Stream0_IRQn);
-    DMA1->LIFCR = 0x3d;
     __DSB();
     active_ = nullptr;
+    running_ = false;
     lease_.release();
     status_ = DataStatus::NoData;
     txStatus_ = DataStatus::NoData;
@@ -109,15 +122,17 @@ void UartDma::receive() {
     while (received_ != current) {
         const uint8_t byte = source[received_];
         received_ = (received_ + 1) & 63;
-        const uint32_t written = written_.load(std::memory_order_relaxed),
-                       read = read_.load(std::memory_order_acquire);
-        if (written - read >= sizeof queue_) {
-            ++overflows_;
-            continue;
-        }
-        queue_[written & 255] = byte;
-        written_.store(written + 1, std::memory_order_release);
+        push(byte);
     }
+}
+void UartDma::push(uint8_t byte) {
+    const uint32_t written = written_.load(std::memory_order_relaxed), read = read_.load(std::memory_order_acquire);
+    if (written - read >= sizeof queue_) {
+        ++overflows_;
+        return;
+    }
+    queue_[written & 255] = byte;
+    written_.store(written + 1, std::memory_order_release);
 }
 bool UartDma::read(uint8_t &byte) {
     const uint32_t read = read_.load(std::memory_order_relaxed);
@@ -150,10 +165,14 @@ void UartDma::interrupt() {
         ++errors_;
         UART5->ICR = USART_ICR_ORECF | USART_ICR_FECF | USART_ICR_NECF;
     }
-    if (status & USART_ISR_IDLE) {
+    // Receive::Dma: an idle line drains the stream's buffer. Receive::Interrupt: each byte as it comes
+    // (reading RDR clears RXNE); the stream is the capture's then, its buffer never read.
+    if ((UART5->CR1 & USART_CR1_IDLEIE) && (status & USART_ISR_IDLE)) {
         UART5->ICR = USART_ICR_IDLECF;
         receive();
     }
+    if ((UART5->CR1 & USART_CR1_RXNEIE_RXFNEIE) && (status & USART_ISR_RXNE_RXFNE))
+        push(uint8_t(UART5->RDR));
     if ((UART5->CR1 & USART_CR1_TXEIE_TXFNFIE) && (status & USART_ISR_TXE_TXFNF)) {
         UART5->TDR = tx_[transmitted_++];
         if (transmitted_ == 2) {

@@ -26,6 +26,19 @@ constexpr FunctionName functions[] = {
     {dmm::Function::Temperature,"TEMP","CONFigure:TEMPerature"}
 };
 }
+// A DMM header as the measurement serves it now: on the DMM screen every one; in the Scope only while
+// its DMM trace runs (the chip is unpowered otherwise), and never the DMM screen's own (screenOnly).
+// A header matched but not served matches no other: meterCommand answers it -221.
+struct Engine::MeterMatch {
+    const Command &command;
+    bool served, screen; // The DMM's headers are served now; the DMM screen's own too.
+    bool refused = false;
+    bool operator()(const char *pattern, bool screenOnly = false) {
+        if (!Header::matches(command.header, pattern)) return false;
+        refused = !(screenOnly ? screen : served);
+        return !refused;
+    }
+};
 void Engine::meterReading(bool secondary) {
     const auto &result = backend_.meter();
     const auto &value = secondary ? result.secondary : result.primary;
@@ -38,8 +51,7 @@ void Engine::meterReading(bool secondary) {
 // SYSTem:DMM:HOLD:<field>: the hold settings one at a time, each checked as the whole by
 // HoldSettings::valid (the editor's and the file's check; a value out of its limits, off its step or
 // breaking rearm > band: -222, nothing changes). Times in ms, band and rearm in last-digit units.
-bool Engine::meterHoldCommand(const Command &c) {
-    const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
+bool Engine::meterHoldCommand(const Command &c, MeterMatch &match) {
     struct Field { const char *header; uint32_t dmm::HoldSettings::*value; };
     static constexpr Field fields[] = {{"SYSTem:DMM:HOLD:DELay", &dmm::HoldSettings::delayMs}, {"SYSTem:DMM:HOLD:STABle", &dmm::HoldSettings::stableMs},
         {"SYSTem:DMM:HOLD:BAND", &dmm::HoldSettings::bandDigits}, {"SYSTem:DMM:HOLD:REARm", &dmm::HoldSettings::rearmDigits},
@@ -85,9 +97,13 @@ bool Engine::meterHoldCommand(const Command &c) {
     }
     return false;
 }
+// The DMM screen's commands, served in the Scope too while its DMM trace runs: there a function is
+// selected as the trace's channel menu selects it, and the readings are the trace's (Backend). The
+// statistics are the DMM screen's own (its HOLD stops them, its REL offsets them): not in the Scope.
 bool Engine::meterCommand(const Command &c) {
-    const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
-    if (meterHoldCommand(c)) return true;
+    const bool screen = backend_.multimeter();
+    MeterMatch match{c, screen || backend_.meterTrace(), screen};
+    if (meterHoldCommand(c, match)) return true;
     if (match("SYSTem:DMM:TEMPerature:CJUNction")) {
         auto settings = backend_.meterTemperature();
         if (c.query) {
@@ -146,7 +162,7 @@ bool Engine::meterCommand(const Command &c) {
         const bool hold = match("SYSTem:DMM:HOLD");
         if (c.query) { const auto &r = backend_.meter(); reply("%u", unsigned(hold ? r.packetHold : r.peerRelative)); }
         else { bool value; if (boolean(c, value) && !(hold ? backend_.holdMeter(value) : backend_.relativeMeter(value))) error(-221); }
-    } else if (match("SYSTem:DMM:STATistics")) {
+    } else if (match("SYSTem:DMM:STATistics", true)) {
         // count,minimum,maximum,average,quantity,sequence: the screen's MIN/MAX/AVG (one Session
         // period, local REL applied as on the screen), SI; none of the shown quantity: 0,NAN...
         if (!c.query) { error(-109); return true; }
@@ -158,7 +174,7 @@ bool Engine::meterCommand(const Command &c) {
         }
         Decimal::integer(s.valid ? s.count : 0,count,sizeof count);
         reply("%s,%s,%s,%s,%u,%lu",count,values[0],values[1],values[2],unsigned(s.quantity),(unsigned long)backend_.meter().sequence);
-    } else if (match("SYSTem:DMM:STATistics:RESet")) {
+    } else if (match("SYSTem:DMM:STATistics:RESet", true)) {
         if (c.query || *c.argument) error(-108, c.query); else backend_.resetMeterStatistics();
     } else if (match("SYSTem:DMM:RANGe:LIST")) {
         // The full scales (SI) of the current function, in RANGE index order: count,max1,max2...
@@ -213,7 +229,8 @@ bool Engine::meterCommand(const Command &c) {
             else if (!backend_.selectFunction(f.function)) error(-221); else waitOperation();
             return true;
         }
-        return false;
+        if (!match.refused) return false;
+        error(-221, c.query);
     }
     return true;
 }

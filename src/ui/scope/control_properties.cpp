@@ -65,7 +65,8 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
 unsigned Controls::choices(unsigned row) const {
     switch (row) {
     case Section: return unsigned(Group::Count);
-    case Channel: case FftSource: case FftScale: return 2;
+    case Channel: return meterChannel() ? 3 : 2;
+    case FftSource: case FftScale: return 2;
     case View: case GridStyle: case Average: case FftWindow: return 4;
     case TraceStyle: case MathTrace: case TraceInterpolation: case SampleReduction: case CounterSource: case CounterAverage: return 3;
     case Persistence: return sizeof Persistences / sizeof *Persistences;
@@ -79,7 +80,7 @@ unsigned Controls::choice(unsigned row) const {
     const auto &c = o.channels[channel];
     switch (row) {
     case Section: return unsigned(group);
-    case Channel: return channel;
+    case Channel: return meterChannel() && o.cursors.channel == CursorOptions::Meter ? CursorOptions::Meter : channel;
     case View: return unsigned(o.mode);
     case TraceStyle: return unsigned(o.style);
     case GridStyle: return unsigned(o.grid);
@@ -113,7 +114,10 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
     const auto pick = [&](const char *const *names, unsigned n) { std::snprintf(text, capacity, "%s", i < n ? names[i] : ""); };
     switch (row) {
     case Section: std::snprintf(text, capacity, "%s", groupName(i)); break;
-    case Channel: case FftSource: std::snprintf(text, capacity, "CH%u", view.number(i)); break;
+    case Channel: case FftSource:
+        if (row == Channel && i == CursorOptions::Meter) std::snprintf(text, capacity, "DMM");
+        else std::snprintf(text, capacity, "CH%u", view.number(i));
+        break;
     case CounterSource: // Off, then each input by its on-screen number.
         if (i == 1 || i == 2) std::snprintf(text, capacity, "CH%u", view.number(i - 1));
         else std::snprintf(text, capacity, "%s", i ? "" : "Off");

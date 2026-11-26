@@ -10,6 +10,7 @@ void Painter::spectrum() {
     const auto &result=model_.spectrum();
     const auto &options=model_.options().spectrum;
     const int width=model_.viewport().width,height=model_.viewport().height;
+    if (model_.options().meter.axis == options.channel) return; // The DMM trace's hidden time axis: nothing of it.
     if (!result.valid) { text("FFT SOURCE UNAVAILABLE",4,18,palette_.readout,width-8,true); return; }
     const auto color=palette_.channel(options.channel);
     trace(model_.storage().fft,model_.options().mode==Mode::SpectrumOverlay ? palette_.math : color,255,1,Style::Vectors);

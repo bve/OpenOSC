@@ -12,7 +12,7 @@ void Painter::scales() {
         return;
     char value[32], label[48];
     for (unsigned c = 0; c < 2; ++c)
-        if (m.channels[c].enabled && o.channels[c].visible) {
+        if (m.channels[c].enabled && o.drawn(c)) {
             const auto scale = DisplayScale::channel(m.channels[c], o.channels[c]);
             if (Format::quantity(scale.perDivision, scale.unit, value, sizeof value)) {
                 const unsigned slot = palette_.view.slot(c); // The on-screen CH1 left, CH2 beside it.

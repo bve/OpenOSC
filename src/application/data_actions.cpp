@@ -102,11 +102,19 @@ ApplicationController::ModeChange ApplicationController::selectMode(MeasurementM
     if (uiReady_) view_.measurement(state_);
     return ModeChange::Selected;
 }
-bool ApplicationController::applyScope(const ScopeRequest &request, uint32_t now, ScopeApply mode) {
+bool ApplicationController::applyScope(const ScopeRequest &requested, uint32_t now, ScopeApply mode) {
     const auto previousTrigger = data_.scopeRequest().trigger;
+    auto request = requested;
+    const bool rolled = request.followTimebase(); // Normal or Single past 20 s/div: Auto (Roll only there).
+    // The DMM trace alone (no channel shown, plot::ChannelDisplay): Auto too, an edge no one sees would hold its line.
+    const auto &view = view_.waveform().options();
+    const bool alone = view.meter.shown && !plot::ChannelDisplay::shown(request, view, 0) && !plot::ChannelDisplay::shown(request, view, 1) &&
+                       request.trigger.mode != scope::TriggerMode::Auto;
+    if (alone) request.trigger.mode = scope::TriggerMode::Auto;
     const bool applied = mode == ScopeApply::Resume ? data_.resumeScope(request)
         : mode == ScopeApply::StageIfHeld && data_.scopeHeld() ? data_.stageScope(request) : data_.configureScope(request);
     if (!applied) return false;
+    if ((rolled || alone) && uiReady_) view_.notify(Tooltip::Advisory, rolled ? "Past 20 s/div: Roll, trigger Auto" : "DMM alone: trigger Auto", now);
     const auto &active = data_.scopeRequest();
     if (uiReady_ && (active.trigger.channel != previousTrigger.channel || active.trigger.mode != previousTrigger.mode))
         view_.waveform().triggerLimit(0);
@@ -167,15 +175,22 @@ bool ApplicationController::applyFound(const ScopeRequest &request, uint32_t now
     return true;
 }
 // What a held record contains decides what can be examined; a running view follows the next capture.
+// The DMM trace's hidden time axis (MeterTraceOptions::axis) is not shown.
 bool ApplicationController::channelShown(unsigned channel) {
     const auto &model=view_.waveform().model();
-    return data_.scopeHeld() && model.hasFrame() ? model.metadata().channels[channel].enabled : data_.scopeRequest().frontend.enabled[channel];
+    const auto &options=view_.waveform().options();
+    return data_.scopeHeld() && model.hasFrame() ? plot::ChannelDisplay::shown(model.metadata(), options, channel)
+                                                 : plot::ChannelDisplay::shown(data_.scopeRequest(), options, channel);
 }
 // One rule for the main scale/position selection, whatever changed the channels (panel, SCPI,
-// settings at start-up, a new frame after RUN): it stays on a channel that is shown. The cards
-// and context follow at once, without waiting for a new sequence (a held frame keeps its own).
+// settings at start-up, a new frame after RUN): it stays on a channel that is shown, and on the DMM
+// trace while it is on, which it takes when no channel is shown. The cards and context follow at
+// once, without waiting for a new sequence (a held frame keeps its own).
 bool ApplicationController::followShownChannel() {
-    if (channelShown(selectedChannel_) || !channelShown(selectedChannel_ ^ 1)) return false;
+    const bool onMeter = view_.waveform().options().meter.shown && (meterSelected_ || (!channelShown(0) && !channelShown(1)));
+    const bool meter = onMeter != meterSelected_;
+    if (meter) { meterSelected_ = onMeter; dataRefresh_ = true; }
+    if (channelShown(selectedChannel_) || !channelShown(selectedChannel_ ^ 1)) return meter;
     selectedChannel_ ^= 1;
     dataRefresh_ = true;
     return true;

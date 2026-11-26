@@ -51,9 +51,9 @@ void WaveformWidget::channelView(const plot::ChannelView &view) {
     palette_.view = view;
     if (object_) lv_obj_invalidate(object_);
 }
-void WaveformWidget::roles(uint32_t trigger, uint32_t tagText, uint32_t readout) {
-    if (palette_.trigger == trigger && palette_.tagText == tagText && palette_.readout == readout) return;
-    palette_.trigger = trigger; palette_.tagText = tagText; palette_.readout = readout;
+void WaveformWidget::roles(uint32_t trigger, uint32_t tagText, uint32_t readout, uint32_t meter) {
+    if (palette_.trigger == trigger && palette_.tagText == tagText && palette_.readout == readout && palette_.meter == meter) return;
+    palette_.trigger = trigger; palette_.tagText = tagText; palette_.readout = readout; palette_.meter = meter;
     if (object_) lv_obj_invalidate(object_);
 }
 bool WaveformWidget::configure(const plot::Options &options) {
@@ -132,6 +132,11 @@ void WaveformWidget::note(const char *text, uint32_t color) {
     overlayLabel(note_, text, color, palette_.background);
 }
 void WaveformWidget::counter(const char *text, uint32_t color) { overlayLabel(counter_, text, color, palette_.background); }
+void WaveformWidget::meterReadings(const dmm::ReadingTrace *readings) {
+    if (meter_ == readings) return;
+    meter_ = readings;
+    if (object_) lv_obj_invalidate(object_);
+}
 void WaveformWidget::setFrame(const scope::FrameView &frame) {
     if (!object_)
         return;
@@ -184,7 +189,7 @@ void WaveformWidget::draw(lv_event_t *event) {
     auto &self = *static_cast<WaveformWidget *>(lv_event_get_user_data(event));
     lv_area_t area;
     lv_obj_get_coords(self.object_, &area);
-    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_).draw();
+    plot::Painter(lv_event_get_layer(event), area, self.model_, self.palette_, self.inlineScales_, self.triggerMark_, self.meter_).draw();
 }
 void WaveformWidget::cover(lv_event_t *event) {
     auto *info = static_cast<lv_cover_check_info_t *>(lv_event_get_param(event));

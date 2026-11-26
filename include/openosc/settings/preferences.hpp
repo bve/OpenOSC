@@ -58,7 +58,7 @@ struct Preferences {
     bool valid() const {
         scope::SamplePlan sampling;
         return brightness >= 10 && brightness <= 100 && mode < InstrumentModeCount && timebaseNs >= 10 &&
-               timebaseNs <= 20000000000ULL && scope::VoltageRanges::contains(millivolts[0]) &&
+               timebaseNs <= scope::Timebases::Maximum && scope::VoltageRanges::contains(millivolts[0]) &&
                scope::VoltageRanges::contains(millivolts[1]) && meterFunction < MeterFunctionCount &&
                useBuiltinTheme <= 1 && showFps <= 2 && Tooltips::valid(tooltipsHidden) && batteryDisplay < 3 && power::BatteryGauge::trimValid(batteryGainPermille, batteryOffsetMv) && panReverse < 2 && clockIndicator <= 1 && swapChannels <= 1 && unsigned(menuContrast) < MenuContrastCount && holdTime < 3 && usbController <= 1 && bode.valid() &&
                generatorShape < 6 &&

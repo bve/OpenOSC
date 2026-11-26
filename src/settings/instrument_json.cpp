@@ -422,6 +422,14 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
             }
         }
     }
+    if (scope.containsKey("dmm_measurements")) { // The DMM trace's readouts; files before them: the defaults.
+        const auto readouts=scope["dmm_measurements"].as<JsonArrayConst>();
+        if (readouts.size()!=scope::ReadoutSelection::PerChannel) return false;
+        for (unsigned i=0; i<scope::ReadoutSelection::PerChannel; ++i) {
+            if (!readouts[i].is<uint32_t>() || !scope::ReadoutSelection::meterKind(readouts[i].as<uint32_t>())) return false;
+            s.measurements.meter[i]=uint8_t(readouts[i].as<uint32_t>());
+        }
+    }
     if (scope.containsKey("measure_basis")) {
         const char *basis=scope["measure_basis"] | "";
         if (!std::strcmp(basis,"screen")) s.measurements.basis=scope::ReadoutBasis::Screen;
@@ -461,6 +469,8 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
         auto row=measurements.createNestedArray();
         for (auto value : channel) row.add(value);
     }
+    auto readouts = scope.createNestedArray("dmm_measurements");
+    for (auto value : s.measurements.meter) readouts.add(unsigned(value));
     scope["measure_basis"] = s.measurements.basis==scope::ReadoutBasis::Record ? "record" : "screen";
     arrangement(scope, "arrangement", s.arrangement);
     ScopeAppearanceJson::encode(scope, s.appearance);

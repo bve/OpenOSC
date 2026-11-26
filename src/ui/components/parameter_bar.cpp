@@ -140,6 +140,7 @@ uint32_t ParameterBar::accent(unsigned index) const {
     case Tint::Channel1: return channels_[0];
     case Tint::Channel2: return channels_[1];
     case Tint::Neutral: return neutral_;
+    case Tint::Meter: return meter_;
     default: return highlight_;
     }
 }

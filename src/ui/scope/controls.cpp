@@ -50,6 +50,11 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
         group = Group((unsigned(group)+unsigned(Group::Count)+direction)%unsigned(Group::Count));
         break;
     case Channel:
+        if (meterChannel()) { // CH1, CH2, DMM.
+            cursor.channel = uint8_t((choice(Channel) + 3 + direction) % 3);
+            if (cursor.channel < 2) channel = cursor.channel;
+            break;
+        }
         channel ^= 1;
         cursor.channel = channel;
         break;

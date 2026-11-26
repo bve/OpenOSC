@@ -96,6 +96,8 @@ public:
     scope::Channel triggerChannel() const { return triggerChannel_; }
     const scope::SpectrumResult &spectrum() const { return spectrum_.result; }
     double spectrumFrequency(unsigned permille) const;
+    // The FFT's work bytes (SpectrumStorage::work): a draw task's scratch.
+    unsigned char *drawScratch() const { return spectrum_.work; }
 
 private:
     bool projectTime(const scope::FrameView &frame, bool fresh, const ColumnCache *cache);

@@ -70,6 +70,9 @@ public:
     void adjust(unsigned row, int direction, bool fine = true);
     int32_t number(unsigned row) const;
     void setNumber(unsigned row, int32_t value);
+    // The Cursors section's Channel row also offers the DMM trace while it is on (CursorOptions::Meter):
+    // the level cursors' channel; `channel`, the CH rows', keeps the last channel chosen.
+    bool meterChannel() const { return group == Group::Cursors && options.meter.shown; }
 private:
     static constexpr int32_t PpbPerPermille = Options::PanFull / 1000;
     void adjustPan(int direction, bool fine);

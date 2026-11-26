@@ -15,10 +15,21 @@ void ApplicationController::serviceInstruments(uint32_t now) {
         }
     }
     const bool visible = uiReady_;
+    // The Scope's DMM trace runs while its plot option is on (DataAccess::meterTrace); each start
+    // powers the chip in its default function, so the saved one is selected, as on a DMM entry.
+    data_.meterTrace(view_.waveform().options().meter.shown);
+    if (data_.meterTraceStarts() != meterTraceStarts_) {
+        meterTraceStarts_ = data_.meterTraceStarts();
+        if (!data_.selectDmmFunction(dmm::Function(prefs_.meterFunction)) && visible)
+            view_.notify(Tooltip::Critical, "DMM function selection failed", now);
+    }
     if (data_.dmmRestarts() != dmmRestarts_) { // The chip restarted in its default function.
         dmmRestarts_ = data_.dmmRestarts();
         if (data_.measurementMode() == MeasurementMode::Multimeter) {
             meterRestore_.arm(data_.selectDmmFunction(dmm::Function(prefs_.meterFunction)));
+            if (visible) view_.notify(Tooltip::Critical, "DMM stopped responding: restarted", now);
+        } else if (data_.meterTraceRunning()) { // The trace's chip: its function again, no range to restore.
+            data_.selectDmmFunction(dmm::Function(prefs_.meterFunction));
             if (visible) view_.notify(Tooltip::Critical, "DMM stopped responding: restarted", now);
         }
     }

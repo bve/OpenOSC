@@ -51,7 +51,7 @@ void ApplicationController::analyzeKeys(uint32_t keys, uint32_t now) {
         openPanel(Panel::Measurements, measurementEditor_); return;
     case Actions::Display:
         plotControls_.options = view_.waveform().options(); plotControls_.channel = selectedChannel_;
-        plotControls_.options.cursors.channel = selectedChannel_;
+        plotControls_.options.cursors.channel = uint8_t(meterSelected_ ? plot::CursorOptions::Meter : selectedChannel_);
         plotControls_.listing = true; sectionDirect_ = false;
         openPanel(Panel::Display, ui::DisplayProperties(plotControls_), unsigned(plotControls_.group)); return;
     case Actions::Layout:

@@ -21,11 +21,12 @@ bool Engine::channelCommand(const Command &c) {
         else if (!backend_.counter(channel,reading)) error(-230,true);
         else number(reading.hertz);
     } else if (display) {
-        if (c.query) reply("%u", f.enabled[channel]);
+        if (c.query) reply("%u", backend_.channelShown(channel));
         else { bool value; if (boolean(c, value)) {
-            // The panel's rule: never the last channel off; the trigger follows the remaining one.
-            if (!r.setChannel(channel, value)) error(-221);
-            else apply(r);
+            // The panel's rule: the last channel shown off only with the DMM trace on; the trigger follows.
+            backend_.releaseFrame();
+            preambleChannels_ = 0;
+            if (const int16_t code = backend_.showChannel(channel, value)) error(code);
         } }
     } else if (coupling) {
         if (c.query) reply("%s", f.coupling[channel] == scope::Coupling::Ac ? "AC" : "DC");

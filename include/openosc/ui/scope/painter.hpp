@@ -6,18 +6,23 @@
 #include "openosc/ui/scope/record_gaps.hpp"
 #include "openosc/settings/color_value.hpp"
 
+namespace openosc::dmm {
+class ReadingTrace;
+}
 namespace openosc::plot {
 // The plot's colours. trigger: FollowSource draws the trigger marks in the source channel's colour;
 // tagText: Contrast writes on a coloured tag (zero tags, the active cursor's) in the ink that
 // contrasts with that tag (ColorContrast); readout: neutral texts on the plot (scales, record-edge
-// and spectrum labels). The Scope appearance's Trigger, TagText and Readout roles (ScopeLook).
+// and spectrum labels); meter: the DMM trace's line, zero tag and level cursors. The
+// Scope appearance's Trigger, TagText, Readout and DMM roles (ScopeLook).
 // channels: the on-screen CH1 and CH2 slots' colours; view: the slot each input shows in (channel()).
 struct Palette {
     static constexpr uint32_t FollowSource = 0xffffffffu, Contrast = 0xfffffffeu;
     uint32_t background = 0, grid = 0, channels[2]{}, math = 0, reference = 0xa78bfa, cursor = 0xe2e8f0;
-    uint32_t trigger = FollowSource, tagText = Contrast, readout = 0xe2e8f0;
+    uint32_t trigger = FollowSource, tagText = Contrast, readout = 0xe2e8f0, meter = 0x4ade80;
     ChannelView view;
-    uint32_t channel(unsigned input) const { return channels[view.slot(input)]; } // An input's colour on screen.
+    // An input's colour on screen; the DMM trace (2) keeps its own in either channel order.
+    uint32_t channel(unsigned input) const { return input < 2 ? channels[view.slot(input)] : meter; }
     uint32_t triggerColor(unsigned source) const { return trigger == FollowSource ? channel(source) : trigger; }
     uint32_t tagInk(uint32_t fill) const { return tagText == Contrast ? ColorContrast::ink(fill) : tagText; }
 };
@@ -32,11 +37,12 @@ struct TriggerMark {
 };
 class Painter {
 public:
-    // frame: the whole waveform object; the plot is frame less the PlotFrame margins.
+    // frame: the whole waveform object; the plot is frame less the PlotFrame margins. meter: the
+    // readings of the Scope's DMM trace (Options::meter), drawn in Y-T and Y-T+FFT at every timebase.
     Painter(lv_layer_t *layer, const lv_area_t &frame, Model &model, const Palette &palette,
-            bool inlineScales = true, TriggerMark trigger = {})
+            bool inlineScales = true, TriggerMark trigger = {}, const dmm::ReadingTrace *meter = nullptr)
         : layer_(layer), frame_(frame), area_(plotArea(frame)), model_(model), palette_(palette), inlineScales_(inlineScales),
-          trigger_(trigger) {}
+          trigger_(trigger), meter_(meter) {}
     void draw();
     static lv_area_t plotArea(const lv_area_t &frame) {
         return {frame.x1 + PlotFrame::Left, frame.y1 + PlotFrame::Top, frame.x2 - PlotFrame::Right, frame.y2 - PlotFrame::Bottom};
@@ -50,6 +56,12 @@ private:
     void recordGaps(const RecordGaps &gaps);      // The window's parts outside the record (record_edges.cpp).
     void recordGapLabels(const RecordGaps &gaps);
     void traces();
+    void meterTrace();
+    // The DMM trace's zero in plot rows (MeterTraceOptions::position), unrounded.
+    double meterZero() const {
+        const double h = model_.viewport().height - 1;
+        return h / 2 - double(model_.options().meter.position) / MeterTraceOptions::PositionSteps * h / 8;
+    }
     void glow(unsigned channel);
     void density(unsigned channel); // A graded channel's density plane, from its own palette (GitHub #85).
     bool densityShown(unsigned channel) const; // Graded with levels to draw: no trace, no glow over it.
@@ -76,6 +88,8 @@ private:
     const Palette &palette_;
     bool inlineScales_;
     TriggerMark trigger_;
+    const dmm::ReadingTrace *meter_;
+    bool meterAbove_ = false, meterBelow_ = false; // meterTrace's line beyond the plot's top, bottom (markers).
 };
 class Path {
 public:

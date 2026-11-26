@@ -96,4 +96,24 @@ void XyMode::enter(ScopeRequest &request, Options &options) {
 void XyMode::constrain(const Options &options, ScopeRequest &request) {
     if (options.mode == Mode::XY) request.timebaseNs = std::min(request.timebaseNs, MaximumTimebaseNs);
 }
+bool ChannelDisplay::show(ScopeRequest &request, Options &options, unsigned channel, bool on) {
+    if (channel > 1) return false;
+    const unsigned other = channel ^ 1;
+    auto &axis = options.meter.axis;
+    if (on) { // The hidden time axis gives way: shown again if it is this channel, else off.
+        if (!request.setChannel(channel, true)) return false;
+        if (axis == other && request.setChannel(other, false)) axis = MeterTraceOptions::NoAxis;
+        if (axis == channel) axis = MeterTraceOptions::NoAxis;
+        return true;
+    }
+    if (!shown(request, options, other) && !options.meter.shown) return false; // The last channel shown stays on.
+    if (request.frontend.enabled[other]) request.setChannel(channel, false);
+    else axis = uint8_t(channel);
+    if (!shown(request, options, 0) && !shown(request, options, 1)) request.trigger.mode = scope::TriggerMode::Auto;
+    return true;
+}
+void ChannelDisplay::meter(Options &options, bool on) {
+    options.meter.shown = on;
+    if (!on) options.meter.axis = MeterTraceOptions::NoAxis; // Its time axis is shown again.
+}
 } // namespace openosc::plot

@@ -32,4 +32,22 @@ public:
     static void constrain(const Options &options, ScopeRequest &request);
     static bool crossed(Mode before, Mode after) { return (before == Mode::XY) != (after == Mode::XY); }
 };
+// A channel shown: on in the capture and not the DMM trace's hidden time axis (MeterTraceOptions::axis).
+// With the DMM trace shown the last channel shown may go off as well: with no other channel on it stays
+// on, hidden, the time axis of the record the DMM line is drawn on, and the trigger becomes Auto (an
+// edge no one sees would hold the line). The DMM trace switched off shows that channel again; the other
+// channel switched on switches it off.
+class ChannelDisplay {
+public:
+    static bool shown(const ScopeRequest &request, const Options &options, unsigned channel) {
+        return channel < 2 && request.frontend.enabled[channel] && options.meter.axis != channel;
+    }
+    // In a record (a held one: what it holds).
+    static bool shown(const scope::FrameMetadata &record, const Options &options, unsigned channel) {
+        return channel < 2 && record.channels[channel].enabled && options.meter.axis != channel;
+    }
+    // False where the channel stays as it is (the last one shown without the DMM trace, or the capture's rule).
+    static bool show(ScopeRequest &request, Options &options, unsigned channel, bool on);
+    static void meter(Options &options, bool on);
+};
 } // namespace openosc::plot
