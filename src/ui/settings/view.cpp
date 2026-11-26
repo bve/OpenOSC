@@ -25,7 +25,8 @@ int SettingsView::menu(const SettingsMenu &menu, const SettingsProperties &rows,
         : menu.page() == SettingsPage::Calibration ? "Zero: ground inputs. Gain: DC reference"
         : menu.page() == SettingsPage::Gain ? "Volts at the probe tip, ratio once"
         : menu.page() == SettingsPage::Interleave ? "HIGH ADC offset, new CH1 records"
-        : menu.page() == SettingsPage::ScopeKeys ? "AUTO and F2/F4 holds on the Scope screen" : nullptr;
+        : menu.page() == SettingsPage::ScopeKeys ? "AUTO and F2/F4 holds on the Scope screen"
+        : menu.page() == SettingsPage::PowerOnKeys ? "Hold with REL while switching on" : nullptr;
     if (header) { text(header, 10, 46, 282); firstY = 68; }
     // Four rows within the menu above the cards, also under a header line (68 + 4 x 24 = 164).
     const PropertyRows page{firstY, 24, 22, 4};

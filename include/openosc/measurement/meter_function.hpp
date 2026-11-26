@@ -2,6 +2,7 @@
 
 namespace openosc {
 struct MeterFunctionInfo { const char* key; const char* name; const char* unit; };
+// The order is stored (power.on_keys, PowerOnKeys): append new functions at the end.
 inline constexpr MeterFunctionInfo MeterFunctions[] = {
     {"voltage_dc", "DC voltage", "V"}, {"voltage_ac", "AC voltage", "V"},
     {"resistance", "Resistance", "Ohm"}, {"continuity", "Continuity", "Ohm"},

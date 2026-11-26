@@ -3,7 +3,7 @@
 #include <cstdint>
 
 namespace openosc::ui {
-enum class SettingsPage : uint8_t { Root, Display, Appearance, Files, Device, About, Storage, Performance, Power, Calibration, Gain, Interleave, ScopeKeys, Tooltips, Count };
+enum class SettingsPage : uint8_t { Root, Display, Appearance, Files, Device, About, Storage, Performance, Power, Calibration, Gain, Interleave, ScopeKeys, Tooltips, PowerOnKeys, Count };
 enum class SettingsAction : uint8_t {
     None, Close, Back, Brightness, ReloadPreferences, ReloadTheme, BuiltinTheme, About, Storage, Recovery, UsbRemote,
     RunProfile, Restart, BacklightTimeout, BacklightIdleLevel, PowerOffTimeout, RestoreSettings, Images, ClearImages,
@@ -15,7 +15,9 @@ enum class SettingsAction : uint8_t {
     // Settings > Display > Tooltips (GitHub #108): a row each, in Tooltip order, then the critical ones (always on).
     TooltipUsage, TooltipUnavailable, TooltipProgress, TooltipDone, TooltipAdvisory, TooltipCritical,
     MenuLeftKey,
-    MenuContrast // Settings > Display > Menu contrast (GitHub #44): Theme or High contrast.
+    MenuContrast, // Settings > Display > Menu contrast (GitHub #44): Theme or High contrast.
+    // Settings > Device > Power > Power-on keys: a row per key, in PowerOnKeys::Key order.
+    PowerOnAuto, PowerOnHold, PowerOnMode
 };
 struct SettingsEntry {
     const char *name;

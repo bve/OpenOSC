@@ -44,6 +44,9 @@ unsigned shortcutIndex(ScopeKeys::Shortcut shortcut) {
     for (unsigned i = 0; i < unsigned(shortcut) && i < unsigned(ScopeKeys::Shortcut::Count); ++i) n += ScopeKeys::available(ScopeKeys::Shortcut(i));
     return n;
 }
+// The Power-on keys page's rows, in PowerOnKeys::Key order.
+unsigned powerOnKey(Action action) { return unsigned(action) - unsigned(Action::PowerOnAuto); }
+static_assert(unsigned(Action::PowerOnMode) - unsigned(Action::PowerOnAuto) + 1 == PowerOnKeys::Count);
 // The Tooltips page's rows, in Tooltip order (TooltipUsage..TooltipAdvisory).
 bool tooltipRow(Action action) { return action >= Action::TooltipUsage && action <= Action::TooltipAdvisory; }
 Tooltip tooltipOf(Action action) { return Tooltip(unsigned(action) - unsigned(Action::TooltipUsage)); }
@@ -69,7 +72,8 @@ PropertyKind SettingsProperties::kind(unsigned row) const {
     case Action::BatteryDisplay: case Action::RunProfile: case Action::BufferSize:
     case Action::BacklightTimeout: case Action::BacklightIdleLevel: case Action::PowerOffTimeout:
     case Action::GeneratorStartup: case Action::UsbController: case Action::Interleave:
-    case Action::AutoKey: case Action::ResetHold: case Action::ShortcutHold: return PropertyKind::Choice;
+    case Action::AutoKey: case Action::ResetHold: case Action::ShortcutHold:
+    case Action::PowerOnAuto: case Action::PowerOnHold: case Action::PowerOnMode: return PropertyKind::Choice;
     case Action::TooltipCritical: return PropertyKind::Info; // Always on: nothing to choose.
     default: return tooltipRow(entry.action) ? PropertyKind::Choice : PropertyKind::Action;
     }
@@ -96,6 +100,7 @@ unsigned SettingsProperties::options(unsigned row) const {
     case Action::AutoKey: return unsigned(ScopeKeys::Auto::Count);
     case Action::ResetHold: return unsigned(ScopeKeys::Reset::Count);
     case Action::ShortcutHold: return shortcutCount();
+    case Action::PowerOnAuto: case Action::PowerOnHold: case Action::PowerOnMode: return PowerOnKeys::Options;
     default: return tooltipRow(action(row)) ? 2 : 0; // Off, On.
     }
 }
@@ -121,6 +126,7 @@ unsigned SettingsProperties::option(unsigned row) const {
     case Action::AutoKey: return unsigned(prefs_.scope.keys.automatic);
     case Action::ResetHold: return unsigned(prefs_.scope.keys.reset);
     case Action::ShortcutHold: return shortcutIndex(prefs_.scope.keys.destination());
+    case Action::PowerOnAuto: case Action::PowerOnHold: case Action::PowerOnMode: return prefs_.powerOnKeys.target[powerOnKey(action(row))];
     default: return tooltipRow(action(row)) && Tooltips::shown(prefs_.tooltipsHidden, tooltipOf(action(row)));
     }
 }
@@ -166,6 +172,9 @@ void SettingsProperties::optionName(unsigned row, unsigned index, char *output, 
         std::snprintf(output, capacity, "%s", shortcut < ScopeKeys::Shortcut::Count ? Shortcuts[unsigned(shortcut)] : "");
         break;
     }
+    case Action::PowerOnAuto: case Action::PowerOnHold: case Action::PowerOnMode:
+        std::snprintf(output, capacity, "%s", PowerOnKeys::name(index % PowerOnKeys::Options));
+        break;
     case Action::UsbController: // Enabled says where it runs.
         if (index) std::snprintf(output, capacity, "Enabled (%lu MHz only)", megahertz(usb::ClockPolicy::Mode));
         else std::snprintf(output, capacity, "Disabled");
@@ -261,6 +270,7 @@ bool SettingsProperties::choose(unsigned row, unsigned index) {
     case Action::AutoKey: prefs_.scope.keys.automatic = ScopeKeys::Auto(index); break;
     case Action::ResetHold: prefs_.scope.keys.reset = ScopeKeys::Reset(index); break;
     case Action::ShortcutHold: prefs_.scope.keys.shortcut = shortcutAt(index); break;
+    case Action::PowerOnAuto: case Action::PowerOnHold: case Action::PowerOnMode: prefs_.powerOnKeys.target[powerOnKey(action(row))] = index; break;
     default:
         if (!tooltipRow(action(row))) return false;
         prefs_.tooltipsHidden = Tooltips::set(prefs_.tooltipsHidden, tooltipOf(action(row)), index != 0);

@@ -100,11 +100,13 @@ bool PreferencesJson::parse(const char *input, size_t bytes, Preferences &output
         if (index == 3) return false;
         candidate.batteryDisplay = index;
     }
-    { // power: the battery display trim (GitHub #107); absent in older files: none.
+    { // power: the battery display trim (GitHub #107) and on_keys (PowerOnKeys::packed); absent: none, the defaults.
         int gain = 0, offset = 0;
+        uint32_t onKeys = candidate.powerOnKeys.packed();
         const auto power = root["power"].as<JsonObjectConst>();
         if (!number(power, "battery_gain_permille", gain) || !number(power, "battery_offset_mv", offset) ||
             !power::BatteryGauge::trimValid(gain, offset)) return false;
+        if (!number(power, "on_keys", onKeys) || !candidate.powerOnKeys.unpack(onKeys)) return false;
         candidate.batteryGainPermille = int8_t(gain); candidate.batteryOffsetMv = int16_t(offset);
     }
     const auto usb = root["usb"].as<JsonObjectConst>();
@@ -245,6 +247,7 @@ size_t PreferencesJson::encode(const Preferences &values, char *output, size_t c
     document["display"]["battery"] = batteryDisplays[values.batteryDisplay];
     document["power"]["battery_gain_permille"] = int(values.batteryGainPermille);
     document["power"]["battery_offset_mv"] = int(values.batteryOffsetMv);
+    if (values.powerOnKeys.packed() != PowerOnKeys{}.packed()) document["power"]["on_keys"] = values.powerOnKeys.packed(); // Absent at the defaults.
     document["usb"]["controller"] = usbControllers[values.usbController];
     document["scope"]["timebase_ns"] = values.timebaseNs;
     auto channels = document["scope"].createNestedArray("millivolts_per_division");
