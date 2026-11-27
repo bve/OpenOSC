@@ -49,6 +49,20 @@ bool Header::word(const char *actual, const char *pattern) {
     }
     return matches(actual, pattern);
 }
+int Header::quoted(const char *&text, char *name, size_t size) {
+    const char *p = text;
+    if (*p != '"' && *p != '\'') return *p ? -104 : -109;
+    const char quote = *p++;
+    size_t length = 0;
+    while (*p && *p != quote) {
+        if (*p == '/' || *p == '\\' || length + 1 >= size) return -224;
+        name[length++] = *p++;
+    }
+    if (*p != quote) return -104;
+    if (!length) return -224;
+    name[length] = 0; text = p + 1;
+    return 0;
+}
 bool Header::boolean(const char *argument, bool &value) {
     if (!argument) return false;
     if (equal(argument, "1") || equal(argument, "ON") || equal(argument, "TRUE")) { value = true; return true; }

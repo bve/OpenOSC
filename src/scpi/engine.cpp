@@ -216,16 +216,26 @@ void Engine::poll(uint32_t now) {
     Command command;
     if (parser_.take(command)) dispatch(command);
 }
+int16_t Engine::blockBegin(const Command &c, uint32_t bytes) {
+    // upload_ is held from uploadBegin to the dispatch of its command, and nothing comes in between: the
+    // parser holds this session's next block until that command is taken, and USB input does not run inside
+    // its FAT write (InstrumentUsb::poll holds polling_). Kept because blockByte routes by upload_: no other
+    // block's bytes may ever reach the upload's stage.
+    if (upload_) return Wait;
+    if (Header::matches(c.header, "MMEMory:UPLoad:DATA")) return uploadBegin(c, bytes);
+    if (Header::matches(c.header, "SOURce:ARBitrary:DATA")) return arbitraryBegin(c, bytes);
+    return -168;
+}
 void Engine::dispatch(const Command &c) {
     uint32_t head; std::memcpy(&head, c.header, sizeof head);
     usbtrace::mark(usbtrace::Tag::Command, head);
     if (c.error) { error(c.error, c.query); return; }
-    if (c.block) { arbitraryCommand(c); return; } // Only SOUR:ARB:DATA takes a block (blockBegin).
+    if (c.block) { if (!uploadCommand(c)) arbitraryCommand(c); return; } // Only MMEM:UPL:DATA and SOUR:ARB:DATA take a block (blockBegin).
     const bool queryArgument = Header::matches(c.header, "WAVeform:MEASure") || Header::matches(c.header, "WAVeform:ENVelope") ||
                                Header::matches(c.header, "MMEMory:CATalog") ||
                                Header::matches(c.header, "MMEMory:DATA");
     if (c.query && *c.argument && !queryArgument) { error(-108,true); return; }
-    if (common(c) || systemCommand(c) || generatorCommand(c) || decodeCommand(c)) return;
+    if (common(c) || systemCommand(c) || uploadCommand(c) || generatorCommand(c) || decodeCommand(c)) return;
     if (backend_.multimeter() ? meterCommand(c) : scopeCommand(c)) return;
     error(-113, c.query);
 }

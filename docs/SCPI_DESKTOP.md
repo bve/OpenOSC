@@ -93,6 +93,26 @@ The instrument saves screenshots as PNG. Use the filename from
 `MMEM:CAT? "SCREENSHOTS"` to download a stored PNG or an earlier BMP.
 `DISP:DATA?` and `HCOP:DATA?` return the live screen as a 320×240 BMP.
 
+`MMEM:UPL:DATA "FILENAME",offset,#<block>` writes a block of up to 512
+bytes to `/openosc/UPDATE/FILENAME.TMP`. A longer block returns `-223`, and a
+malformed or interrupted one `-161`, as for `SOUR:ARB:DATA` (see
+[Limits and errors](AWG.md#limits-and-errors)). Offset 0 starts the upload and
+replaces an old `.TMP`. Every other offset must equal the bytes written so
+far, or the upload is canceled with `-222`. While another session's upload
+is open, offset 0 returns `-221`. A block that finds both file transfer
+buffers busy returns `-200`. `MMEM:UPL:END?` closes the file and checks it
+as Recovery does before flashing (extension `.OSC` or `.BIN`, header, board,
+size, vectors and the CRC of the whole payload). A whole image replaces
+`FILENAME`, and the reply is `bytes,crc32` for the data received, with the
+CRC-32 in decimal. Anything else returns `-230`, removes the `.TMP` and
+keeps the old `FILENAME`. If the replacement itself fails (`-200`), the old
+`FILENAME` is restored, or at worst kept as `FILENAME.OLD`. An upload is
+canceled when its session ends or the device shuts down.
+
+`SYST:REC:INST "FILENAME"` restarts into Recovery, which installs
+`/openosc/UPDATE/FILENAME` and starts the new firmware without a key press.
+A Recovery older than this command stops in its menu instead.
+
 ## Serial decoder results
 
 Select **UART (TTL)**, **RS-232**, **RS-485** or **DMX512** on the instrument under

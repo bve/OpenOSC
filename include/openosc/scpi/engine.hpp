@@ -43,11 +43,15 @@ private:
     bool meterHoldCommand(const Command &command); // SYSTem:DMM:HOLD:MODE ... :STATe? (meter.cpp).
     bool generatorCommand(const Command &command);
     bool arbitraryCommand(const Command &command); // SOURce:ARBitrary: and SOUR:FUNC ARB's frequency (arbitrary.cpp).
-    // BlockSink: SOUR:ARB:DATA's block goes to the backend's stage as it comes (arbitrary.cpp).
-    int16_t blockBegin(const char *header, uint32_t bytes) override;
-    void blockByte(uint8_t byte) override { backend_.arbitraryByte(this, byte); }
-    void blockAbort() override { backend_.arbitraryAbort(this); }
-    void dropBlock() { backend_.arbitraryAbort(this); } // A taken block's stage, with the input that held it.
+    bool uploadCommand(const Command &command);    // MMEMory:UPLoad: (upload.cpp).
+    // BlockSink (engine.cpp): a block goes to its command's stage as it comes. MMEM:UPL:DATA's to upload_
+    // (upload.cpp), SOUR:ARB:DATA's to the backend's (arbitrary.cpp).
+    int16_t blockBegin(const Command &command, uint32_t bytes) override;
+    int16_t uploadBegin(const Command &command, uint32_t bytes);
+    int16_t arbitraryBegin(const Command &command, uint32_t bytes);
+    void blockByte(uint8_t byte) override { if (upload_) upload_[uploadAt_++] = byte; else backend_.arbitraryByte(this, byte); } // Within uploadBegin's length.
+    void blockAbort() override { dropBlock(); }
+    void dropBlock() { endUpload(); backend_.arbitraryAbort(this); } // A taken block's stage, with the input that held it.
     // SOUR:ARB:DATA?: the loaded waveform as a definite block (Backend::arbitraryRead), pinned to its revision.
     bool arbitraryBinary_ = false;
     uint32_t arbitraryRevision_ = 0, arbitraryAt_ = 0, arbitraryBytes_ = 0;
@@ -57,12 +61,18 @@ private:
     // MMEM:DATA?: FatFs read in the foreground only (USB's background pass runs inside FAT writes).
     void fillStage();
     static constexpr size_t StageBytes = 512; // A FAT sector a refill.
-    static uint8_t *claimStage(const Engine *owner); // One of two ITCM stages (system.cpp); null: both in use.
-    static void releaseStage(const Engine *owner);
+    // One of two ITCM stages (system.cpp); null: both in use. Owners: an engine for its output (MMEM:DATA?,
+    // the peak stream) and its &upload_ for an upload block, each holding at most one.
+    static uint8_t *claimStage(const void *owner);
+    static void releaseStage(const void *owner);
     bool fileDone() const { return !fileBinary_ || (fileRead_ == fileBytes_ && stageAt_ == stageEnd_); }
     bool fileBinary_ = false, fileClosePending_ = false;
     uint32_t fileRead_ = 0, fileBytes_ = 0;
     uint8_t *stage_ = nullptr; uint16_t stageAt_ = 0, stageEnd_ = 0;
+    // MMEM:UPL:DATA's block (uploadAt_ of it received): its stage from uploadBegin until its command has
+    // written it to the file, or the block is dropped.
+    uint8_t *upload_ = nullptr; uint16_t uploadAt_ = 0;
+    void endUpload() { if (upload_) releaseStage(&upload_); upload_ = nullptr; uploadAt_ = 0; }
     void endDecode();                           // The CSV export lets go (reset, abort, done).
     void dispatch(const Command &command);
     void reply(const char *format, ...);

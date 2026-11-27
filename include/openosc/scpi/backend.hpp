@@ -140,7 +140,15 @@ public:
     // settings change) and the resolved format (LONG, COMPACT, AMBIGUOUS; INVALID without a record).
     struct FactoryRecordReading { const char *policy = "AUTO", *format = "INVALID"; };
     virtual bool factoryRecordFormat(FactoryRecordReading &) const { return false; }
-    virtual bool recovery() { return false; }
+    // SYST:RECovery (install nullptr: Recovery's menu) and SYST:RECovery:INSTall "<name>" (install and
+    // start /openosc/UPDATE/<name>). False: refused (shutting down, no such file, an upload open).
+    virtual bool recovery(const char *install) { return false; }
+    // MMEMory:UPLoad: a firmware image written into /openosc/UPDATE in chunks (the session that began it
+    // owns it; endSession() cancels it). uploadData: offset 0 starts <name>, any other continues it where
+    // it ended; uploadEnd publishes it and gives its size and CRC-32 (zlib's). 0 or the SCPI error.
+    static constexpr size_t UploadNameBytes = 48; // A file name in /openosc/UPDATE (MMEM:UPL, SYST:REC:INST), with the terminator.
+    virtual int uploadData(const char *name, uint32_t offset, const uint8_t *data, size_t size) { return -241; }
+    virtual int uploadEnd(uint32_t &bytes, uint32_t &crc) { return -241; }
     // Run mode as the core clock in MHz (0: no profile runs, the HSI fallback). The setter changes
     // it in place, as the Settings menu does, and returns 0 or the SCPI error to report.
     virtual uint32_t coreMhz() const { return 0; }

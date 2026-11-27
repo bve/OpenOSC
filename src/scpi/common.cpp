@@ -127,7 +127,15 @@ bool Engine::common(const Command &c) {
         }
     } else if (match("SYSTem:RECovery")) {
         if (c.query || *c.argument) error(-108,c.query);
-        else if (!backend_.recovery()) error(-221);
+        else if (!backend_.recovery(nullptr)) error(-221);
+    } else if (match("SYSTem:RECovery:INSTall")) {
+        // "<name>": the image in /openosc/UPDATE that Recovery installs and starts with no key pressed.
+        char name[Backend::UploadNameBytes];
+        const char *text = c.argument;
+        int code = c.query ? -108 : Header::quoted(text, name, sizeof name);
+        if (!code && *text) code = -108;
+        if (code) error(code, c.query);
+        else if (!backend_.recovery(name)) error(-221);
     } else return false;
     return true;
 }

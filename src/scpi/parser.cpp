@@ -14,15 +14,17 @@ void Parser::endBlock(int16_t error) {
     if (begun_ && error && sink_) sink_->blockAbort();
     begun_ = false; block_ = Block::None; digits_ = seen_ = 0; length_ = remaining_ = 0; blockError_ = 0;
 }
-// The '#' of a block only right after the header and its separator: nothing of the argument yet.
+// The '#' of a block only where an argument begins: right after the header and its separator, or after
+// a comma of the arguments (outside quotes: feed() checks the '#' is, and no quote follows the comma).
 bool Parser::argumentStart() const {
     size_t i = 0;
     while (i < used_ && space(line_[i])) ++i;
     if (i == used_) return false;
     while (i < used_ && !space(line_[i])) ++i;
     if (i == used_) return false;
-    while (i < used_ && space(line_[i])) ++i;
-    return i == used_;
+    size_t end = used_;
+    while (end > i && space(line_[end - 1])) --end;
+    return end == i || line_[end - 1] == ',';
 }
 bool Parser::blockByte(uint8_t byte) {
     switch (block_) {
@@ -52,7 +54,7 @@ bool Parser::blockByte(uint8_t byte) {
         auto &command = commands_[head_];
         command = {};
         decode(command);
-        int16_t result = command.error ? command.error : sink_ ? sink_->blockBegin(command.header, length) : int16_t(-168);
+        int16_t result = command.error ? command.error : sink_ ? sink_->blockBegin(command, length) : int16_t(-168);
         if (result == BlockSink::Wait) { std::memcpy(path_, path, sizeof path); --seen_; return false; } // This digit again once the sink is free.
         if (result > 0) result = -200;
         length_ = remaining_ = length;

@@ -159,7 +159,7 @@ bool Engine::prepareBlock(const scope::FrameMetadata &m) {
     pin(m);
     segmentAt_ = 0; pointAt_ = 0; binarySent_ = 0;
     endWave();
-    if (peakStream_ && !(waveStage_ = claimStage(this))) { error(-200, true); return false; } // Both stages stream.
+    if (peakStream_ && !(waveStage_ = claimStage(this))) { error(-200, true); return false; } // Both stages in use (output streams, an upload block).
     return true;
 }
 // After the header's reply (which ends any earlier output): the block follows it, a peak block with

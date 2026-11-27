@@ -7,17 +7,18 @@ struct Command {
     char header[96]{}, argument[160]{};
     int16_t error = 0;
     bool query = false;
-    bool block = false; // Its argument was a definite-length block, streamed to the BlockSink (argument empty).
+    bool block = false; // Its last argument was a definite-length block, streamed to the BlockSink (argument: those before it).
 };
 // Where a definite-length block's data goes (IEEE 488.2 7.7.6.2, #<n><length><data>): byte by byte as
-// it comes, never through the line buffer. blockBegin has the command's whole header and the length:
-// 0 takes the block, Wait holds the input (Parser::feed false: the same byte again later), a negative
-// SCPI error skips the block's bytes (the command reports that error). blockAbort: a block begun did
-// not end as a command (the message ended inside it, bytes other than the terminator after it, reset).
+// it comes, never through the line buffer. The block is the command's first argument or follows the
+// others' comma. blockBegin has the command up to it (its whole header, the arguments before it) and
+// the length: 0 takes the block, Wait holds the input (Parser::feed false: the same byte again later), a
+// negative SCPI error skips the block's bytes (the command reports that error). blockAbort: a block begun
+// did not end as a command (the message ended inside it, bytes other than the terminator after it, reset).
 class BlockSink {
 public:
     static constexpr int16_t Wait = 1;
-    virtual int16_t blockBegin(const char *header, uint32_t bytes) = 0;
+    virtual int16_t blockBegin(const Command &command, uint32_t bytes) = 0;
     virtual void blockByte(uint8_t byte) = 0;
     virtual void blockAbort() = 0;
 protected:
@@ -37,7 +38,7 @@ public:
     // its extent is unknown (no binary data is ever taken as commands).
     bool discarding() const { return block_ == Block::Discard; }
 private:
-    // Hash: "#" begins the argument (its digit count next). Length: the length digits. Data: to
+    // Hash: "#" begins an argument (its digit count next). Length: the length digits. Data: to
     // the sink. Skip: refused, counted to its end. After: only spaces, CR, then LF or ';'.
     enum class Block : uint8_t { None, Hash, Length, Data, Skip, After, Discard };
     bool finish(bool end);

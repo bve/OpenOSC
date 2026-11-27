@@ -12,10 +12,10 @@ int main() {
     Display::takeBootFrame(); // Discard a marker left by an older app that did not consume it.
     if (!Board::initialize()) Watchdog::fatal(boot_diagnostics.error);
     Board::delay(30);
-    const bool requestedByApp = RecoveryRequest::take();
+    const auto request = RecoveryRequest::take();
     // Recovery itself faulted last time: its menu, not an auto-start into the same fault (taken once).
     const bool faulted = ResetRecord::takeRecoveryFault(ResetRecord::retained());
-    const bool recoveryRequested = (Keypad::read() & Keypad::F2) || requestedByApp || faulted;
+    const bool recoveryRequested = (Keypad::read() & Keypad::F2) || request.recovery || faulted;
     Display screen;
     UpdateOperation update(screen);
     bool logoShown = false;
@@ -53,5 +53,6 @@ int main() {
     if (ready) fs.mountPrepared();
     RecoveryController controller(screen, nor, fs, usb, update, fatCheck, disk, ready);
     if (!reconciled) controller.reportFatRepairFailure();
+    if (request.install) controller.installOnStart(request.name);
     controller.run();
 }

@@ -12,6 +12,7 @@
 #include "openosc/usb/instrument_usb.hpp"
 
 namespace openosc {
+static_assert(RecoveryRequest::NameBytes == FirmwareUpload::NameBytes, "Recovery request name");
 void ApplicationController::confirmShutdown(ShutdownAction action) {
     confirmAction_=action;
     confirmOperation(ui::Confirmation(action),&ApplicationController::requestShutdown);
@@ -27,10 +28,11 @@ public:
     static constexpr const char *DecodeCsvShutdown = "DECODE CSV CANCELLED: SHUTDOWN";
     static constexpr const char *BodeCsvShutdown = "FRA CSV CANCELLED: SHUTDOWN";
     explicit ShutdownSteps(ApplicationController &a) : a_(a) {}
-    // Every background file user ends before the saves and the unmount: an unfinished decoded or FRA CSV
-    // is closed and its .TMP removed now (its export ended), so nothing writes the volume after it.
+    // Every background file user ends before the saves and the unmount: an unfinished decoded or FRA CSV or an
+    // open firmware upload is closed and its .TMP removed now (its export ended), so nothing writes the volume
+    // after it.
     void prepare() override {
-        a_.imageReader_.cancel(); a_.images_.cancelClear();
+        a_.imageReader_.cancel(); a_.images_.cancelClear(); a_.upload_.cancel();
         a_.closeCaptures();
         a_.closeSessions(false);
         a_.closeAwgFiles(false);
@@ -61,7 +63,7 @@ public:
     void finish(ShutdownAction action) override {
         if (action == ShutdownAction::PowerOff) PowerControl::powerOff();
         if (action == ShutdownAction::Restart) NVIC_SystemReset();
-        RecoveryRequest::restart(); // Recovery re-initialises the NOR itself and repairs the volume.
+        RecoveryRequest::restart(a_.recoveryInstall_[0] ? a_.recoveryInstall_ : nullptr); // Recovery re-initialises the NOR itself and repairs the volume.
     }
     bool resume() override;
 private:

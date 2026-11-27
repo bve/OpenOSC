@@ -4,9 +4,11 @@
 #include "openosc/recovery/action.hpp"
 #include "openosc/storage/fat/formatter.hpp"
 #include "openosc/recovery/fat_check.hpp"
+#include "openosc/platform/recovery_request.hpp"
 #include "openosc/storage/nor_flash.hpp"
 #include "openosc/update/update_operation.hpp"
 #include "openosc/usb/usb_device.hpp"
+#include <cstdio>
 
 namespace openosc {
 class RecoveryController {
@@ -20,6 +22,9 @@ public:
           update_(update), fatCheck_(fatCheck), formatter_(disk,fs),backup_(screen, fs), storageReady_(storageReady) {}
     [[noreturn]] void run();
     void reportFatRepairFailure() { repairFailed_ = true; } // Shown instead of the main menu once.
+    // The application asked to install /openosc/UPDATE/<name> and start it: run() does that, with no key
+    // pressed, instead of showing the menu; a failure stays on the message screen.
+    void installOnStart(const char *name) { std::snprintf(installName_, sizeof installName_, "%s", name); }
 private:
     enum class State { Main, Disconnect, Files, Calibration, Confirm, Message, FatReport, Formatting };
     using Action = RecoveryAction;
@@ -36,6 +41,7 @@ private:
     void serviceFormat();
     void drawConfirm();
     void showMain();
+    void installRequested();
     void message(const char* title, const char* detail);
     bool releaseHost();
     Display& screen_;
@@ -56,5 +62,6 @@ private:
     bool yes_ = false, hex_ = true, overwrite_ = false;
     bool updated_ = false; // The start offer follows the update just installed.
     char imagePath_[FF_MAX_LFN + 10]{};
+    char installName_[RecoveryRequest::NameBytes]{}; // installOnStart's file, until installRequested() takes it.
 };
 }
