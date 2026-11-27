@@ -77,6 +77,7 @@ void Network::closeTcp() {
 }
 void Network::wifiOff() {
     webScpi_.stop();
+    localName_.stop();
     closeTcp();
     release(dns_);
     dnsOffered_ = false;
@@ -97,6 +98,7 @@ bool Network::mode(Mode value, uint32_t now) {
     if (access) accessPointSettings(config, name_, apPassword_);
     else stationSettings(config, ssid_, password_);
     const auto radioMode = access ? WIFI_MODE_AP : WIFI_MODE_STA;
+    localName_.start();
     if (esp_wifi_set_mode(radioMode) != ESP_OK ||
         esp_wifi_set_config(access ? WIFI_IF_AP : WIFI_IF_STA, &config) != ESP_OK ||
         !start(radioMode) ||

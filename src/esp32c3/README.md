@@ -8,9 +8,12 @@ This ESP-IDF project runs on the ESP32-C3 SuperMini. Both the ZT703S and ZT706S 
 | --- | --- | --- |
 | GPIO4 | SWCLK / PA14 | Instrument TX and wake signal |
 | GPIO3 | SWDIO / PA13 | Companion TX |
+| 3V3 (marked 3.3 on some boards) | VDD (about 3.0 V) | Power from the instrument |
 | GND | GND | Common signal ground |
 
-Use 3.3 V logic. Power the SuperMini through its USB connector or from a suitable supply. Disconnect the SWD debug probe before enabling the companion. Restart the instrument with the probe disconnected if the menu still reports an attached debugger. The instrument returns the pins to SWD when the link closes. The companion leaves its TX pin as an input before the handshake and during sleep. Disconnect the companion from the SWD pins when debugging or programming the STM32 over SWD.
+Use 3.3 V logic. Connect the SuperMini's 3V3 pin directly to the instrument's VDD pad and connect their grounds. Switching off the instrument cuts power to the SuperMini.
+
+Disconnect the SWD debug probe before enabling the companion. Restart the instrument with the probe disconnected if the menu still reports an attached debugger. The instrument returns the pins to SWD when the link closes. The companion leaves its TX pin as an input before the handshake and during sleep. Disconnect the companion from the SWD pins when debugging or programming the STM32 over SWD.
 
 PA13 and PA14 have no USART alternate function on the STM32H7B0. The instrument uses GPIO with LPTIM2/3 and BDMA2. The ESP uses UART1. The link runs at 500000 baud, 8N2. The PA14/GPIO4 wire idles low and a high pulse wakes the ESP32-C3. Install matching STM32 and ESP32-C3 builds together. [STM32H7B0 datasheet](https://www.st.com/resource/en/datasheet/stm32h7b0vb.pdf)
 
@@ -36,7 +39,7 @@ stages the release assets in `build/releases/vX.Y.Z/assets/`.
 | `esp32c3-addon-app-vX.Y.Z.bin` | `OpenOSC-Companion-ESP32-C3.bin` | **Update firmware** in the web admin page |
 | `esp32c3-addon-recovery-vX.Y.Z.bin` | `OpenOSC-Companion-ESP32-C3-Recovery.bin` | **Update Recovery** in the web admin page |
 
-For initial installation, enter the ESP32-C3 ROM bootloader and flash the USB image at offset zero. This initializes the ESP flash layout and its settings area. With esptool 4.x installed:
+For initial USB installation, disconnect the SuperMini from the instrument before connecting its USB cable. Enter the ESP32-C3 ROM bootloader and flash the USB image at offset zero. This initializes the ESP flash layout and its settings area. With esptool 4.x installed:
 
 ```sh
 esptool.py --chip esp32c3 --port <esp32-c3-usb-port> write_flash 0x0 build/esp32c3/OpenOSC-Companion-ESP32-C3-USB.bin
@@ -47,10 +50,12 @@ Build the matching STM32 firmware with `pio run -e firmware` for the ZT703S or `
 ## Use from the instrument
 
 1. Open the main Settings menu by holding **MENU**. Open **Wireless Module** and select **Power** to wake the board.
-2. Select **Wi-Fi mode → Access point** to start the protected `OpenOSC-xxxxxx` network. Its suffix is the last six hexadecimal digits of the ESP32-C3 Wi-Fi MAC address. The **Network**, **IPv4 address** and **AP password** rows show the connection details. On a new installation, join with password `12345678`. Existing installations retain their AP password during the update. Open `http://192.168.4.1/` if the captive portal does not open automatically. The web admin opens without a login.
+2. Select **Wi-Fi mode → Access point** to start the protected `OpenOSC-xxxxxx` network. Its suffix is the last six hexadecimal digits of the ESP32-C3 Wi-Fi MAC address. The **Network**, **IPv4 address** and **AP password** rows show the connection details. On a new installation, join with password `12345678`. Existing installations retain their AP password during the update. Open `http://openosc.local/` if the captive portal does not open automatically. The web admin opens without a login.
 3. To join an existing 2.4 GHz network, use **Find Wi-Fi networks**, select the network, enter the password and select **Connect**. In the password editor, select **Character**, step through ASCII characters and confirm. **Add character** appends it. **Delete last** removes it. The same STA setup is available in the web admin page. **Wi-Fi mode → Station** reconnects to the saved network.
 4. Use **Sync time** once the companion has network time. In AP mode, the admin page can set the companion clock from a browser. The instrument displays UTC and uses it for new FAT file timestamps for the current boot.
 5. **Sleep when idle** offers Never, 1, 5, 15 or 30 minutes. The default is 5 minutes. Instrument wireless-module actions, portal changes and active SCPI traffic restart this timer. Select **Power** again to put the ESP into deep sleep. On power-up the ESP waits in deep sleep for the instrument.
+
+The `openosc.local` address uses multicast DNS and works in both AP and Station modes from the same local network. If the client cannot resolve `.local` names or another instrument is using that name, open `http://192.168.4.1/` in AP mode or use the **IPv4 address** shown on the instrument in Station mode.
 
 Use **Save AP password** in the web admin to choose an 8–63 character WPA2 password. An active Access point restarts with the new password. Upgrade ESP Recovery before changing the password to keep browser updates on the same network. The AP password, Wi-Fi transmit-power limit, station credentials, Wi-Fi SCPI preference and inactivity timeout are stored on the ESP. Wi-Fi and Bluetooth start with their radios off after the STM32 wakes the companion.
 
@@ -78,7 +83,7 @@ Commands and replies use the same OpenOSC SCPI handling as USB, including defini
 
 ### WebSocket transport for browser clients
 
-Enable **Wi-Fi SCPI** and connect to `ws://192.168.4.1:5026/scpi` in AP mode. In station mode, substitute the IPv4 address shown on the instrument. Use a trusted network for this plaintext connection. The endpoint accepts the Wireless Module's web origin, `https://fyfar.github.io`, and native clients that omit the Origin header. An occupied wireless session returns HTTP 409 during the handshake.
+Enable **Wi-Fi SCPI** and connect to `ws://openosc.local:5026/scpi` or use the instrument's IPv4 address. Use a trusted network for this plaintext connection. The endpoint accepts the Wireless Module's web origins, `https://fyfar.github.io`, and native clients that omit the Origin header. An occupied wireless session returns HTTP 409 during the handshake.
 
 - Open the socket without a WebSocket subprotocol and set `binaryType = "arraybuffer"`.
 - Send newline-terminated SCPI commands as text or binary. Keep client messages at or below 1,024 bytes.
@@ -133,6 +138,8 @@ Recovery runs from a 768 KiB factory partition and writes one 1.5 MiB applicatio
 The instrument can show **Companion link timed out** while ESP Recovery is writing. Once the ESP32-C3 admin page has returned, select **Power** in **Wireless Module** if the instrument link needs to reconnect.
 
 Older Recovery builds need to be updated before the browser can continue an application upload on the same network. On an older installation with a reachable Recovery, use its existing upload page once to install the current companion firmware, then update Recovery from the new admin page.
+
+Use the IPv4 address when updating a module whose installed Recovery does not yet advertise `openosc.local`. After updating both images, the hostname works during the application-to-Recovery handoff as well.
 
 The ESP-IDF bootloader watchdog covers startup. An eight-second task watchdog covers the main loop, the debug service and firmware uploads. If a newly installed image resets before completing its startup check, the bootloader returns to Recovery.
 

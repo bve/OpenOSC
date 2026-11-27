@@ -1,5 +1,6 @@
 #include "boot.hpp"
 #include "http_origin.hpp"
+#include "local_name.hpp"
 #include "network_identity.hpp"
 #include "upload.hpp"
 #include "watchdog.hpp"
@@ -107,13 +108,17 @@ private:
             if (esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, stationDisconnected, nullptr) != ESP_OK) return false;
             stationSettings(wifi, ssid, password);
         } else accessPointSettings(wifi, name_, apPassword_);
+        localName_.start();
         if (esp_wifi_init(&defaults) != ESP_OK || esp_wifi_set_storage(WIFI_STORAGE_RAM) != ESP_OK ||
             esp_wifi_set_mode(sta ? WIFI_MODE_STA : WIFI_MODE_AP) != ESP_OK ||
             esp_wifi_set_config(sta ? WIFI_IF_STA : WIFI_IF_AP, &wifi) != ESP_OK ||
             esp_wifi_start() != ESP_OK || esp_wifi_set_max_tx_power(wifiPower_) != ESP_OK ||
-            (sta && esp_wifi_connect() != ESP_OK)) return false;
-        if (!sta) std::printf("Recovery Wi-Fi: %s\nWi-Fi password: %s\nOpen http://192.168.4.1/\n",
-                             name_, apPassword_);
+            (sta && esp_wifi_connect() != ESP_OK)) {
+            localName_.stop();
+            return false;
+        }
+        if (!sta) std::printf("Recovery Wi-Fi: %s\nWi-Fi password: %s\nOpen http://%s.local/ or http://192.168.4.1/\n",
+                             name_, apPassword_, LocalName::Host);
         return true;
     }
     static esp_err_t dispatch(httpd_req_t *req) { return static_cast<Recovery *>(req->user_ctx)->handle(req); }
@@ -151,6 +156,7 @@ private:
     char name_[ApNameBytes + 1]{}, apPassword_[PasswordBytes + 1]{};
     httpd_handle_t server_ = nullptr;
     esp_netif_t *pinnedStation_ = nullptr;
+    LocalName localName_;
     std::atomic<bool> busy_{false};
 };
 }

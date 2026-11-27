@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 set(IDF_TARGET esp32c3 CACHE STRING "Companion MCU")
-set(ENV{IDF_COMPONENT_MANAGER} "0")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 if(OPENOSC_COMPANION_RECOVERY)
     project(openosc_companion_recovery_web)

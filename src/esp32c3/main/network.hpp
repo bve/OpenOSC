@@ -4,6 +4,7 @@
 #include "openosc/companion/wifi_power.hpp"
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "local_name.hpp"
 #include "esp_wifi.h"
 #include "freertos/queue.h"
 #include "nvs.h"
@@ -59,6 +60,7 @@ private:
     void offerDns(uint32_t ip);
     Bridge &bridge_;
     ScpiWebSocket webScpi_{bridge_};
+    LocalName localName_;
     esp_netif_t *sta_ = nullptr, *ap_ = nullptr;
     nvs_handle_t nvs_ = 0;
     QueueHandle_t commands_ = nullptr;

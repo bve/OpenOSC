@@ -1,4 +1,5 @@
 #include "scpi_websocket.hpp"
+#include "local_name.hpp"
 #include <cstdio>
 #include <cstring>
 #include "esp_timer.h"
@@ -18,7 +19,7 @@ bool allowedOrigin(httpd_req_t *req, uint32_t ipv4) {
     if (!httpd_req_get_hdr_value_len(req, "Origin")) return true;
     char origin[80], address[INET_ADDRSTRLEN], adminOrigin[sizeof "http://" + INET_ADDRSTRLEN];
     if (httpd_req_get_hdr_value_str(req, "Origin", origin, sizeof origin) != ESP_OK) return false;
-    if (!std::strcmp(origin, "https://fyfar.github.io")) return true;
+    if (!std::strcmp(origin, "https://fyfar.github.io") || LocalName::matchesHttpOrigin(origin)) return true;
     const in_addr ip{htonl(ipv4)};
     if (!inet_ntop(AF_INET, &ip, address, sizeof address)) return false;
     std::snprintf(adminOrigin, sizeof adminOrigin, "http://%s", address);

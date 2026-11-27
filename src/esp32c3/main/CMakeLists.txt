@@ -1,4 +1,4 @@
-set(common_sources "http_origin.cpp" "network_identity.cpp" "ota/boot.cpp" "ota/upload.cpp" "ota/web_network.cpp")
+set(common_sources "http_origin.cpp" "local_name.cpp" "network_identity.cpp" "ota/boot.cpp" "ota/upload.cpp" "ota/web_network.cpp")
 set(common_requires esp_driver_gpio esp_http_server esp_hw_support esp_wifi esp_event
                     esp_netif esp_timer nvs_flash lwip bootloader_support app_update)
 if(OPENOSC_COMPANION_RECOVERY)
