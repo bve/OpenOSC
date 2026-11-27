@@ -27,6 +27,7 @@ constexpr SettingsEntry display[] = {
     {"Tooltips", Action::None, Page::Tooltips},
     {"Menu contrast", Action::MenuContrast}, // Menus black with white text (GitHub #44), next to the theme.
     {"Appearance", Action::None, Page::Appearance},
+    {"Reading digits size", Action::MeterReadingSize},
     {"Back", Action::Back},
 };
 // AUTO and the F2/F4 holds on the Scope waveform screen (ScopeKeys, issue #96).

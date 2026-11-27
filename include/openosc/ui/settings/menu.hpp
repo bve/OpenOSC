@@ -18,7 +18,8 @@ enum class SettingsAction : uint8_t {
     MenuContrast, // Settings > Display > Menu contrast (GitHub #44): Theme or High contrast.
     MeasurementWake, // Settings > Power > Wake on measurement (GitHub #169): Off, DMM, Scope or Both.
     Captures, ClearCaptures, // Settings > Files & USB > Waveforms and Clear waveforms (GitHub #186).
-    Companion
+    Companion,
+    MeterReadingSize
 };
 struct SettingsEntry {
     const char *name;

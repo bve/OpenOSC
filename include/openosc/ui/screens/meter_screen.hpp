@@ -49,7 +49,7 @@ private:
     bool analog_ = false, held_ = false, styled_ = false;
     bool statistics_ = true; // The measurements block has its statistics' rows (or the trend).
     bool recording_ = false;
-    bool bar_ = true;
+    bool bar_ = true, largeReading_ = true;
     dmm::TemperatureAxis temperatureAxis_;
     DataStatus shownState_ = DataStatus::NoData; // Of the reading shown (its row is placed again on a layout).
     lv_area_t readingBox_{}; // The reading row's box (MeterReading::showRow): the theme's, in its block.

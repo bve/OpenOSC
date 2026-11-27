@@ -153,7 +153,9 @@ void MeterScreen::reading(const char *text, DataStatus state) {
     // The digital badge uses its theme position relative to the reading block in any order.
     const int unitY = readingBox_.y1 + unit.y - box.y;
     const lv_area_t unitBadge{unit.x, unitY, unit.x + unit.width - 1, unitY + unit.height - 1};
-    MeterReading::showRow(label, elements.get(ElementId::Unit), text, fonts, readingBox_, analog_ ? nullptr : &unitBadge, UnitGap,
+    using Placement = MeterReading::UnitPlacement;
+    const auto placement = analog_ ? Placement::CentredRow : largeReading_ ? Placement::Above : Placement::Inline;
+    MeterReading::showRow(label, elements.get(ElementId::Unit), text, fonts, readingBox_, unitBadge, placement, UnitGap,
                           state == DataStatus::Overload);
     // The 64 px digits redraw beyond their box (LVGL's extra draw margin of the face). Where that
     // reaches the soft keys next to the reading block, the keys are redrawn whole with it: a card
@@ -219,6 +221,7 @@ void MeterScreen::update(const dmm::Result &result, bool held, DataStatus status
     }
     auto &elements = host_.elements();
     held_ = held;
+    largeReading_ = context.largeReading;
     style(context.face, context.palette, context.appearance ? *context.appearance : MeterAppearance());
     // The measurements block's rows: MIN/MAX/AVG when shown (Statistics On, the statistics page) or
     // the trend; without them it shrinks (digital) or is absent (analog) and the rest closes up.

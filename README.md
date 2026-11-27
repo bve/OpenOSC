@@ -256,9 +256,10 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   0.6700 MΩ appears as 670.0 kΩ, 0.090 nF as 90 pF, and 22.00 mF as 22000 µF. **Range** shows
   the meter's range limit in its own unit, so a 90 pF reading on the 9.999 nF range shows
   `Range 9.999 nF` with the reading in pF.
-- The unit normally sits beside the reading. The digital layout moves it above the digits when
-  the side column would shrink a five-digit reading. MIN, MAX and AVG omit the unit when all three
-  use the main reading's unit. OL appears centred without a unit.
+- **Settings → Display → Reading digits size** sets the digital reading layout. **Normal** puts the
+  unit to the right on the same line. **Large** (default) puts it above the digits at the right edge,
+  which leaves the full width for the reading. MIN, MAX and AVG omit the unit when all three use
+  the main reading's unit. OL appears centred without a unit.
 - Session logging without a PC (**MENU → Measurement → Session log**): interval rows (count, min, max
   and average of the readings in each interval) or event records (a new record whenever the reading
   leaves a percentage band), stopped manually, at a set duration or when you leave the multimeter.

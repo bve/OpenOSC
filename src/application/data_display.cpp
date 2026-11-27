@@ -312,7 +312,7 @@ void ApplicationController::displayData(uint32_t now) {
                                           bool(prefs_.meter.statistics), prefs_.meter.shownFace(), prefs_.meter.shownPalette(),
                                           &prefs_.meter.shownAppearance(), word, bool(prefs_.meter.bar),
                                           data_.meterLogger().active() || data_.meterSession().recording(),
-                                          selecting, &meter.charge(), prefs_.meter.barUnit};
+                                          selecting, &meter.charge(), prefs_.meter.barUnit, prefs_.meter.largeReading};
             view_.multimeter(shownReading(meter, selecting), meter.holding(), status, context);
             lastMeterSelecting_ = selecting;
             lastMeterSequence_ = meter.displayed().sequence;

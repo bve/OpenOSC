@@ -120,6 +120,7 @@ void ApplicationController::applySettings(const Preferences &chosen, uint32_t no
     // Menu contrast (GitHub #44): the next menu draw takes it; the open Settings page is redrawn after this.
     prefs_.menuContrast = chosen.menuContrast; view_.menuContrast(prefs_.menuContrast);
     prefs_.clockIndicator = chosen.clockIndicator; // Shown or hidden on the next display pass.
+    prefs_.meter.largeReading = chosen.meter.largeReading;
     // Swap CH1/CH2: relabelled at once, a held record included; no capture, option or readout changes.
     prefs_.swapChannels = chosen.swapChannels; view_.channelView(plot::ChannelView{prefs_.swapChannels != 0});
     prefs_.tooltipsHidden = chosen.tooltipsHidden; view_.tooltips(prefs_.tooltipsHidden); // A notice of a kind hidden goes now.

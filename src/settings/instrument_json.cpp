@@ -341,6 +341,7 @@ bool InstrumentJson::parse(JsonObjectConst scope, JsonObjectConst meter, Prefere
         !boolean(scope, "longer_record", s.longerRecord) ||
         !choice(scope, "factory_record_format", s.factoryRecordFormat, factoryRecordFormats) ||
         !choice(meter, "display", output.meter.display, displays) ||
+        !boolean(meter, "large_reading", output.meter.largeReading) ||
         !boolean(meter, "statistics", output.meter.statistics) || !boolean(meter, "bar_graph", output.meter.bar) ||
         !boolean(meter, "bar_scale_unit", output.meter.barUnit) || !boolean(meter,"auto",output.meter.automatic) ||
         !number(meter,"range_index",output.meter.range) || !choice(meter, "face", output.meter.face, faces) ||
@@ -476,6 +477,7 @@ void InstrumentJson::encode(JsonObject scope, JsonObject meter, const Preference
     keys["f4_hold"] = shortcuts[unsigned(s.keys.destination())];
     encodeBode(scope, values.bode);
     meter["display"] = displays[values.meter.display]; meter["statistics"] = bool(values.meter.statistics); meter["bar_graph"] = bool(values.meter.bar);
+    meter["large_reading"] = values.meter.largeReading;
     meter["bar_scale_unit"] = values.meter.barUnit;
     meter["auto"] = bool(values.meter.automatic); meter["range_index"] = values.meter.range;
     meter["face"] = faces[values.meter.face]; meter["palette"] = palettes[values.meter.palette];

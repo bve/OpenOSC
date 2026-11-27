@@ -40,7 +40,7 @@ int MeterReading::unitArea(const lv_font_t *font, const char *current) {
     return widest;
 }
 void MeterReading::showRow(lv_obj_t *reading, lv_obj_t *unit, const char *text, const ReadingFonts &fonts,
-                           const lv_area_t &box, const lv_area_t *unitBadge, int gap, bool overload) {
+                           const lv_area_t &box, const lv_area_t &unitBadge, UnitPlacement placement, int gap, bool overload) {
     const auto *unitFont = lv_obj_get_style_text_font(unit, LV_PART_MAIN);
     const int boxWidth = lv_area_get_width(&box);
     // Every font on the largest one's baseline: a fallback size sits on the same line.
@@ -60,14 +60,11 @@ void MeterReading::showRow(lv_obj_t *reading, lv_obj_t *unit, const char *text, 
         place(unit, unitFont, box.x2, 1);
         return;
     }
-    const bool centred = !unitBadge;
+    const bool centred = placement == UnitPlacement::CentredRow;
+    const bool above = placement == UnitPlacement::Above;
     const char *suffix = lv_label_get_text(unit);
-    int area = lv_obj_is_hidden(unit) ? 0 : centred ? width(unitFont, suffix) : unitArea(unitFont, suffix);
-    // The digit faces have tabular digits. Choose the unit position for a full five-digit count
-    // with a decimal point and sign, so the unit and the right edge stay put as readings change.
-    const bool above = unitBadge && area &&
-        font("8.8888", boxWidth, fonts) != font("8.8888", boxWidth - gap - area, fonts);
-    if (above) area = 0;
+    const int area = above || lv_obj_is_hidden(unit) ? 0 :
+                     centred ? width(unitFont, suffix) : unitArea(unitFont, suffix);
     const int space = area ? gap : 0;
     const auto *font = MeterReading::font(text, boxWidth - space - area, fonts);
     align(reading, LV_TEXT_ALIGN_RIGHT);
@@ -79,8 +76,8 @@ void MeterReading::showRow(lv_obj_t *reading, lv_obj_t *unit, const char *text, 
     place(reading, font, x, digits);
     if (above) {
         align(unit, LV_TEXT_ALIGN_RIGHT);
-        lv_obj_set_pos(unit, unitBadge->x1, unitBadge->y1);
-        lv_obj_set_size(unit, lv_area_get_width(unitBadge), lv_area_get_height(unitBadge));
+        lv_obj_set_pos(unit, unitBadge.x1, unitBadge.y1);
+        lv_obj_set_size(unit, lv_area_get_width(&unitBadge), lv_area_get_height(&unitBadge));
     } else {
         align(unit, LV_TEXT_ALIGN_LEFT);
         place(unit, unitFont, std::min<int>(x + digits + space, box.x2), area);

@@ -72,6 +72,7 @@ struct MeterPreferences {
     DigitalArrangement digitalArrangement;
     AnalogArrangement analogArrangement;
     bool barUnit = true; // The engineering unit after the bar scale's last number.
+    bool largeReading = true; // Digital digits use the full width, with the unit above.
     // How HOLD takes its reading (Measurement > Hold): Manual by default and in files before it. Only
     // the mode and its parameters are kept: a cycle or a snapshot never outlives a restart.
     dmm::HoldSettings hold;
