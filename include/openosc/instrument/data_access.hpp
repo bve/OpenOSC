@@ -87,6 +87,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     scope::ChannelMetadata scopeChannelFor(const ScopeRequest &request, unsigned channel) const;
     // consume=false: a look that leaves the frame unseen (it is not released for capture).
     bool acquireScope(scope::FrameLease &lease, bool consume = true);
+    void skipScopeDisplayFrame();
     // The record on show (`shown`: its metadata as the view has it), while its memory still holds it,
     // annotated with the trigger it was shown with: the view moves it again when acquireScope gives
     // nothing (Normal or Single waiting, issue #89). No other reader takes a record this way.
@@ -198,6 +199,7 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     const DmmSessionRecorder &meterSession() const { return session_; }
     DmmSessionRecorder &meterSession() { return session_; }
     uint32_t scopeCaptures() const { return capture_.completed(); }
+    bool companionWindow() const { return capture_.state() != scope::FrameMailbox::State::Capturing; }
     // The newest frame a reader is given (acquireScope's rule): finite records and Roll snapshots
     // alike, once serviceScopeFrames accepted them (Auto, an edge, forced). Takes no lease.
     uint32_t scopeFrameSequence() const { return acceptedSequence_; }

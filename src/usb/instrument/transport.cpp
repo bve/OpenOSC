@@ -38,9 +38,29 @@ void InstrumentUsb::synchronize() {
         if (generation_ != usb::instrument.generation) { generation_ = usb::instrument.generation; mask = 3; }
     }
     if (mask & 1) tmc_.reset();
-    if (mask & 2) { serialEngine_.reset(); serialZlp_ = false; }
+    if ((mask & 2) && !companionSerial_) { serialEngine_.reset(); serialZlp_ = false; }
+}
+bool InstrumentUsb::cdcOpen() const {
+    CriticalSection lock;
+    const auto &pipe = usb::instrument.pipes[1];
+    return connected() && (usb::instrument.dtr || pipe.receiveReady || pipe.transmitBusy);
+}
+bool InstrumentUsb::takeCompanionSerial() {
+    if (cdcOpen() || companionSerial_) return false;
+    serialEngine_.reset();
+    serialEngine_.closeFile();
+    serialZlp_ = false;
+    companionSerial_ = true;
+    return true;
+}
+void InstrumentUsb::releaseCompanionSerial() {
+    if (!companionSerial_) return;
+    serialEngine_.reset();
+    serialEngine_.closeFile();
+    companionSerial_ = false;
 }
 void InstrumentUsb::transfer(uint32_t now) {
+    if (companionSerial_) return;
     auto &serialPipe = usb::instrument.pipes[1];
     // Only into this session's engine: not after a reset, configuration or DTR change until
     // synchronize() has reset it (usb::consume).

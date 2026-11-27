@@ -9,17 +9,25 @@ namespace {
 #define JSON_WORKSPACE
 #endif
 alignas(std::max_align_t) uint8_t documentStorage[JsonWorkspace::DocumentBytes] JSON_WORKSPACE;
-char textStorage[JsonWorkspace::TextCapacity] JSON_WORKSPACE;
+alignas(uint32_t) char textStorage[JsonWorkspace::TextCapacity] JSON_WORKSPACE;
 constexpr unsigned ThemeSlots = unsigned(JsonWorkspace::ThemeSlot::Count);
 alignas(Theme) uint8_t themeStorage[ThemeSlots][sizeof(Theme)] JSON_WORKSPACE;
 // Foreground only (the main loop and its file operations); no interrupt handler parses JSON.
 bool textLeased = false, documentLeased = false, themeLeased[ThemeSlots] = {};
+void (*reclaimText)() = nullptr;
 }
 char *JsonWorkspace::acquireText() {
     if (textLeased) return nullptr;
+    if (reclaimText) reclaimText();
     textLeased = true;
     return textStorage;
 }
+char *JsonWorkspace::borrowText(void (*reclaim)()) {
+    if (textLeased || reclaimText) return nullptr;
+    reclaimText = reclaim;
+    return textStorage;
+}
+void JsonWorkspace::returnText() { reclaimText = nullptr; }
 void JsonWorkspace::releaseText() { textLeased = false; }
 void *JsonWorkspace::acquireDocument() {
     if (documentLeased) return nullptr;

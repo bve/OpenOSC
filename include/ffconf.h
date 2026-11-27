@@ -31,7 +31,11 @@
 #define FF_USE_TRIM 0
 #define FF_FS_TINY 1
 #define FF_FS_EXFAT 0
+#if defined(OPENOSC_APPLICATION) && defined(__arm__)
+#define FF_FS_NORTC 0
+#else
 #define FF_FS_NORTC 1
+#endif
 #define FF_NORTC_MON 11
 #define FF_NORTC_MDAY 7
 #define FF_NORTC_YEAR 2026

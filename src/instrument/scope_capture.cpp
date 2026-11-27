@@ -6,6 +6,9 @@
 #include "openosc/platform/board.hpp"
 #include "openosc/platform/usb_trace.hpp"
 #include "openosc/platform/interrupts.hpp"
+#if defined(__arm__)
+#include "openosc/companion/link.hpp"
+#endif
 #include <algorithm>
 #include <utility>
 
@@ -583,6 +586,9 @@ bool DataAccess::startCapture() {
             metadata.interleaveMatch = matchFor(metadata, frontend, actualRate);
     }
 #endif
+#if defined(__arm__)
+    companion::Uart::yieldBus();
+#endif
     usbtrace::mark(usbtrace::Tag::CaptureBegin);
     const bool captureStarted = capture_.start(metadata, frontend, buffer, rolling, trigger.comparatorLevel(), zeroTrial() ? nullptr : &trigger);
     usbtrace::mark(usbtrace::Tag::CaptureEnd);
@@ -777,8 +783,11 @@ void DataAccess::serviceScopeCapture(uint32_t now) {
     // whose start was deferred must start, or it never reaches the hardware.
     const bool mayCapture=(zeroPhase!=calibration::ZeroOperation::Phase::Applying || zeroOperation_.trialConfigured()) &&
                           zeroPhase!=calibration::ZeroOperation::Phase::Restoring;
-    if (mayCapture && capture_.state() == scope::FrameMailbox::State::Idle && !captureFailed_ &&
-        uint32_t(now - configuredAt_) >= ConfigQuietMs && !capturePaused_)
-        startCapture();
+    if (!mayCapture || capture_.state() != scope::FrameMailbox::State::Idle || captureFailed_ ||
+        uint32_t(now - configuredAt_) < ConfigQuietMs || capturePaused_) return;
+#if defined(__arm__)
+    if (!holdPending_ && !internalCapture() && companion::link().deferCapture(now)) return;
+#endif
+    startCapture();
 }
 } // namespace openosc

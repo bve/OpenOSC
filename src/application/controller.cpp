@@ -138,6 +138,9 @@ void ApplicationController::serviceMcuTemperature(uint32_t now) {
         serviceShutdown(now);
         serviceBootGuard(now);
         usb.poll(now);
+#if defined(__arm__)
+        serviceCompanion(now, serialEngine);
+#endif
         serviceUsbAuto(now); // USB controller Auto (GitHub #170): after the poll's host evidence.
 #ifdef OPENOSC_DIAG_MAILBOX
         local.poll(now);

@@ -9,6 +9,9 @@ constexpr SettingsEntry root[] = {
     {"Display", Action::None, Page::Display},
     {"Files & USB", Action::None, Page::Files},
     {"Device", Action::None, Page::Device},
+#if defined(__arm__)
+    {"Wireless Module", Action::Companion},
+#endif
     {"Back", Action::Back},
 };
 constexpr SettingsEntry display[] = {

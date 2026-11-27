@@ -3,6 +3,9 @@
 #include "openosc/ui/scope/column_cache.hpp"
 #include "openosc/ui/scope/format.hpp"
 #include "openosc/platform/clocks.hpp"
+#if defined(__arm__)
+#include "openosc/companion/link.hpp"
+#endif
 #include <cstdio>
 #include <cstring>
 
@@ -19,6 +22,13 @@ dmm::Function ApplicationController::meterSelecting() const {
     const auto &meter = data_.meter();
     return data_.dmmSelectionStatus() == DataStatus::Busy && !meter.holding() ? meter.awaited() : dmm::Function::Unknown;
 }
+bool ApplicationController::inactiveWirelessPage() const {
+#if defined(__arm__)
+    return panel_ == Panel::Companion && !companion::link().engaged();
+#else
+    return false;
+#endif
+}
 // Full-rate capture restarts under a large redraw, or while a host enumerates, have coincided with
 // USB33RDY dips and bus resets on the device (cause not established). A hidden trace needs no new
 // frames, and such a record takes under a millisecond when one is asked for, so those restarts wait.
@@ -26,6 +36,7 @@ dmm::Function ApplicationController::meterSelecting() const {
 // offset measurement neither, nor held by the settle window its own confirmation left. Both still
 // wait while a host enumerates (bounded; a measurement past its deadline ends as Timeout).
 void ApplicationController::pauseHiddenCapture(uint32_t now, bool enumerating) {
+    const bool wirelessIdle = inactiveWirelessPage();
     const bool measuring = data_.interleaveMeasurement().active()
 #if OPENOSC_BOARD == 703
         || (panel_ == Panel::InterleaveMatch && interleaveMatch_.step() == calibration::InterleaveMatchWizard::Step::Measuring)
@@ -33,9 +44,9 @@ void ApplicationController::pauseHiddenCapture(uint32_t now, bool enumerating) {
         || panel_ == Panel::GainMatch // Live capture is the wizard's source.
         || bodeRunning() // A sweep takes records behind its own plot.
         ;
-    if (uiReady_ && view_.overlayActive() && !data_.zeroBusy() && !measuring && !autoBusy() &&
+    if (uiReady_ && view_.overlayActive() && !wirelessIdle && !data_.zeroBusy() && !measuring && !autoBusy() &&
         data_.scopeRequest().trigger.mode == scope::TriggerMode::Auto) hiddenAt_ = now;
-    const bool settling = (!measuring && uint32_t(now - hiddenAt_) < OverlaySettleMs) || enumerating;
+    const bool settling = (!measuring && !wirelessIdle && uint32_t(now - hiddenAt_) < OverlaySettleMs) || enumerating;
     data_.pauseCapture(state_.mode == MeasurementMode::Oscilloscope && settling && data_.fullRateCapture(), now);
 }
 // The level belongs to the next capture; its marker sits on the scale of the record on screen.
@@ -253,6 +264,7 @@ void ApplicationController::displayData(uint32_t now) {
             // No projection and no readouts without a trace; the decoder still takes the record.
             readouts_.suspend(data_); dataAt_=now;
             if (prefs_.scope.decoder.enabled) feedDecoder();
+            else if (inactiveWirelessPage()) data_.skipScopeDisplayFrame(); // A single-slot capture needs the unseen frame's arena.
             showDecoder(now);
             if (view_.overlayActive()) return;
             if (dataRefresh_ || lastScopeStatus_ != data_.status() || lastScopeHold_ != data_.scopeHeld()) {

@@ -57,6 +57,7 @@
 namespace openosc {
 class InstrumentBackend;
 class InstrumentUsb;
+namespace scpi { class Engine; }
 class ApplicationController {
 public:
     ApplicationController(LvglDisplay &display, NorFlash &nor, Filesystem &fs, PreferencesFile &preferences,
@@ -144,6 +145,11 @@ private:
     void gainKeys(uint32_t keys,uint32_t now);
     void interleaveAction(ui::SettingsAction action,uint32_t now);
     ui::SettingsProperties settingsRows() const; // With the calibration pages' draft and status.
+#if defined(__arm__)
+    void openCompanion();
+    void companionKeys(uint32_t keys, uint32_t now);
+    void serviceCompanion(uint32_t now, scpi::Engine &engine);
+#endif
     ui::CalibrationDraft calibrationDraft_;
     char gainQuestion_[32]{}; // The gain confirmation's title (Confirmation keeps a pointer).
     void serviceZeroUi(uint32_t now);
@@ -181,6 +187,7 @@ private:
     bool bodeOwns() const; // The sweep's settings in force: running, or their restore pending (SCPI refused).
     bool bodeRestoring() const; // Not running, its restore not yet whole (a ZT706S acknowledge): no new sweep.
     // The loop pass's overlay pause of full-rate capture (DataAccess::pauseCapture).
+    bool inactiveWirelessPage() const;
     void pauseHiddenCapture(uint32_t now, bool enumerating);
     bool interleaveWatched_=false;
     bool zeroWatched_=false;
@@ -445,7 +452,7 @@ private:
     bool restoreAuto();
     void serviceInstruments(uint32_t now);
     void queuePlotSave(uint32_t now);
-    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLog, Sessions, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, AwgFiles, Confirmation, Images, Captures, Zero, InterleaveMatch, GainMatch, Bode };
+    enum class Panel { None, Display, Trigger, Frequency, Meter, MeterAppearance, MeterHold, MeterLog, Sessions, MeterLayout, ScopeLayout, ScopeColors, Analyze, Decoder, Channel, Acquisition, Measurements, Generator, GeneratorLayout, AwgFiles, Confirmation, Images, Captures, Zero, InterleaveMatch, GainMatch, Bode, Companion };
     Panel panel_ = Panel::None;
     // Every property panel and Settings: one navigator (only one is open at a time).
     ui::PropertyNavigator navigator_;

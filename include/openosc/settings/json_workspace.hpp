@@ -84,6 +84,9 @@ public:
     static bool textHeld();
     static bool documentHeld();
     static bool themeHeld(ThemeSlot slot);
+    // A DMA user may borrow unused text storage. Text has priority and calls reclaim before use.
+    static char *borrowText(void (*reclaim)());
+    static void returnText();
 private:
     static char *acquireText();
     static void releaseText();

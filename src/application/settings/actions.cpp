@@ -4,6 +4,9 @@
 namespace openosc {
 void ApplicationController::settingsAction(ui::SettingsAction action, uint32_t now) {
     switch (action) {
+#if defined(__arm__)
+    case ui::SettingsAction::Companion: openCompanion(); break;
+#endif
     case ui::SettingsAction::CalibrateHardwareZero:
         if (data_.measurementMode()!=MeasurementMode::Oscilloscope) { view_.notify(Tooltip::Unavailable, "Select Scope first",now); break; }
         confirmOperation(ui::Confirmation("GROUND BOTH SCOPE INPUTS?","Stop GEN / set offset PWM","Any DC on an input is taken as offset"),&ApplicationController::beginHardwareZero);

@@ -1,0 +1,55 @@
+name: Build firmware
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository == 'bve/OpenOSC'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO toolchains
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: platformio-6.1.19-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('platformio.ini', 'src/esp32c3/platformio.ini') }}
+
+      - name: Install build tools
+        run: python -m pip install platformio==6.1.19 esptool==4.11.0
+
+      - name: Build firmware packages
+        id: packages
+        run: |
+          python scripts/build_firmware.py
+          directory="build/releases/v$(cat VERSION)"
+          (cd "$directory/assets" && sha256sum --check ../SHA256SUMS)
+          echo "directory=$directory" >> "$GITHUB_OUTPUT"
+
+      - name: Upload firmware packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenOSC-firmware
+          path: ${{ steps.packages.outputs.directory }}
+          if-no-files-found: error
+          retention-days: 14

@@ -290,6 +290,7 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
 
 - USBTMC and CDC (virtual COM port) with SCPI commands, working alongside the local UI
 - [SCPI extensions for desktop clients](docs/SCPI_DESKTOP.md) for frame, peak, measurement and file transfers
+- Optional [ESP32-C3 companion for ZT703S](src/esp32c3/README.md) with Wi-Fi and Bluetooth LE SCPI
 - Compatible command profiles for Rigol DS oscilloscopes and the OWON XDM1041 multimeter, so
   existing PC software such as ngscopeclient can talk to the device
 - [Fyfar](https://github.com/Fyfar) built a web app for the oscilloscope, multimeter, signal generator
@@ -381,9 +382,10 @@ and [Updating](https://github.com/bve/OpenOSC/wiki/Updating).
 
 Recovery is packed as a regular factory update container (`.ZTK`):
 
-- ZT703S: `OpenOSC-Recovery-ZT703S.ZTK`
-- ZT706S: `OpenOSC-Recovery-ZT706S.ZTK`
+- ZT703S: `OpenOSC-Recovery-ZT703S-vX.Y.Z.ZTK`
+- ZT706S: `OpenOSC-Recovery-ZT706S-vX.Y.Z.ZTK`
 
+Earlier releases and local PlatformIO builds use the same names without the version suffix.
 The bootloader reads the target model from the file header. On most units the file name can be
 changed, as long as it keeps the upper-case `.ZTK` extension.
 
@@ -438,8 +440,8 @@ Writing a backup back requires an SWD programmer.
 1. Start Recovery. It opens automatically when no valid firmware is installed.
    Later, you can open it by holding **F2** while the device starts.
 2. Connect the device to a computer. Recovery shows the device's storage as a USB drive.
-3. Copy the firmware file for your model into `/openosc/UPDATE/`: `OpenOSC-Firmware-ZT703S.OSC` or
-   `OpenOSC-Firmware-ZT706S.OSC` (from the release or your own build).
+3. Copy the firmware `.OSC` file for your model into `/openosc/UPDATE/`. Release assets include the
+   version in the name, for example `OpenOSC-Firmware-ZT703S-vX.Y.Z.OSC`.
 4. Finish copying. Optionally, eject the drive on the computer.
 5. On the device, select **UPDATE FIRMWARE**, choose the file and confirm it with **F3**.
 6. When the update completes, Recovery offers to start the application with **CONFIRM** selected:
@@ -485,7 +487,15 @@ pinned in `platformio.ini` and installed automatically.
 pio run
 ```
 
-This builds both devices. Output files:
+This builds both STM32 instruments. Use `python3 scripts/build_firmware.py` to build the instruments
+and the optional ESP32-C3 Wireless Module together. It puts the versioned release assets in
+`build/releases/vX.Y.Z/assets/` and writes `SHA256SUMS` next to that directory. The ESP32-C3
+USB installer is named `esp32c3-addon-vX.Y.Z.bin`. [Wireless Module installation](https://github.com/bve/OpenOSC/wiki/Mod-ESP32-C3-Wireless-Module)
+
+GitHub Actions runs this build on pushes and pull requests. Download the installable packages and
+checksums from the **OpenOSC-firmware** artifact on the workflow run.
+
+STM32 output files:
 
 | Device | Recovery (step 1) | Firmware (step 2) |
 | --- | --- | --- |
@@ -500,7 +510,7 @@ The firmware version is taken from [`VERSION`](VERSION).
 
 ## Third-party components
 
-All dependencies are included in [`vendor/`](vendor):
+The STM32 dependencies are included in [`vendor/`](vendor):
 
 - STM32CubeH7: CMSIS, HAL and USB Device library (ST)
 - CMSIS-DSP (Arm, Apache-2.0)
@@ -510,7 +520,7 @@ All dependencies are included in [`vendor/`](vendor):
 - ArduinoJson 6.21.5 (MIT)
 - IBM Plex Sans and Noto Sans Mono fonts (SIL OFL 1.1)
 
-Each component keeps its own license file.
+Each component keeps its own license file. The optional ESP32-C3 companion includes [Arm CMSIS-DAP](src/esp32c3/main/swd/arm) and builds against ESP-IDF.
 
 ## Contributing
 

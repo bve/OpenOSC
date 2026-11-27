@@ -147,6 +147,9 @@ bool DataAccess::findTrigger(const scope::FrameView &frame,uint32_t &index) {
     if (frame.metadata().triggered) { index=frame.metadata().triggerIndex; return true; }
     return triggerCache_.find(frame,triggerForFrame(frame.metadata()),index);
 }
+void DataAccess::skipScopeDisplayFrame() {
+    if (!scopeHeld_ && !internalCapture()) store_.consume(store_.sequence());
+}
 bool DataAccess::acquireScope(scope::FrameLease &lease, bool consume) {
     if (zeroBusy() || zeroBlocked_) return false;
     if (!store_.acquireLatest(lease, consume))

@@ -1,0 +1,6 @@
+#pragma once
+
+#define COMPANION_SWCLK 4
+#define COMPANION_SWDIO 3
+#define COMPANION_RECOVERY 5
+#define COMPANION_NRST 6

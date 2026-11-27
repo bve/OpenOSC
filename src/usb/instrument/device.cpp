@@ -77,8 +77,8 @@ void InstrumentUsb::stop() {
     release(active_ || initialized_); // initialized_: set up, never on the bus.
     if (active_) { active_ = false; reattach_.stopped(Board::milliseconds()); }
     initialized_ = false;
-    tmc_.reset(); serialEngine_.reset(); serialZlp_ = false;
-    tmcEngine_.closeFile(); serialEngine_.closeFile();
+    tmc_.reset(); tmcEngine_.closeFile();
+    if (!companionSerial_) { serialEngine_.reset(); serialEngine_.closeFile(); serialZlp_ = false; }
 }
 bool InstrumentUsb::connected() const {
     return active_ && usb::instrument.configured && usbDevice.dev_state == USBD_STATE_CONFIGURED;
@@ -121,14 +121,14 @@ void InstrumentUsb::poll(uint32_t now) {
     }
     synchronize();
     if (!connected()) { // A host gone mid-reply: free its file or lease.
-        tmcEngine_.idle(now); serialEngine_.idle(now);
-        tmcEngine_.closeFile(); serialEngine_.closeFile();
+        tmcEngine_.idle(now); tmcEngine_.closeFile();
+        if (!companionSerial_) { serialEngine_.idle(now); serialEngine_.closeFile(); }
         return;
     }
-    serialEngine_.poll(now);
+    if (!companionSerial_) serialEngine_.poll(now);
     serviceTmc(now); // USBTMC: split transactions first, then the bulk pipe.
     transfer(now);
-    serialEngine_.refill();
+    if (!companionSerial_) serialEngine_.refill();
     boot_diagnostics.usbState = usbDevice.dev_state;
 }
 }

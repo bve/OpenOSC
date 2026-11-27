@@ -280,6 +280,9 @@ bool ApplicationController::applyGenerator(const generator::Settings &settings, 
 
 void ApplicationController::panelKeys(uint32_t keys, uint32_t now, bool fine) {
     switch (panel_) {
+#if defined(__arm__)
+    case Panel::Companion: companionKeys(keys, now); break;
+#endif
     case Panel::Display: plotKeys(keys, now, fine); break;
     case Panel::Trigger: triggerKeys(keys, now, fine); break;
     case Panel::Frequency: frequencyKeys(keys, now); break;

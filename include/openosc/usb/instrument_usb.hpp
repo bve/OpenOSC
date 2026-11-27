@@ -68,6 +68,9 @@ public:
     bool hostActive(uint32_t now) const;
     // Only a host's SOFs as the last poll() found them (HostPresence): USB Auto's proof of a computer.
     bool hostPresent() const { return hostPresent_; }
+    bool cdcOpen() const;
+    bool takeCompanionSerial();
+    void releaseCompanionSerial();
 private:
     // A host unproven this long is gone (pulled cable, suspended PC): the watchdog's episode ends with
     // it, and a later host starts a new one. Longer than HostPresence::GraceMs (a bus reset).
@@ -97,5 +100,6 @@ private:
     bool clocked_ = false, enabled_ = true; // followClock, enable (the default: Enabled).
     bool hostPresent_ = false; // HostPresence at the last poll.
     bool serialZlp_ = false;
+    bool companionSerial_ = false;
 };
 } // namespace openosc
