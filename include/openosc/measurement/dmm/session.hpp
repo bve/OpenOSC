@@ -88,6 +88,27 @@ public:
 private:
     unsigned left_ = 0;
 };
+// The chip's first reading after it changes the range itself (AUTO) is wrong: 0 V, or the old digits at
+// the new range's scale (23.03 V stepping 2.2 -> 4.5 V), seen at the 2.5 V and the 25 mA switches on the
+// bench. That reading, the first in another range of the same function (Ranges::current) as the chip
+// sends it (a thermocouple's millivolts, not the temperature), is not shown, as an overload's settling,
+// and not integrated by the charge, in HOLD too. Only a usable number or an overload tells the range: a
+// placeholder ("--.--") is passed through and leaves what RangeSettle knows untouched, so a range change
+// across a placeholder still drops the first number after it.
+// The switching reading sometimes comes flagged MANUAL, so AUTO on the reading before it counts as well
+// as on the reading itself: a range changed in MANUAL is the user's and is shown at once, while leaving
+// or entering AUTO drops one reading when that also changes the range. An overload is always shown, and
+// never two in a row: a signal that keeps the chip switching shows its readings rather than freezing on
+// an old one.
+class RangeSettle {
+public:
+    bool skip(const Result &result); // True: this reading is not shown.
+    void clear() { index_ = function_ = ~0U; automatic_ = skipped_ = current_ = false; }
+private:
+    unsigned index_ = ~0U, function_ = ~0U; // function_, current_: what index_ is a range of.
+    // automatic_: the last reading that told the range (a number or an overload) was in AUTO.
+    bool automatic_ = false, skipped_ = false, current_ = false;
+};
 class Session {
 public:
     bool accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs);
@@ -98,7 +119,7 @@ public:
     // Readings before nowUs are stale (an activation, a resume): the charge's run ends there too.
     void expire(uint64_t nowUs) { freshFromUs_ = nowUs; charge_.interrupt(); }
     // The last packet as decoded: its function, range, HOLD and REL flags for the commands, and the
-    // raw stream (log, serial output). Settling readings (OverloadSettle) are here too.
+    // raw stream (log, serial output). Settling readings (OverloadSettle, RangeSettle) are here too.
     const Result &latest() const { return latest_; }
     const Result &live() const { return shown_; }
     const TemperatureSettings &temperatureSettings() const { return temperatureSettings_; }
@@ -142,7 +163,8 @@ public:
     const Statistics &statistics() const { return stats_; }
     const History &history() const { return history_; }
     const RelativeReading &relative() const { return relative_; }
-    // The DC current's ampere-hour counter (ChargeCounter): fed by every decoded packet, HOLD or not;
+    // The DC current's ampere-hour counter (ChargeCounter): fed by every decoded packet, HOLD or not, except
+    // the first reading after an AUTO range change (RangeSettle), which ends its run;
     // reset by a confirmed packet of another function and by entering or leaving the DMM (resetCharge,
     // DataAccess and the controller); interruptCharge: readings were lost (UART, framing), the charge stays.
     const ChargeCounter &charge() const { return charge_; }
@@ -184,6 +206,7 @@ private:
     Result latest_, shown_, held_;
     uint8_t raw_[18]{}, rawBytes_ = 0; // Packet::Bytes.
     OverloadSettle settle_;
+    RangeSettle rangeSettle_;
     HoldDetector detector_;
     Statistics stats_;
     History history_;

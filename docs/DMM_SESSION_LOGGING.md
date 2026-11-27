@@ -97,7 +97,9 @@ records, and **Estimate** shows the most the chosen duration can write.
 
 A session measures the function shown when it starts. V and mV of the same coupling (DC or AC) count as
 the same measurement, as do A and mA, because their values are recorded in SI units. A range change
-keeps the session.
+keeps the session. The readings the screen skips (the false reading at an AUTO range change, the two
+after an overload in Ω) are not recorded either. The DMM log keeps them, except a thermocouple's: its
+DMM log holds the converted temperatures and skips that reading too.
 
 - The local **HOLD** and **REL** change only the screen. The session keeps recording the live readings,
   without the REL offset.

@@ -1,10 +1,29 @@
 #include "openosc/measurement/dmm/session.hpp"
 #include "openosc/measurement/dmm/function.hpp"
+#include "openosc/measurement/dmm/ranges.hpp"
 #include "openosc/data/decimal.hpp"
 #include <cmath>
 #include <limits>
 
 namespace openosc::dmm {
+bool RangeSettle::skip(const Result &result) {
+    if (!result.primary.valid() && result.primary.status != DataStatus::Overload) return false; // A placeholder says nothing of the range.
+    // Ranges compare within one function and input, tracked here: the session's own context stays frozen
+    // under HOLD, while a function selected then must not take its first range for a change.
+    const auto function = Functions::identify(result);
+    if (function != Function::Unknown && (unsigned(function) != function_ || result.currentInput != current_)) {
+        clear();
+        function_ = unsigned(function); current_ = result.currentInput;
+    }
+    unsigned index = ~0U;
+    if (!Ranges::current(result, &index)) index = ~0U;
+    const bool switched = (automatic_ || result.range == RangeMode::Auto) && result.primary.status != DataStatus::Overload &&
+                          index != ~0U && index_ != ~0U && index != index_ && !skipped_;
+    index_ = index;
+    automatic_ = result.range == RangeMode::Auto;
+    skipped_ = switched;
+    return switched;
+}
 namespace {
 Result asTemperature(const Result &packet, const TemperatureSettings &settings, bool typeK,
                      std::optional<int16_t> mcuJunction) {
@@ -85,7 +104,7 @@ bool History::value(size_t index, double &output) const {
 }
 void Session::reselect() {
     resetStatistics(); // The charge stays: only a confirmed packet of another function resets it.
-    settle_.clear();
+    settle_.clear(); rangeSettle_.clear();
     detector_.reselect(); // The old function's snapshot and window go with the selection.
     awaiting_ = false;
 }
@@ -119,13 +138,20 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     const bool known = function != Function::Unknown;
     const bool functionChanged = known && function_ != ~0U && (unsigned(function) != function_ || candidate.currentInput != functionCurrent_);
     const bool settles = (known && function == awaited_) || timestampUs >= awaitUntilUs_;
+    // After an overload in Ohm, two readings are not shown, and after an AUTO range change one: nothing
+    // below sees them (display, hold mode, statistics, trend). Under HOLD the overload settling waits, as
+    // the factory decodes nothing then.
+    if (functionChanged) settle_.clear(); // The range settle follows the function itself (RangeSettle::skip).
+    // The range settle sees every packet, HOLD or not, to know the range the next one comes from.
+    const bool settling = !userHold_ && !candidate.packetHold;
+    const bool overloadSettles = settling && settle_.skip(candidate), rangeSettles = rangeSettle_.skip(latest_);
+    // A range change's false reading is no current either, in HOLD too: the charge's run pauses there,
+    // nothing estimated.
+    if (rangeSettles) { charge_.interrupt(); return true; }
     // The charge reads the packet itself: the manual HOLD, the hold modes and the local REL only change
     // what is shown. A selection not yet confirmed is not integrated.
     charge_.observe(candidate, timestampUs, !awaiting_ || settles);
-    // After an overload in Ohm, two readings are not shown: nothing below sees them (display, hold
-    // mode, statistics, trend). Under HOLD the settling waits, as the factory decodes nothing then.
-    if (functionChanged) settle_.clear();
-    if (!userHold_ && !candidate.packetHold && settle_.skip(candidate)) return true;
+    if (overloadSettles) return true;
     shown_ = candidate;
     detector_.observe(candidate, {relative_.active() && !functionChanged, candidate.packetHold, awaiting_ && !settles});
     if (held()) {

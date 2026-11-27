@@ -91,9 +91,12 @@ void DataAccess::poll(uint32_t now) {
             watchdog_.packet(timeUs_);
             if (meter_.accept(packet, sizeof packet, timeUs_)) {
                 status_ = meter_.latest().primary.status;
-                const auto &reading = meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest();
-                if (logger_.active()) logger_.append(reading, meter_.userHeld());
-                session_.observe(reading, meterFunction());
+                const auto &live = meter_.live();
+                // The DMM log keeps the raw packets (a temperature as converted in live(), so not a dropped one).
+                if (logger_.active()) logger_.append(live.primary.quantity == Quantity::Temperature ? live : meter_.latest(), meter_.userHeld());
+                // The session log takes only a reading that passed the range and overload settling: a dropped
+                // packet leaves live() at the reading before.
+                if (live.sequence == meter_.latest().sequence) session_.observe(live, meterFunction());
             }
         }
         meter_.service(timeUs_); // The hold mode's countdown and freshness, with or without packets.
