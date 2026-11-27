@@ -4,14 +4,14 @@
 namespace openosc::companion::ota {
 inline constexpr char AppForm[] = R"html(
 <form class="row" id="app-update">
-<div><h3>Application</h3><p class="hint">Installs through Recovery, then restarts.</p></div>
-<div class="fields"><label>Application image (.bin) <input type="file" accept=".bin" required></label></div>
-<button>Update firmware</button>
+<div><h3>Module application</h3><p class="hint">The module restarts after installation.</p></div>
+<div class="fields"><label>ESP32-C3 application image (.bin) <input type="file" accept=".bin" required></label></div>
+<button>Update module app</button>
 </form>)html";
 inline constexpr char RecoveryForm[] = R"html(
 <form class="row" id="recovery-update">
-<div><h3>Recovery</h3><p class="hint">Keeps the running application.</p></div>
-<div class="fields"><label>Recovery image (.bin) <input type="file" accept=".bin" required></label></div>
+<div><h3>Module Recovery</h3><p class="hint">The module application keeps running.</p></div>
+<div class="fields"><label>ESP32-C3 Recovery image (.bin) <input type="file" accept=".bin" required></label></div>
 <button>Update Recovery</button>
 </form>)html";
 inline constexpr char UpdateScript[] = R"html(

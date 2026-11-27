@@ -19,7 +19,7 @@ PA13 and PA14 have no USART alternate function on the STM32H7B0. The instrument 
 
 The default Wi-Fi transmit-power limit is 8.5 dBm. The **Wi-Fi TX power** row and web settings offer limits from 2 to 20 dBm. The same saved limit applies in Access point and Station modes. Recovery uses it during a browser update. A Recovery started by the physical pin uses the default limit.
 
-Only the instrument opens a reply window. The instrument lets wireless commands and data through in short gaps between records. A capture already in progress keeps its timing. With **Power** set to **Off**, no time is reserved for the link. Continuous Roll and a scope waiting for its trigger can defer wireless commands indefinitely. Use **HOLD** to release the bus in those cases. Ordinary companion functions use GPIO and support RDP1. The **Wireless SWD** action requires an RDP0 development unit.
+Only the instrument opens a reply window. The instrument lets wireless commands and data through in short gaps between records. A capture already in progress keeps its timing. With **Power** set to **Off**, no time is reserved for the link. Continuous Roll and a scope waiting for its trigger can defer wireless commands indefinitely. Use **HOLD** to release the bus in those cases. Ordinary companion functions use GPIO and support RDP1. The **Wireless SWD** menu item appears only on RDP0 development units.
 
 ## Build and install
 
@@ -36,7 +36,7 @@ stages the release assets in `build/releases/vX.Y.Z/assets/`.
 | Release asset | Development image | Use |
 | --- | --- | --- |
 | `esp32c3-addon-vX.Y.Z.bin` | `OpenOSC-Companion-ESP32-C3-USB.bin` | Initial USB installation or migration to the Recovery partition layout |
-| `esp32c3-addon-app-vX.Y.Z.bin` | `OpenOSC-Companion-ESP32-C3.bin` | **Update firmware** in the web admin page |
+| `esp32c3-addon-app-vX.Y.Z.bin` | `OpenOSC-Companion-ESP32-C3.bin` | **Update module app** in the web admin page |
 | `esp32c3-addon-recovery-vX.Y.Z.bin` | `OpenOSC-Companion-ESP32-C3-Recovery.bin` | **Update Recovery** in the web admin page |
 
 For initial USB installation, disconnect the SuperMini from the instrument before connecting its USB cable. Enter the ESP32-C3 ROM bootloader and flash the USB image at offset zero. This initializes the ESP flash layout and its settings area. With esptool 4.x installed:
@@ -62,6 +62,7 @@ Use **Save AP password** in the web admin to choose an 8–63 character WPA2 pas
 ## Browse instrument files
 
 Open **Files** in the web admin to browse the STM32's external SPI flash under `/openosc`.
+Expand folders in the tree and select one to see its contents. Use the path above the list to move back up.
 The browser can download, upload, create, rename and delete files. It can also create, rename
 and delete empty folders. An upload uses a temporary file until it is complete. Uploading to a name
 that already exists is rejected. If the scope is continuously rolling or waiting for a trigger, pause
@@ -129,11 +130,11 @@ The two-wire connection supports software reset through SWD. For hardware reset 
 
 ## Update the ESP32-C3 over Wi-Fi
 
-1. Open the companion's web admin page on its access point or at its station address and select **Firmware**.
-2. For application updates, select the application image from the table above and press **Update firmware**. Keep the tab open. The ESP restarts in Recovery and the page continues the upload on the same network. In AP mode, the SSID, password and address stay the same. In Station mode, Recovery rejoins the saved Wi-Fi and uses the current address for the upload. A brief Wi-Fi interruption is normal during the restart.
+1. Open the companion's web admin page on its access point or at its station address and select **ESP32-C3 Update**. To update the instrument, use OpenOSC Recovery on the instrument.
+2. For application updates, select the application image from the table above and press **Update module app**. Keep the tab open. The ESP restarts in Recovery and the page continues the upload on the same network. In AP mode, the SSID, password and address stay the same. In Station mode, Recovery rejoins the saved Wi-Fi and uses the current address for the upload. A brief Wi-Fi interruption is normal during the restart.
 3. For Recovery updates, select the Recovery image from the table above and press **Update Recovery**. The running companion verifies the new Recovery while leaving the application and settings in place. If the transfer is interrupted, retry from the same admin page before starting a firmware update.
 
-Recovery runs from a 768 KiB factory partition and writes one 1.5 MiB application slot. If an application upload is interrupted, repeat the upload from the admin page. Recovery can return to a valid installed application after two minutes without an active upload. To enter Recovery without a working companion application, hold **GPIO7 to GND** while resetting the SuperMini and release it after Recovery starts. It exposes the usual `OpenOSC-xxxxxx` access point. Use **Start installed firmware** if the application is still valid.
+Recovery runs from a 768 KiB factory partition and writes one 1.5 MiB application slot. If an application upload is interrupted, repeat the upload from the admin page. Recovery can return to a valid installed application after two minutes without an active upload. To enter Recovery without a working companion application, hold **GPIO7 to GND** while resetting the SuperMini and release it after Recovery starts. It exposes the usual `OpenOSC-xxxxxx` access point. Use **Start module application** if the application is still valid.
 
 The instrument can show **Companion link timed out** while ESP Recovery is writing. Once the ESP32-C3 admin page has returned, select **Power** in **Wireless Module** if the instrument link needs to reconnect.
 

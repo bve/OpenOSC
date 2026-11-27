@@ -30,7 +30,7 @@ border-radius:6px;color:var(--muted);font-size:.875rem;text-decoration:none;whit
 nav{position:sticky;top:0;z-index:1;display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin:.6rem -.75rem 0;
 padding:.4rem .75rem;background:var(--bg);border-bottom:1px solid var(--line)}
 nav a{display:flex;align-items:center;justify-content:center;min-height:42px;border-radius:6px;color:var(--muted);
-text-decoration:none;font-weight:600;font-size:.9rem;white-space:nowrap}
+text-decoration:none;font-weight:600;font-size:.9rem;line-height:1.2;text-align:center}
 nav a:hover{color:var(--ink);background:var(--panel)}
 nav a[aria-current]{color:var(--accent);background:var(--panel);box-shadow:inset 0 -2px var(--accent)}
 main section{padding-top:.9rem}
@@ -56,6 +56,7 @@ button:disabled{opacity:.5;cursor:wait}
 .quiet:hover{color:var(--ink);background:#202b35}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .upload{padding:0 .9rem .8rem}
+.update-target{margin:0 .1rem .65rem}
 progress{width:100%;height:.5rem;accent-color:var(--accent)}
 #upload-status:not(:empty){margin-top:.4rem;color:var(--muted);font-size:.9rem;white-space:pre-wrap;overflow-wrap:anywhere}
 .mode{display:grid;gap:.6rem;padding:.8rem .9rem;margin-top:.9rem;border-left:3px solid var(--accent)}

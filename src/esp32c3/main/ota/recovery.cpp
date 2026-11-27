@@ -21,11 +21,11 @@ namespace {
 constexpr char Page[] = R"html(
 <main>
 <form class="panel mode" method="post" action="/boot">
-<div><h3>Recovery mode</h3><p class="hint">The application is stopped. Start it, or install an application image.</p></div>
-<button>Start installed firmware</button>
+<div><h3>ESP32-C3 Recovery</h3><p class="hint">Start the module application or install an application image.</p></div>
+<button>Start module application</button>
 </form>
 <section aria-labelledby="firmware-heading">
-<h2 id="firmware-heading">Install firmware</h2>
+<h2 id="firmware-heading">ESP32-C3 Update</h2>
 )html";
 esp_err_t recoveryPage(httpd_req_t *req) {
     if (web::begin(req) != ESP_OK || httpd_resp_sendstr_chunk(req, Page) != ESP_OK ||

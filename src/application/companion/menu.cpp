@@ -37,15 +37,22 @@ public:
         return link().state() == Link::State::On ? nullptr : "Disconnect SWD debugger before enabling";
     }
     unsigned count() const override {
-        return page == Page::Main ? unsigned(MainCount) : page == Page::Scan ? 1 + link().networkCount() : unsigned(PasswordCount);
+        if (page == Page::Main) return unsigned(MainCount) - unsigned(!showWirelessSwd_);
+        return page == Page::Scan ? 1 + link().networkCount() : unsigned(PasswordCount);
+    }
+    Row mainRow(unsigned index) const {
+        return Row(index + unsigned(!showWirelessSwd_ && index >= WirelessSwd));
+    }
+    unsigned mainIndex(Row row) const {
+        return unsigned(row) - unsigned(!showWirelessSwd_ && row > WirelessSwd);
     }
     PropertyKind kind(unsigned row) const override {
         if (page == Page::Password) return row == Character ? PropertyKind::Number : PropertyKind::Action;
         if (page == Page::Scan) return PropertyKind::Action;
-        if (row == Power) return PropertyKind::Action;
-        if (row == WirelessSwd && !companion::Uart::debugAllowed()) return PropertyKind::Info;
-        if (link().state() != Link::State::On && row != Utc) return PropertyKind::Info;
-        switch (row) {
+        const auto item = mainRow(row);
+        if (item == Power) return PropertyKind::Action;
+        if (link().state() != Link::State::On && item != Utc) return PropertyKind::Info;
+        switch (item) {
         case Wifi: case Idle: return PropertyKind::Choice;
         case TxPower: return link().status().wifiPower ? PropertyKind::Choice : PropertyKind::Info;
         case Tcp: case Ble: return PropertyKind::Toggle;
@@ -58,7 +65,7 @@ public:
             "Find Wi-Fi networks", "Wi-Fi SCPI", "Bluetooth LE", "Sleep when idle", "Sync time", "UTC", "Network",
             "IPv4 address", "AP password", "BLE PIN"};
         const char *name = "";
-        if (page == Page::Main) name = row < MainCount ? names[row] : "";
+        if (page == Page::Main) name = row < count() ? names[mainRow(row)] : "";
         else if (page == Page::Scan) {
             if (!row) name = "Scan again";
             else if (const auto *n = link().network(row - 1)) name = n->ssid;
@@ -81,18 +88,17 @@ public:
             return;
         }
         const auto &status = link().status();
-        if (row == Power) {
+        const auto item = mainRow(row);
+        if (item == Power) {
             static constexpr const char *states[] = {"Off", "Starting", "On", "Stopping", "No reply", "SWD"};
             std::snprintf(out, size, "%s", link().waitingForCapture() ? "Waiting for capture" : states[unsigned(link().state())]);
-        } else if (row == WirelessSwd && !companion::Uart::debugAllowed()) {
-            std::snprintf(out, size, "RDP protected");
-        } else if (row == Utc) {
+        } else if (item == Utc) {
             const uint32_t utc = link().time(now);
             if (utc) std::snprintf(out, size, "%02lu:%02lu:%02lu", (unsigned long)(utc / 3600 % 24),
                                   (unsigned long)(utc / 60 % 60), (unsigned long)(utc % 60));
             else std::snprintf(out, size, "Unsynced");
         } else if (link().state() == Link::State::On || link().state() == Link::State::Debug) {
-            switch (row) {
+            switch (item) {
             case Network: std::snprintf(out, size, "%s", status.ssid); break;
             case Address:
                 if (status.ip) std::snprintf(out, size, "%u.%u.%u.%u", unsigned(status.ip >> 24),
@@ -113,32 +119,35 @@ public:
     }
     unsigned options(unsigned row) const override {
         if (page != Page::Main || link().state() != Link::State::On) return 0;
-        if (row == TxPower) return link().status().wifiPower ? companion::WifiPowerCount : 0;
-        return row == Wifi ? std::size(WifiModes) : row == Idle ? std::size(companion::IdleMinutes) : row == Tcp || row == Ble ? 2 : 0;
+        const auto item = mainRow(row);
+        if (item == TxPower) return link().status().wifiPower ? companion::WifiPowerCount : 0;
+        return item == Wifi ? std::size(WifiModes) : item == Idle ? std::size(companion::IdleMinutes) : item == Tcp || item == Ble ? 2 : 0;
     }
     unsigned option(unsigned row) const override {
         const auto &status = link().status();
-        if (row == Wifi) return unsigned(std::find(std::begin(WifiModes), std::end(WifiModes), status.mode) - std::begin(WifiModes));
-        if (row == TxPower) return companion::wifiPowerIndex(status.wifiPower);
-        if (row == Ble) return bool(status.flags & Flag::Ble);
-        if (row == Tcp) return bool(status.flags & Flag::Tcp);
-        if (row == Idle) for (unsigned i = 0; i < options(row); ++i) if (companion::IdleMinutes[i] == status.idle) return i;
+        const auto item = mainRow(row);
+        if (item == Wifi) return unsigned(std::find(std::begin(WifiModes), std::end(WifiModes), status.mode) - std::begin(WifiModes));
+        if (item == TxPower) return companion::wifiPowerIndex(status.wifiPower);
+        if (item == Ble) return bool(status.flags & Flag::Ble);
+        if (item == Tcp) return bool(status.flags & Flag::Tcp);
+        if (item == Idle) for (unsigned i = 0; i < options(row); ++i) if (companion::IdleMinutes[i] == status.idle) return i;
         return 0;
     }
     void optionName(unsigned row, unsigned index, char *out, size_t size) const override {
-        if (row == Wifi) {
+        const auto item = mainRow(row);
+        if (item == Wifi) {
             static constexpr const char *modes[] = {"Off", "Station", "Access point"};
             std::snprintf(out, size, "%s", index < std::size(WifiModes) ? modes[unsigned(WifiModes[index])] : "");
-        } else if (row == TxPower && index < companion::WifiPowerCount) {
+        } else if (item == TxPower && index < companion::WifiPowerCount) {
             std::snprintf(out, size, "%s dBm", companion::WifiPowerLevels[index].dbm);
-        } else if (row == Idle && index < options(row)) {
+        } else if (item == Idle && index < options(row)) {
             if (!index) std::snprintf(out, size, "Never");
             else std::snprintf(out, size, "%u min", unsigned(companion::IdleMinutes[index]));
         } else std::snprintf(out, size, "%s", index ? "On" : "Off");
     }
     bool choose(unsigned row, unsigned index) override {
         if (index >= options(row)) return false;
-        switch (row) {
+        switch (mainRow(row)) {
         case Wifi: return link().set(Command::Mode, uint8_t(WifiModes[index]));
         case Idle: return link().set(Command::Idle, companion::IdleMinutes[index]);
         case TxPower: return link().set(Command::WifiPower, companion::WifiPowerLevels[index].quarters);
@@ -160,6 +169,9 @@ public:
     unsigned rendered = 0;
     char password[companion::PasswordBytes + 1]{};
     uint8_t length = 0;
+
+private:
+    const bool showWirelessSwd_ = companion::Uart::debugAllowed();
 };
 CompanionRows &rows() {
     alignas(CompanionRows) static uint8_t storage[sizeof(CompanionRows)];
@@ -196,18 +208,19 @@ void ApplicationController::companionKeys(uint32_t keys, uint32_t now) {
             return;
         }
         menu.page = menu.page == Page::Password ? Page::Scan : Page::Main;
-        navigator_.reset(menu.page == Page::Scan ? menu.chosenNetwork + 1 : unsigned(Menu::Networks));
+        navigator_.reset(menu.page == Page::Scan ? menu.chosenNetwork + 1 : menu.mainIndex(Menu::Networks));
     } else if (result == Outcome::Activate) {
         const unsigned row = navigator_.row();
         bool accepted = true;
         if (menu.page == Page::Main) {
-            if (row == Menu::Power) accepted = link.active() ? link.stop() : link.start();
-            if (row == Menu::WirelessSwd) accepted = link.request(Command::PrepareSwd);
-            if (row == Menu::Networks) {
+            const auto item = menu.mainRow(row);
+            if (item == Menu::Power) accepted = link.active() ? link.stop() : link.start();
+            if (item == Menu::WirelessSwd) accepted = link.request(Command::PrepareSwd);
+            if (item == Menu::Networks) {
                 accepted = link.request(Command::Scan);
                 if (accepted) { menu.page = Page::Scan; navigator_.reset(); }
             }
-            if (row == Menu::Sync) accepted = link.request(Command::Clock);
+            if (item == Menu::Sync) accepted = link.request(Command::Clock);
         } else if (menu.page == Page::Scan) {
             if (!row) accepted = link.request(Command::Scan);
             else if (const auto *network = link.network(row - 1)) {
@@ -216,7 +229,7 @@ void ApplicationController::companionKeys(uint32_t keys, uint32_t now) {
                     menu.clearPassword(); menu.page = Page::Password; navigator_.reset();
                 } else {
                     accepted = link.join(menu.chosenNetwork, "");
-                    if (accepted) { menu.page = Page::Main; navigator_.reset(Menu::Networks); }
+                    if (accepted) { menu.page = Page::Main; navigator_.reset(menu.mainIndex(Menu::Networks)); }
                 }
             }
         } else if (row == Menu::AddCharacter) {
@@ -229,7 +242,7 @@ void ApplicationController::companionKeys(uint32_t keys, uint32_t now) {
         } else if (row == Menu::Connect) {
             accepted = link.join(menu.chosenNetwork, menu.password);
             if (accepted) {
-                menu.clearPassword(); menu.page = Page::Main; navigator_.reset(Menu::Networks);
+                menu.clearPassword(); menu.page = Page::Main; navigator_.reset(menu.mainIndex(Menu::Networks));
             } else if (menu.length < 8) {
                 view_.notify(Tooltip::Unavailable, "Use at least 8 characters", now);
                 return;

@@ -8,7 +8,7 @@
 namespace openosc::companion::web {
 inline constexpr char SettingsStart[] = R"html(
 <nav aria-label="Settings sections">
-<a href="#network">Wi-Fi</a><a href="#services">Services</a><a href="#files">Files</a><a href="#firmware">Firmware</a>
+<a href="#network">Wi-Fi</a><a href="#services">Services</a><a href="#files">Files</a><a href="#firmware">ESP32-C3 Update</a>
 </nav>
 <main>
 <section id="network" aria-labelledby="network-heading">
@@ -71,7 +71,8 @@ inline constexpr char SettingsRest[] = R"html(
 </div>
 </section>
 <section id="firmware" aria-labelledby="firmware-heading">
-<h2 id="firmware-heading">Firmware</h2>
+<h2 id="firmware-heading">ESP32-C3 Update</h2>
+<p class="hint update-target">Update the ESP32-C3 Wireless Module here. To update the instrument, use OpenOSC Recovery on the instrument.</p>
 )html";
 
 inline esp_err_t option(httpd_req_t *req, unsigned value, bool selected, const char *label, const char *unit = "") {
