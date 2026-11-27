@@ -93,16 +93,16 @@ void appearance(JsonObject meter, const MeterAppearance &values) {
     }
 }
 // meter.hold: {"mode": "manual|delayed|stable|auto", "delay_ms", "stable_ms", "band_digits", "rearm_digits",
-// "min_readings"}. Each value stands alone against HoldSettings::valid (the editor's and SCPI's check):
+// "min_readings", "zero_digits"}. Each value stands alone against HoldSettings::valid (the editor's and SCPI's check):
 // one out of range or of another type keeps its default, never its neighbours or the rest of the file.
 // The band and the rearm threshold are one pair (rearm > band): taken together when they fit, else
 // each alone where it still fits the other.
 void hold(JsonObjectConst object, dmm::HoldSettings &output) {
     dmm::HoldSettings value;
-    auto take = [&](const char *name, uint32_t dmm::HoldSettings::*field) {
-        if (!object[name].is<uint32_t>()) return;
+    auto take = [&](const char *name, uint16_t dmm::HoldSettings::*field) {
+        if (!object[name].is<uint16_t>()) return;
         auto next = value;
-        next.*field = object[name].as<uint32_t>();
+        next.*field = object[name].as<uint16_t>();
         if (next.valid()) value = next;
     };
     dmm::HoldMode mode;
@@ -110,10 +110,11 @@ void hold(JsonObjectConst object, dmm::HoldSettings &output) {
     take("delay_ms", &dmm::HoldSettings::delayMs);
     take("stable_ms", &dmm::HoldSettings::stableMs);
     take("min_readings", &dmm::HoldSettings::minReadings);
-    if (object["band_digits"].is<uint32_t>() && object["rearm_digits"].is<uint32_t>()) {
+    take("zero_digits", &dmm::HoldSettings::zeroDigits);
+    if (object["band_digits"].is<uint16_t>() && object["rearm_digits"].is<uint16_t>()) {
         auto pair = value;
-        pair.bandDigits = object["band_digits"].as<uint32_t>();
-        pair.rearmDigits = object["rearm_digits"].as<uint32_t>();
+        pair.bandDigits = object["band_digits"].as<uint16_t>();
+        pair.rearmDigits = object["rearm_digits"].as<uint16_t>();
         if (pair.valid()) value = pair;
     }
     take("band_digits", &dmm::HoldSettings::bandDigits);
@@ -125,7 +126,7 @@ void hold(JsonObject meter, const dmm::HoldSettings &values) {
     object["mode"] = dmm::HoldSettings::key(values.mode);
     object["delay_ms"] = values.delayMs; object["stable_ms"] = values.stableMs;
     object["band_digits"] = values.bandDigits; object["rearm_digits"] = values.rearmDigits;
-    object["min_readings"] = values.minReadings;
+    object["min_readings"] = values.minReadings; object["zero_digits"] = values.zeroDigits;
 }
 // meter.log (GitHub #144) as [mode, interval_s, duration_s, threshold_permille], mode 0 interval or 1 event:
 // numbers only, the shortest form (the longest file keeps a fifth of the JSON string budget free).

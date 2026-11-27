@@ -115,6 +115,17 @@ void HoldDetector::observe(const Result &result, const Context &context) {
     // Two packets of one poll share its time: the second adds no time to a window (skipped), but a
     // real change of value in it is still a departure.
     const bool repeatedTime = timeUs <= lastUs_;
+    if (!repeatedTime) lastUs_ = timeUs;
+    const bool automatic = settings_.mode == HoldMode::Auto;
+    const int64_t zero = settings_.zeroDigits;
+    // Auto treats a reading inside the deadband as a disconnect, leaving the snapshot visible.
+    // The DMM's own REL packets carry a difference, so zero there can be a connected source.
+    if (automatic && !result.peerRelative && counts >= -zero && counts <= zero &&
+        (result.kind == Kind::Dc || result.kind == Kind::Ac || result.kind == Kind::Capacitance)) {
+        phase_ = Phase::Waiting;
+        size_ = 0;
+        return;
+    }
     switch (phase_) {
     case Phase::Delay:
         // The first valid reading at or after the countdown's end (Delayed checks no stability).
@@ -128,7 +139,7 @@ void HoldDetector::observe(const Result &result, const Context &context) {
     case Phase::Held:
         // Delayed, Stable: one snapshot until HOLD or an explicit change. Auto: left by more than the
         // rearm threshold, a new plateau is sought from here; the snapshot stays shown meanwhile.
-        if (settings_.mode == HoldMode::Auto && departed(result, quantum)) {
+        if (automatic && departed(result, quantum)) {
             phase_ = Phase::Waiting;
             size_ = 0;
             if (!repeatedTime) push(signature, counts, timeUs);
@@ -136,7 +147,6 @@ void HoldDetector::observe(const Result &result, const Context &context) {
         break;
     case Phase::Idle: break;
     }
-    if (!repeatedTime) lastUs_ = timeUs;
 }
 void HoldDetector::service(uint64_t nowUs) {
     if (size_ && nowUs > lastUs_ && nowUs - lastUs_ > StaleUs) size_ = 0; // The source went quiet.

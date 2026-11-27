@@ -37,13 +37,13 @@ void Engine::meterReading(bool secondary) {
 }
 // SYSTem:DMM:HOLD:<field>: the hold settings one at a time, each checked as the whole by
 // HoldSettings::valid (the editor's and the file's check; a value out of its limits, off its step or
-// breaking rearm > band: -222, nothing changes). Times in ms, band and rearm in last-digit units.
+// breaking rearm > band: -222, nothing changes). Times in ms, thresholds in last-digit units.
 bool Engine::meterHoldCommand(const Command &c) {
     const auto match = [&](const char *pattern) { return Header::matches(c.header, pattern); };
-    struct Field { const char *header; uint32_t dmm::HoldSettings::*value; };
+    struct Field { const char *header; uint16_t dmm::HoldSettings::*value; };
     static constexpr Field fields[] = {{"SYSTem:DMM:HOLD:DELay", &dmm::HoldSettings::delayMs}, {"SYSTem:DMM:HOLD:STABle", &dmm::HoldSettings::stableMs},
         {"SYSTem:DMM:HOLD:BAND", &dmm::HoldSettings::bandDigits}, {"SYSTem:DMM:HOLD:REARm", &dmm::HoldSettings::rearmDigits},
-        {"SYSTem:DMM:HOLD:COUNt", &dmm::HoldSettings::minReadings}};
+        {"SYSTem:DMM:HOLD:COUNt", &dmm::HoldSettings::minReadings}, {"SYSTem:DMM:HOLD:ZERO", &dmm::HoldSettings::zeroDigits}};
     static constexpr const char *modes[] = {"MANual", "DELayed", "STABle", "AUTO"}, *replies[] = {"MAN", "DEL", "STAB", "AUTO"};
     static_assert(sizeof modes / sizeof *modes == unsigned(dmm::HoldMode::Count));
     auto settings = backend_.meterHold().settings;
@@ -63,8 +63,8 @@ bool Engine::meterHoldCommand(const Command &c) {
         if (c.query) { reply("%lu", (unsigned long)(settings.*f.value)); return true; }
         double value;
         if (!argument(c, value)) return true;
-        if (!(value >= 0 && value <= 100000) || value != double(uint32_t(value))) { error(-222); return true; }
-        settings.*f.value = uint32_t(value);
+        if (!(value >= 0 && value <= UINT16_MAX) || value != double(uint16_t(value))) { error(-222); return true; }
+        settings.*f.value = uint16_t(value);
         apply();
         return true;
     }

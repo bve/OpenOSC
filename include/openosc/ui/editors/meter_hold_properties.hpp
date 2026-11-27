@@ -10,7 +10,7 @@ namespace openosc::ui {
 // takes each committed field at once (saved, applied: a running cycle ends, none starts).
 class MeterHoldProperties final : public PropertyList {
 public:
-    enum Row { Mode, Delay, StableTime, Band, Rearm, Readings, Count };
+    enum Row { Mode, Delay, StableTime, Band, Rearm, Readings, Zero, Count };
     explicit MeterHoldProperties(const dmm::HoldSettings &settings = {}) : settings_(settings), saved_(settings) {}
     const dmm::HoldSettings &settings() const { return settings_; }
     const char *title() const override { return "HOLD"; }

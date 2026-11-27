@@ -8,7 +8,7 @@ namespace openosc::dmm {
 // How HOLD takes the reading it shows (docs/DMM_AUTO_HOLD.md). Manual: the reading at the key press,
 // as always. Delayed: a fixed countdown, then the first valid fresh reading. Stable: armed by HOLD,
 // the first stable plateau, once. Auto: armed by HOLD, every new stable plateau after the reading
-// has left the last one. Only the stream of packets decides: no command or sound of the DMM.
+// has left the last one, with a deadband around zero for voltage, current and capacitance.
 enum class HoldMode : uint8_t { Manual, Delayed, Stable, Auto, Count };
 // The user's settings, one validation for the editor, the settings file and SCPI. "Digits" are units
 // of the last digit the reading shows (its quantum: unit prefix and decimals), never an absolute value
@@ -18,13 +18,14 @@ struct HoldSettings {
     static constexpr uint32_t MinDelayMs = 1000, MaxDelayMs = 60000, DelayStepMs = 1000;
     static constexpr uint32_t MinStableMs = 200, MaxStableMs = 10000, StableStepMs = 100;
     static constexpr uint32_t MinBand = 1, MaxBand = 100, MinRearm = 2, MaxRearm = 1000, MinReadings = 2, MaxReadings = 16;
+    static constexpr uint32_t MaxZero = 1000;
     HoldMode mode = HoldMode::Manual;
-    uint32_t delayMs = 6000, stableMs = 1000, bandDigits = 5, rearmDigits = 20, minReadings = 3;
+    uint16_t delayMs = 6000, stableMs = 1000, bandDigits = 5, rearmDigits = 20, minReadings = 3, zeroDigits = 50;
     bool valid() const {
         return unsigned(mode) < unsigned(HoldMode::Count) && delayMs >= MinDelayMs && delayMs <= MaxDelayMs &&
                delayMs % DelayStepMs == 0 && stableMs >= MinStableMs && stableMs <= MaxStableMs && bandDigits >= MinBand &&
                bandDigits <= MaxBand && rearmDigits >= MinRearm && rearmDigits <= MaxRearm && rearmDigits > bandDigits &&
-               minReadings >= MinReadings && minReadings <= MaxReadings;
+               minReadings >= MinReadings && minReadings <= MaxReadings && zeroDigits <= MaxZero;
     }
     // The linked pair, each within its limits: a band raised to or past the rearm threshold lifts it,
     // a threshold lowered to or below the band lowers the band (rearm > band holds after either).
@@ -38,7 +39,7 @@ struct HoldSettings {
     }
     bool operator==(const HoldSettings &b) const {
         return mode == b.mode && delayMs == b.delayMs && stableMs == b.stableMs && bandDigits == b.bandDigits &&
-               rearmDigits == b.rearmDigits && minReadings == b.minReadings;
+               rearmDigits == b.rearmDigits && minReadings == b.minReadings && zeroDigits == b.zeroDigits;
     }
     bool operator!=(const HoldSettings &b) const { return !(*this == b); }
     // "Manual", "Delayed", "Stable", "Auto"; the keys "manual" ... "auto" (settings file, SCPI).
