@@ -58,6 +58,20 @@ python3 scripts/generate_board_config.py
 
 The build stops with an error if the generated files are out of date.
 
+## Running tests
+
+Host unit tests for hardware-independent code (protocol decoders, DMM packets and ranges) live in
+`test/`, one folder per suite. They use [Unity](https://github.com/ThrowTheSwitch/Unity) and run
+on your computer, without a device:
+
+```sh
+pio test -e native
+```
+
+A host C++ compiler (GCC or Clang) is needed. `pio run` does not build the tests. To add a suite,
+create `test/test_<name>/`, and add the sources it needs to `build_src_filter` in `[env:native]`
+in `platformio.ini`.
+
 ## Pull requests
 
 1. For anything larger than a small fix, open an issue first so we can agree on the approach.
