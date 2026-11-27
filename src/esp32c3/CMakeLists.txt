@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 set(IDF_TARGET esp32c3 CACHE STRING "Companion MCU")
+set(openosc_version_file "${CMAKE_CURRENT_LIST_DIR}/../../VERSION")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${openosc_version_file}")
+file(STRINGS "${openosc_version_file}" PROJECT_VER LIMIT_COUNT 1)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 if(OPENOSC_COMPANION_RECOVERY)
     project(openosc_companion_recovery_web)
