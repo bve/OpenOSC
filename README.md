@@ -1,8 +1,8 @@
 # OpenOSC
 
-[![Total release downloads](https://img.shields.io/github/downloads/bve/OpenOSC/total?style=plastic)](https://github.com/bve/OpenOSC/releases)
-[![ZT703S firmware downloads](https://img.shields.io/github/downloads/bve/OpenOSC/OpenOSC-Firmware-ZT703S.OSC?style=plastic&label=ZT703S%20downloads&displayAssetName=false)](https://github.com/bve/OpenOSC/releases)
-[![ZT706S firmware downloads](https://img.shields.io/github/downloads/bve/OpenOSC/OpenOSC-Firmware-ZT706S.OSC?style=plastic&label=ZT706S%20downloads&displayAssetName=false)](https://github.com/bve/OpenOSC/releases)
+[![Total release downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbve%2FOpenOSC%2Fdownload-badges%2Fdownloads.json&query=%24.total&label=downloads&color=brightgreen&style=plastic)](https://github.com/bve/OpenOSC/releases)
+[![ZT703S firmware downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbve%2FOpenOSC%2Fdownload-badges%2Fdownloads.json&query=%24.ZT703S&label=ZT703S%20downloads&color=brightgreen&style=plastic)](https://github.com/bve/OpenOSC/releases)
+[![ZT706S firmware downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbve%2FOpenOSC%2Fdownload-badges%2Fdownloads.json&query=%24.ZT706S&label=ZT706S%20downloads&color=brightgreen&style=plastic)](https://github.com/bve/OpenOSC/releases)
 [![Latest release](https://img.shields.io/github/v/release/bve/OpenOSC?style=plastic)](https://github.com/bve/OpenOSC/releases/latest)
 [![GitHub stars](https://img.shields.io/github/stars/bve/OpenOSC?style=plastic)](https://github.com/bve/OpenOSC/stargazers)
 

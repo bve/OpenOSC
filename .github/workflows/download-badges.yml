@@ -1,0 +1,44 @@
+name: Update download counters
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: download-badges
+
+jobs:
+  count:
+    if: github.repository == 'bve/OpenOSC'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out badge data
+        uses: actions/checkout@v7
+        with:
+          ref: download-badges
+
+      - name: Count published release downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -e -s '
+            reduce (.[][] | select(.draft == false) | .assets[]) as $asset (
+              {total: 0, ZT703S: 0, ZT706S: 0};
+              .total += $asset.download_count |
+              (($asset.name | capture("^OpenOSC-Firmware-(?<model>ZT703S|ZT706S)(?:-v[0-9]+[.][0-9]+[.][0-9]+)?[.]OSC$"; "i").model | ascii_upcase) // null) as $model |
+              if $model then .[$model] += $asset.download_count else . end
+            )
+          ' > downloads.json
+          if git diff --quiet -- downloads.json; then
+            exit 0
+          fi
+          git add -- downloads.json
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Refresh release download counts'
+          git push origin HEAD:refs/heads/download-badges
