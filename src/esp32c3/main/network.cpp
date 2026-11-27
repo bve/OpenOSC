@@ -33,6 +33,16 @@ int bound(int type, uint16_t port) {
     return fd;
 }
 bool retry() { return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR; }
+
+void configureDebugSocket(int fd) {
+    const int enabled = 1, idle = 6, interval = 2, probes = 3;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof enabled);
+    // Reclaim the connection after a lost Wi-Fi link, even if the peer cannot send a FIN.
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof idle);
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof interval);
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &probes, sizeof probes);
+    setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof enabled);
+}
 }
 
 bool Network::initialize() {
@@ -235,6 +245,7 @@ void Network::serveTcp(uint32_t now) {
     if (client_ < 0 && listener_ >= 0) {
         client_ = accept(listener_, nullptr, nullptr);
         if (client_ >= 0 && (fcntl(client_, F_SETFL, O_NONBLOCK) != 0 || !bridge_.open(Owner::Tcp, now))) release(client_);
+        if (client_ >= 0 && debug_) configureDebugSocket(client_);
     }
     if (client_ < 0) return;
     if (!bridge_.active(Owner::Tcp)) { release(client_); return; }

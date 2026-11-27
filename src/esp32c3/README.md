@@ -98,7 +98,7 @@ When a hosted page connects to the module, the browser may prompt for local netw
 
 OpenOCD and GDB can halt and resume the CPU, read and write memory and registers, set breakpoints, reset the STM32 through SWD, and program and verify flash. Disconnect any separate wired debug probe before enabling the companion.
 
-1. Wake the companion in **Settings → Wireless Module**, bring up Wi-Fi or enable **Bluetooth LE**, then select **Wireless SWD**. The instrument hands GPIO4/SWCLK and GPIO3/SWDIO over to the probe. SCPI and web administration are suspended while SWD owns the pins.
+1. Press **HOLD** if a scope capture is running. Wake the companion in **Settings → Wireless Module**, bring up Wi-Fi or enable **Bluetooth LE**, then select **Wireless SWD**. The instrument hands GPIO4/SWCLK and GPIO3/SWDIO over to the probe. SCPI and web administration are suspended while SWD owns the pins.
 2. Use OpenOCD with the **CMSIS-DAP TCP** backend. Stock OpenOCD 0.12.0 predates this backend. For a read-only connection check over Wi-Fi, use the address shown on the instrument:
 
    ```sh
@@ -116,7 +116,7 @@ OpenOCD and GDB can halt and resume the CPU, read and write memory and registers
 
    The BLE bridge exits when OpenOCD disconnects. Start it again for another session. To run a GDB server, omit the `-c` argument and connect GDB to `127.0.0.1:3333`.
 
-4. When finished, run `python src/esp32c3/swd_probe.py --wifi <address> --close` or the same command with `--ble <device>`. The probe clears halting debug and releases the pins. It also detaches after five seconds without a client following an active session. The web admin and the selected radios return after a session started from the instrument. Select **Power** in **Wireless Module** to reconnect the STM32 link. If detach fails, the probe remains reachable so it can be retried. A probe waiting for its first connection expires after the configured idle period, or five minutes when **Never** is selected. An attached debugger can remain paused.
+4. When finished, run `python src/esp32c3/swd_probe.py --wifi <address> --close` or the same command with `--ble <device>`. The probe clears halting debug and releases the pins. It also detaches five seconds after OpenOCD disconnects normally. If the connection drops unexpectedly, the probe waits up to one minute for a reconnect so an interrupted flash write can be retried. The web admin and the selected radios return after a session started from the instrument. Select **Power** in **Wireless Module** to reconnect the STM32 link. If detach fails, the probe remains reachable so it can be retried. A probe waiting for its first connection expires after the configured idle period, or five minutes when **Never** is selected. An attached debugger can remain paused.
 
 ### Recover an instrument that cannot start OpenOSC
 

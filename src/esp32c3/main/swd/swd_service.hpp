@@ -19,7 +19,7 @@ private:
     uint8_t input_[FrameSize]{}, output_[FrameSize]{};
     uint8_t session_ = 0;
     size_t received_ = 0, need_ = Header, sent_ = 0, pending_ = 0;
-    uint32_t activeAt_, stopAt_ = 0, reconnectUntil_ = 0;
-    bool attached_ = false, stopping_ = false;
+    uint32_t activeAt_, stopAt_ = 0, disconnectedAt_ = 0, reconnectMs_ = 0;
+    bool attached_ = false, cleanDisconnect_ = false, stopping_ = false;
 };
 }

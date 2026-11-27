@@ -1,4 +1,6 @@
 #include "swd_service.hpp"
+#include "DAP_config.h"
+#include "arm/DAP.h"
 #include "esp_timer.h"
 
 namespace openosc::companion {
@@ -6,11 +8,13 @@ namespace {
 constexpr uint8_t Request = 1, Response = 2, Close = 3;
 constexpr uint32_t Magic = 0x00504144; // OpenOCD CMSIS-DAP TCP signature.
 constexpr uint32_t ReconnectMs = 5000;
+constexpr uint32_t InterruptedReconnectMs = 60000;
 }
 
 void SwdService::resetSession(uint8_t session) {
     session_ = session;
     attached_ = false;
+    cleanDisconnect_ = false;
     received_ = sent_ = pending_ = 0;
     need_ = Header;
     dap_.disconnect();
@@ -31,7 +35,14 @@ void SwdService::packet(uint32_t now) {
         }
     } else {
         length = dap_.execute(input_ + Header, need_ - Header, output_ + Header);
-        attached_ = output_[Header] != 0xff || attached_;
+        const auto command = output_[Header];
+        if (command == ID_DAP_Connect && output_[Header + 1] != 0) {
+            attached_ = true;
+            cleanDisconnect_ = false;
+            reconnectMs_ = 0;
+        } else if (command == ID_DAP_Disconnect) {
+            cleanDisconnect_ = true;
+        }
     }
     output_[4] = length;
     output_[5] = length >> 8;
@@ -45,14 +56,20 @@ bool SwdService::poll(uint32_t now, uint32_t timeoutMs) {
     const auto session = bridge_.session();
     if (stopping_ && (!session || int32_t(now - stopAt_) >= 0)) return false;
     if (session != session_) {
-        reconnectUntil_ = !session && attached_ ? now + ReconnectMs : 0;
+        if (attached_) {
+            disconnectedAt_ = now;
+            reconnectMs_ = cleanDisconnect_ ? ReconnectMs : InterruptedReconnectMs;
+        }
         resetSession(session);
     }
-    const bool disconnected = reconnectUntil_ && int32_t(now - reconnectUntil_) >= 0;
-    if (disconnected || (!attached_ && uint32_t(now - activeAt_) >= timeoutMs)) {
+    const bool expired = reconnectMs_ ? now - disconnectedAt_ >= reconnectMs_
+                                      : !attached_ && now - activeAt_ >= timeoutMs;
+    if (expired) {
+        // Drop an incomplete handshake before clearing the target's debug state.
+        if (session_) bridge_.drop(session_);
         if (dap_.detachTarget()) return false;
-        reconnectUntil_ = 0;
-        activeAt_ = now;
+        disconnectedAt_ = now;
+        reconnectMs_ = ReconnectMs;
     }
     if (!session_) return true;
     if (sent_ < pending_) {
@@ -68,7 +85,6 @@ bool SwdService::poll(uint32_t now, uint32_t timeoutMs) {
         const bool close = input_[6] == Close && !length;
         if (get32(input_) != Magic || input_[7] || (!dap && !close)) {
             bridge_.drop(session_);
-            resetSession(0);
             return true;
         }
         need_ += length;
