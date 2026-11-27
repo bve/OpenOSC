@@ -67,7 +67,7 @@ void MeterScreen::style(unsigned face, unsigned palette, const MeterAppearance &
         lv_obj_set_style_text_font(line, look_.text(MeterRole::Details, details), 0);
 }
 // Digital (ScreenLayout::digital): the reading block is the sign row (function sign, jacks) over
-// the 64..80 px digits with their unit beside them at the row's right edge, the measurements block
+// the 64..80 px digits with their unit beside or above them at the right edge, the measurements block
 // the summary (meta row, MIN/MAX/AVG, bar) or the trend. Analog (ScreenLayout::analog): the dial
 // block is the sign and the meta row (range, range mode, AC frequency) over the 92 px dial with RMS
 // and the jacks as its marking; the measurements block MIN/MAX/AVG on one row; the reading block
@@ -142,6 +142,7 @@ void MeterScreen::cards(dmm::Function function, bool beeper, bool currentInput, 
 void MeterScreen::reading(const char *text, DataStatus state) {
     const auto &theme = host_.theme().elements[Mode];
     const auto &box = theme[unsigned(ElementId::Reading)];
+    const auto &unit = theme[unsigned(ElementId::Unit)];
     auto &elements = host_.elements();
     auto *label = elements.get(ElementId::Reading);
     // The theme's default Digits takes the block's size (digitsFor); a larger Reading font is kept up to it.
@@ -149,8 +150,10 @@ void MeterScreen::reading(const char *text, DataStatus state) {
     const auto fonts = MeterStyles::reading(look_.face, decltype(box.font)(font));
     const bool changed = std::strcmp(lv_label_get_text(label), text) != 0;
     shownState_ = state;
-    // Digital: the row at the box's right edge; analog: centred under the dial. OL centred alone.
-    MeterReading::showRow(label, elements.get(ElementId::Unit), text, fonts, readingBox_, UnitGap, analog_,
+    // The digital badge uses its theme position relative to the reading block in any order.
+    const int unitY = readingBox_.y1 + unit.y - box.y;
+    const lv_area_t unitBadge{unit.x, unitY, unit.x + unit.width - 1, unitY + unit.height - 1};
+    MeterReading::showRow(label, elements.get(ElementId::Unit), text, fonts, readingBox_, analog_ ? nullptr : &unitBadge, UnitGap,
                           state == DataStatus::Overload);
     // The 64 px digits redraw beyond their box (LVGL's extra draw margin of the face). Where that
     // reaches the soft keys next to the reading block, the keys are redrawn whole with it: a card

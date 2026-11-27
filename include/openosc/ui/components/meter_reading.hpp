@@ -17,13 +17,12 @@ public:
     // The unit area beside the digits: the widest unit a reading can show (MeterText::ReadingUnits)
     // or `current`, in `font`, so a change of unit or range never moves the digits.
     static int unitArea(const lv_font_t *font, const char *current = nullptr);
-    // The reading row in `box` (parent coordinates), the digital and the analog face alike: the
-    // sign column and digits, followed by the unit on their baseline. Digital reserves a fixed
-    // unit area at the right edge; analog centres the printed digits and unit. Use the largest font
-    // that fits the current reading and keep its baseline even when the size changes. For overload,
-    // centre OL across the whole box; the caller clears the unit's text.
+    // The digital row may use `unitBadge` above the digits when reserving space beside them would
+    // shrink a five-digit reading. The analog row (null badge) centres the digits and their unit.
+    // Both rectangles use parent coordinates. For overload, centre OL across the whole reading
+    // box; the caller clears the unit's text.
     static void showRow(lv_obj_t *reading, lv_obj_t *unit, const char *text, const ReadingFonts &fonts,
-                        const lv_area_t &box, int gap, bool centred, bool overload);
+                        const lv_area_t &box, const lv_area_t *unitBadge, int gap, bool overload);
     // The width the label's text takes with its sign column (pad_left included).
     static int contentWidth(lv_obj_t *label);
     static void release(lv_obj_t *label); // Another screen's use of the label: no sign column.
