@@ -8,10 +8,13 @@ struct SpectrumOptions {
     SpectrumWindow window=SpectrumWindow::Hann;
     SpectrumScale scale=SpectrumScale::Dbfs;
     uint8_t channel=0;
-    bool removeDc=true;
+    // Keep the option bytes aligned as before inside the plot settings.
+    bool removeDc : 1;
+    bool fullRate : 1;
+    constexpr SpectrumOptions() : removeDc(true), fullRate(false) {}
     bool valid() const { return unsigned(window)<4 && unsigned(scale)<2 && channel<2; }
     bool same(const SpectrumOptions &b) const {
-        return window==b.window && scale==b.scale && channel==b.channel && removeDc==b.removeDc;
+        return window==b.window && scale==b.scale && channel==b.channel && removeDc==b.removeDc && fullRate==b.fullRate;
     }
 };
 struct SpectrumResult {
@@ -19,6 +22,7 @@ struct SpectrumResult {
     double binHz=0,peakHz=0;
     float peakCodes=0,maximum=0;
     bool valid=false,hasPeak=false;
+    uint32_t first=0; // First analyzed point in the record's chronological order.
 };
 struct SpectrumStorage {
     // Exactly 2048 points: the one CMSIS-DSP real FFT length whose tables are linked.

@@ -43,14 +43,25 @@ bool Spectrum::transform(SpectrumStorage &s,unsigned count) {
 }
 bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const SpectrumOptions &options) {
     s.result={};
-    if (!frame.valid() || !options.valid() || !frame.metadata().channels[options.channel].enabled) return false;
+    const auto &metadata=frame.metadata();
+    if (!frame.valid() || !options.valid() || !metadata.channels[options.channel].enabled) return false;
     unsigned count=SpectrumStorage::Capacity;
-    while (count>frame.metadata().samples) count>>=1;
+    while (count>metadata.samples) count>>=1;
     if (count<SpectrumStorage::MinimumCount) return false;
     window(s,count,options.window);
     // Spanning the whole record gives the resolution its time window allows; the
     // CIC filter keeps content above the reduced Nyquist from folding back.
-    const unsigned step=frame.metadata().samples/count;
+    const unsigned step=options.fullRate ? 1 : metadata.samples/count;
+    uint32_t first=0;
+    if (options.fullRate) {
+        const uint32_t lastStart=metadata.samples-count;
+        if (metadata.rolling) first=lastStart;
+        else {
+            const uint32_t center=metadata.triggered ? metadata.triggerIndex :
+                metadata.pretriggerKnown ? metadata.pretrigger : metadata.samples/2;
+            first=std::min(center-std::min<uint32_t>(center,count/2),lastStart);
+        }
+    }
     float sum=0;
     // Modular CIC: the integrators may wrap, the output may not. It reaches code*step^4: 2^39 at the
     // deepest decimation (524288/2048=256), so 64-bit registers (32 bits wrapped there before).
@@ -65,16 +76,16 @@ bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const Spectru
         return int64_t(value);
     };
     // The record in order through its sequential reader: the same corrected codes as signedCode.
-    auto reader=frame.cursor(Channel(options.channel));
+    auto reader=frame.cursor(Channel(options.channel),first);
     if (step==1) {
         unsigned i=0;
         if (reader.run(count,[&](int16_t sample) { s.real[i++]=sample; sum+=sample; })!=count) return false;
     } else {
-        int16_t first;
-        if (!frame.signedCode(Channel(options.channel),0,first)) return false;
+        int16_t initialCode;
+        if (!frame.signedCode(Channel(options.channel),0,initialCode)) return false;
         // Settle on the first sample so the record starts without a filter transient.
         for (unsigned n=0;n<CicOrder;++n) {
-            for (unsigned j=0;j<step;++j) push(first);
+            for (unsigned j=0;j<step;++j) push(initialCode);
             pull();
         }
         const double gain=fourthPower(step);
@@ -84,13 +95,14 @@ bool Spectrum::calculate(SpectrumStorage &s,const FrameView &frame,const Spectru
             sum+=s.real[i];
         }
     }
-    const auto &channel=frame.metadata().channels[options.channel];
+    const auto &channel=metadata.channels[options.channel];
     const float offset=options.removeDc ? sum/count : channel.calibrated ? channel.zeroCode : 0;
     for (unsigned i=0;i<count;++i) s.real[i]=(s.real[i]-offset)*s.weights[i];
     if (!transform(s,count)) return false;
     auto &r=s.result;
     // Near the reduced Nyquist the filter cannot separate aliases, so that band is not shown.
-    r.count=count; r.decimation=step; r.bins=(step>1 ? count*3/8 : count/2)+1; r.binHz=frame.metadata().samplesPerSecond.value()/(count*step);
+    r.first=first; r.count=count; r.decimation=step;
+    r.bins=(step>1 ? count*3/8 : count/2)+1; r.binHz=metadata.samplesPerSecond.value()/(count*step);
     // Magnitudes of bins 1..: count/2-1 complex pairs at most, inside the packed output.
     const float *packed=s.imaginary;
     s.amplitude[0]=std::abs(packed[0]);

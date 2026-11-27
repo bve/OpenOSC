@@ -38,6 +38,7 @@ public:
         FftWindow,
         FftScale,
         FftDc,
+        FftFullRate,
         CounterSource,
         CounterAverage,
         CounterPpm,

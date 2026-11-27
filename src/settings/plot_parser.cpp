@@ -56,6 +56,7 @@ bool legacyTriggerPosition(JsonObjectConst object) {
 } // namespace
 bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
     auto o = output;
+    o.spectrum.fullRate = false; // An older plot without fft.full_rate uses whole-record decimation.
     static constexpr const char *modes[] = {"yt", "xy","fft","yt_fft"}, *styles[] = {"vectors", "points", "envelope"};
     static constexpr const char *grids[] = {"full", "major", "axes", "none"},
                                 *math[] = {"off", "add", "subtract"};
@@ -75,8 +76,12 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
         if (!object["fft"].is<JsonObjectConst>()) return false;
         const auto input=object["fft"].as<JsonObjectConst>();
         constexpr const char *windows[]={"rectangular","hann","hamming","blackman"}, *scales[]={"linear","dbfs"};
+        bool removeDc=o.spectrum.removeDc, fullRate=false;
         if (!integer(input,"channel",o.spectrum.channel) || !choice(input,"window",o.spectrum.window,windows) ||
-            !choice(input,"scale",o.spectrum.scale,scales) || !flag(input,"remove_dc",o.spectrum.removeDc)) return false;
+            !choice(input,"scale",o.spectrum.scale,scales) || !flag(input,"remove_dc",removeDc) ||
+            !flag(input,"full_rate",fullRate)) return false;
+        o.spectrum.removeDc=removeDc;
+        o.spectrum.fullRate=fullRate;
     }
     if (object.containsKey("counter")) {
         if (!object["counter"].is<JsonObjectConst>()) return false;

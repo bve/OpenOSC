@@ -199,7 +199,12 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   brightness for CH1 and CH2 (**Channel → Trace brightness**, 10–100 %). Both dim towards the plot
   background on dark and light schemes. Trace brightness also applies to Peak Hold, Persistence, Glow,
   X-Y (CH1) and Density. Channel colors, labels and markers keep full contrast
-- FFT up to 2048 points with four window functions, dBFS or linear scale
+- FFT up to 2048 points with four window functions, dBFS or linear scale. Enable **FFT full rate**
+  under **Analyze → Display → FFT** to analyze 2048 consecutive samples at the record's own rate
+  and show frequencies up to half that rate. The window follows the record's trigger or trigger
+  position marker, falls back to its middle, and takes the newest samples in Roll. The record map
+  marks the analyzed interval. Full rate is off by default, which keeps the finer bin spacing of
+  the decimated whole-record FFT.
 - Protocol decoders (**Analyze → Decoder**): UART (TTL), RS-232 and RS-485 with autobaud, DMX512, I²C, SPI, LIN, CAN and ISO CAN FD.
   Waveform with annotations, split or table view and event detail. **Decoder → Save CSV** exports the
   completed decode to `/openosc/DECODE`.

@@ -63,6 +63,7 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
     case FftWindow: options.spectrum.window=scope::SpectrumWindow((unsigned(options.spectrum.window)+4+direction)%4); break;
     case FftScale: options.spectrum.scale=scope::SpectrumScale((unsigned(options.spectrum.scale)+1)%2); break;
     case FftDc: options.spectrum.removeDc=!options.spectrum.removeDc; break;
+    case FftFullRate: options.spectrum.fullRate=!options.spectrum.fullRate; break;
     case CounterSource: options.counter.source=uint8_t((options.counter.source+3+direction)%3); break;
     case CounterAverage: cycle(options.counter.average, direction, counterAverages); break;
     case CounterPpm: step(options.counter.ppm, direction, fine ? 1 : 10, -1000, 1000); break;

@@ -10,10 +10,10 @@ constexpr unsigned rows[][14] = {
     {Controls::Channel, Controls::TimeCursors, Controls::VoltageCursors, Controls::CursorAX,
      Controls::CursorBX, Controls::CursorAY, Controls::CursorBY},
     {Controls::Persistence, Controls::Reference, Controls::Clear},
-    {Controls::FftSource, Controls::FftWindow, Controls::FftScale, Controls::FftDc},
+    {Controls::FftSource, Controls::FftWindow, Controls::FftScale, Controls::FftDc, Controls::FftFullRate},
     {Controls::CounterSource, Controls::CounterAverage, Controls::CounterPpm, Controls::CounterEstimate, Controls::CounterTimed}
 };
-constexpr unsigned counts[] = {12, 6, 7, 3, 4, 5};
+constexpr unsigned counts[] = {12, 6, 7, 3, 5, 5};
 constexpr const char *names[] = {"View", "Capture rendering", "Cursors", "History", "FFT", "Frequency counter"};
 }
 const char *Controls::groupName(unsigned g) { return g < unsigned(Group::Count) ? names[g] : ""; }

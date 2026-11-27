@@ -48,7 +48,8 @@ bool Model::configure(const Options &options) {
             trace.enabled = false;
     if (options_.persistenceMs != options.persistenceMs) clearHistory();
     spectrumDirty_ = spectrumDirty_ || options_.spectrum.channel != options.spectrum.channel ||
-        options_.spectrum.window != options.spectrum.window || options_.spectrum.removeDc != options.spectrum.removeDc;
+        options_.spectrum.window != options.spectrum.window || options_.spectrum.removeDc != options.spectrum.removeDc ||
+        options_.spectrum.fullRate != options.spectrum.fullRate;
     options_ = options;
     // Graded channels in a time view only (X-Y and the FFT keep their own drawing): a change clears.
     const bool time = options.mode == Mode::Time || options.mode == Mode::SpectrumOverlay;
@@ -87,7 +88,9 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
                            m.triggered != metadata_.triggered || m.triggerIndex != metadata_.triggerIndex ||
                            edge.known != before.known || edge.level != before.level || edge.rising != before.rising ||
                            edge.channel != before.channel;
-    if (!fresh && !dirty_ && !reset && !alignment)
+    const bool fftMarkerChanged = options_.spectrum.fullRate && !m.triggered && !m.rolling &&
+        (m.pretriggerKnown != metadata_.pretriggerKnown || (m.pretriggerKnown && m.pretrigger != metadata_.pretrigger));
+    if (!fresh && !dirty_ && !reset && !alignment && !fftMarkerChanged)
         return true;
     if (!fresh && alignment)
         reset = true;
@@ -115,7 +118,7 @@ bool Model::project(const scope::FrameView &frame, unsigned width, unsigned heig
             clear();
             return false;
         }
-    spectrumDirty_ = spectrumDirty_ || fresh || reset || alignment;
+    spectrumDirty_ = spectrumDirty_ || fresh || reset || alignment || fftMarkerChanged;
     bool success = true;
     if (options_.mode == Mode::XY) success = projectXY(frame);
     else if (options_.mode != Mode::Spectrum) success = projectTime(frame,fresh,cache);

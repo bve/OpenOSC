@@ -19,7 +19,7 @@ struct OverviewGeometry {
     int window = None, windowWidth = 0, analyzed = None, analyzedWidth = 0, trigger = None;
     bool before = false, after = false; // The view lies wholly before the record's start or past its end.
     static OverviewGeometry calculate(const scope::FrameMetadata &metadata, const plot::Viewport &viewport, plot::Mode mode,
-                                      uint32_t analyzedPoints, int inside);
+                                      uint32_t analyzedPoints, int inside, uint32_t analyzedFirst = 0);
     static OverviewGeometry calculate(const plot::Model &model, int inside);
     bool operator==(const OverviewGeometry &o) const {
         return points == o.points && budget == o.budget && budgetShort == o.budgetShort && window == o.window && windowWidth == o.windowWidth && analyzed == o.analyzed &&

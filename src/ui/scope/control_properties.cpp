@@ -15,7 +15,8 @@ template <class T, size_t N> unsigned indexOf(T value, const T (&choices)[N]) {
 }
 Kind Controls::kind(unsigned row) const {
     switch (row) {
-    case PeakHold: case Glow: case Visible: case Invert: case TimeCursors: case VoltageCursors: case FftDc: return Kind::Toggle;
+    case PeakHold: case Glow: case Visible: case Invert: case TimeCursors: case VoltageCursors:
+    case FftDc: case FftFullRate: return Kind::Toggle;
     case Pan: case Gain: case Position: case CursorAX: case CursorBX: case CursorAY: case CursorBY: case CounterPpm: return Kind::Number;
     case CenterTrigger: case Reference: case Clear: return Kind::Action;
     default: return Kind::Choice;
@@ -56,6 +57,7 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case FftWindow: std::snprintf(text, capacity, "FFT window"); break;
     case FftScale: std::snprintf(text, capacity, "FFT scale"); break;
     case FftDc: std::snprintf(text, capacity, "FFT remove DC"); break;
+    case FftFullRate: std::snprintf(text, capacity, "FFT full rate"); break;
     case CounterSource: std::snprintf(text, capacity, "Counter"); break;
     case CounterAverage: std::snprintf(text, capacity, "Readings averaged"); break;
     case CounterPpm: std::snprintf(text, capacity, "Clock correction"); break;
@@ -102,6 +104,7 @@ unsigned Controls::choice(unsigned row) const {
     case TimeCursors: return o.cursors.time;
     case VoltageCursors: return o.cursors.voltage;
     case FftDc: return o.spectrum.removeDc;
+    case FftFullRate: return o.spectrum.fullRate;
     case CounterSource: return o.counter.source;
     case CounterAverage: return o.counter.average == 1 ? 0 : o.counter.average == 3 ? 1 : 2;
     case CounterEstimate: return o.counter.estimate;

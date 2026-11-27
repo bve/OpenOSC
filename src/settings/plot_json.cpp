@@ -33,6 +33,7 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     spectrum["window"]=windows[unsigned(o.spectrum.window)];
     spectrum["scale"]=o.spectrum.scale==scope::SpectrumScale::Dbfs ? "dbfs" : "linear";
     spectrum["remove_dc"]=o.spectrum.removeDc;
+    if (o.spectrum.fullRate) spectrum["full_rate"]=true;
     auto counter=root.createNestedObject("counter");
     counter["source"]=o.counter.source; counter["average"]=o.counter.average; counter["ppm"]=o.counter.ppm;
     if (o.counter.estimate) counter["estimate"]=o.counter.estimate; // #172, #173: written only when on.

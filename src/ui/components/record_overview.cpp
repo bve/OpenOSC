@@ -63,7 +63,7 @@ void span(int64_t begin, int64_t end, int64_t length, int inside, int &left, int
 } // namespace
 
 OverviewGeometry OverviewGeometry::calculate(const scope::FrameMetadata &m, const plot::Viewport &view, plot::Mode mode,
-                                             uint32_t analyzedPoints, int inside) {
+                                             uint32_t analyzedPoints, int inside, uint32_t analyzedFirst) {
     OverviewGeometry g;
     if (!m.valid() || inside < MinimumSpan) return g;
     g.points = m.samples * ((m.channels[0].enabled ? 1U : 0U) + (m.channels[1].enabled ? 1U : 0U));
@@ -77,8 +77,10 @@ OverviewGeometry OverviewGeometry::calculate(const scope::FrameMetadata &m, cons
         else if (first > last) g.after = true;
         else span(std::max<int64_t>(first, 0), std::min(end, last) + 65536, length, inside, g.window, g.windowWidth);
     }
-    if ((mode == plot::Mode::Spectrum || mode == plot::Mode::SpectrumOverlay) && analyzedPoints)
-        span(0, int64_t(std::min(analyzedPoints, m.samples)) << 16, length, inside, g.analyzed, g.analyzedWidth);
+    if ((mode == plot::Mode::Spectrum || mode == plot::Mode::SpectrumOverlay) && analyzedPoints && analyzedFirst < m.samples) {
+        const auto end = analyzedFirst + std::min(analyzedPoints, m.samples - analyzedFirst);
+        span(int64_t(analyzedFirst) << 16, int64_t(end) << 16, length, inside, g.analyzed, g.analyzedWidth);
+    }
     if (m.triggered && !m.rolling && m.triggerIndex < m.samples)
         g.trigger = std::min(inside - 1, int(((int64_t(m.triggerIndex) << 16) + 32768) * inside / length));
     return g;
@@ -87,7 +89,7 @@ OverviewGeometry OverviewGeometry::calculate(const plot::Model &model, int insid
     if (!model.hasFrame()) return {};
     const auto &spectrum = model.spectrum();
     return calculate(model.metadata(), model.viewport(), model.options().mode,
-                     spectrum.valid ? spectrum.count * spectrum.decimation : 0, inside);
+                     spectrum.valid ? spectrum.count * spectrum.decimation : 0, inside, spectrum.first);
 }
 void RecordOverview::clear() {
     if (root_) lv_obj_delete(root_);
