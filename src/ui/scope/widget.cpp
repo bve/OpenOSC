@@ -109,7 +109,7 @@ void WaveformWidget::triggerPulse(uint32_t now) {
     triggerMark({triggerMark_.limit, true});
 }
 void WaveformWidget::frontChannel(unsigned channel) {
-    if (model_.frontChannel() == (channel & 1)) return;
+    if (model_.frontChannel() == channel) return;
     model_.frontChannel(channel);
     if (object_) lv_obj_invalidate(object_);
 }

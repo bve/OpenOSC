@@ -16,7 +16,7 @@ public:
     void status(DataStatus status, bool held);
     void settings(const scope::FrameMetadata &next, unsigned channel);
     // panReverse: Settings > Display > Pan direction, for Zoom & Pan's Left/Right hint.
-    void context(unsigned channel, plot::Focus focus, bool panReverse = false);
+    void context(unsigned channel, plot::Focus focus, bool panReverse = false, bool math = false);
     void generator(const generator::Snapshot &output, bool captureHalved);
     // Settings > Display > Swap CH1/CH2: the plot, footer and cards relabelled at once (HOLD included).
     void channelView(const plot::ChannelView &view) { host_.channelView(view); cards(); }
@@ -47,6 +47,7 @@ private:
     void cards();
     void select(unsigned channel); // The cards' channel, its trace drawn in front (#81).
     unsigned channel_ = 0;
+    bool mathSelected_ = false;
     bool held_ = false, valid_ = false;
     plot::Focus focus_ = plot::Focus::Scale;
     bool panReverse_ = false;

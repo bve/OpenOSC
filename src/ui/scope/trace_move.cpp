@@ -14,8 +14,7 @@ bool shiftAnalog(ScopeRequest &request, unsigned channel, int amount) {
     position = next;
     return changed;
 }
-bool shiftDigital(Options &options, unsigned channel, int amount) {
-    auto &position = options.channels[channel].positionPermille;
+bool shiftDigital(int16_t &position, int amount) {
     const auto next = int16_t(std::clamp<int>(position + amount, -1000, 2000));
     const bool changed = next != position;
     position = next;
@@ -75,8 +74,8 @@ TraceMove::Change TraceMove::apply(ScopeRequest &request, Options &options, unsi
     const int analog = fine ? AnalogFine : AnalogCoarse, digital = fine ? DigitalFine : DigitalCoarse;
     if (options.mode == Mode::XY) { // CH1 is the X axis and CH2 the Y axis; a lower screen line is a lower voltage.
         if (held) {
-            change.view = shiftDigital(options, 0, -horizontal * digital); // As RUN's analog shift: Right moves it right.
-            change.view = shiftDigital(options, 1, vertical * digital) || change.view;
+            change.view = shiftDigital(options.channels[0].positionPermille, -horizontal * digital); // Right moves it right.
+            change.view = shiftDigital(options.channels[1].positionPermille, vertical * digital) || change.view;
         } else {
             change.request = shiftAnalog(request, 0, -horizontal * analog);
             change.request = shiftAnalog(request, 1, vertical * analog) || change.request;
@@ -84,7 +83,8 @@ TraceMove::Change TraceMove::apply(ScopeRequest &request, Options &options, unsi
         return change;
     }
     change.view = pan(options, horizontal, model, false); // Arrows: one division a step (S09).
-    if (held) change.view = shiftDigital(options, channel, vertical * digital) || change.view;
+    if (channel == MathView::TraceIndex) change.view = shiftDigital(options.mathView.positionPermille, vertical * digital) || change.view;
+    else if (held) change.view = shiftDigital(options.channels[channel].positionPermille, vertical * digital) || change.view;
     else change.request = shiftAnalog(request, channel, vertical * analog);
     return change;
 }

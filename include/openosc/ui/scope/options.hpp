@@ -71,6 +71,16 @@ struct CounterOptions {
         return source <= 2 && (average == 1 || average == 3 || average == 10) && ppm >= -1000 && ppm <= 1000 && estimate <= 1 && timed <= 1;
     }
 };
+struct MathView {
+    static constexpr unsigned TraceIndex = 2;
+    static constexpr uint16_t MinimumGain = 1, MaximumGain = 6400;
+    int16_t positionPermille = 500;
+    uint16_t gainPercent = 100;
+    bool removeDc = false;
+    bool operator==(const MathView &o) const {
+        return positionPermille == o.positionPermille && gainPercent == o.gainPercent && removeDc == o.removeDc;
+    }
+};
 struct Options {
     Mode mode = Mode::Time;
     Style style = Style::Vectors;
@@ -95,7 +105,9 @@ struct Options {
     // held view shows what RUN will use. 0: the record's own. View only, never the record's metadata.
     uint64_t heldTimebaseNs = 0;
     bool centerHeldTrigger = false; // View-only override of a held record's original pretrigger.
-    CounterOptions counter; // In the tail padding: Options keeps its size.
+    CounterOptions counter;
+    MathView mathView;
+    bool showsMath() const { return math != Math::Off && (mode == Mode::Time || mode == Mode::SpectrumOverlay); }
     // A density plane's history (GitHub #85): the persistence's, or DensityHistoryMs with none.
     static constexpr uint16_t DensityHistoryMs = 1000;
     uint16_t densityHistoryMs() const { return persistenceMs ? persistenceMs : DensityHistoryMs; }

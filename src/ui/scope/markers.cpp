@@ -16,6 +16,7 @@ void Painter::markers() {
         return;
     }
     const auto &traces = model_.storage().traces;
+    constexpr auto math = MathView::TraceIndex;
     for (unsigned c = 0; c < 2; ++c)
         if (traces[c].enabled) {
             const auto color = palette_.channel(c);
@@ -34,6 +35,12 @@ void Painter::markers() {
         ZeroTags::place(zero, shown, h + 1, centre);
         for (unsigned c = 0; c < 2; ++c)
             if (shown[c]) zeroTag(c, zero[c], centre[c], h);
+        if (o.showsMath() && traces[math].enabled)
+            zeroTag(math, traces[math].zero, ZeroTags::mathCentre(traces[math].zero, h + 1, shown, centre), h);
+    }
+    if (o.showsMath() && traces[math].enabled) {
+        if (traces[math].clippedTop) text("^", w - 36, 0, palette_.math, 12);
+        if (traces[math].clippedBottom) text("v", w - 36, h - 13, palette_.math, 12);
     }
     const unsigned source = unsigned(model_.triggerChannel());
     if (model_.metadata().rolling || !o.showTrigger || !model_.metadata().channels[source].enabled || !o.channels[source].visible)
@@ -80,18 +87,25 @@ void Painter::limitBadge(int y, int limit, int h, uint32_t color) {
 // The channel's zero: a box with its digit in the left margin at `centre` and a tip to the plot
 // edge at the zero itself (or, for a zero above or below the plot, an arrow that way).
 void Painter::zeroTag(unsigned c, int zero, int centre, int h) {
-    const auto color = palette_.channel(c);
+    const bool math = c == MathView::TraceIndex;
+    const auto color = math ? palette_.math : palette_.channel(c);
     const unsigned digit = palette_.view.slot(c); // The on-screen number, as its colour.
     const int left = -PlotFrame::Left, half = PlotFrame::TagHeight / 2, tip = left + PlotFrame::TagWidth;
     fill({area_.x1 + left, area_.y1 + centre - half, area_.x1 + tip - 1, area_.y1 + centre + half}, color);
     // The digit: TagDigits' raster, centred (two tag pixels on each side), one fill per run.
-    const int x0 = left + TagDigits::Left, y0 = centre - half + TagDigits::Top;
-    for (int y = 0; y < TagDigits::Height; ++y)
-        for (int x = 0; x < TagDigits::Width;) {
-            if (!TagDigits::ink(digit, x, y)) { ++x; continue; }
+    static constexpr uint8_t plus[] = {0b1010000, 0b1110010, 0b1110111, 0b1010010, 0b1010000};
+    static constexpr uint8_t minus[] = {0b1010000, 0b1110000, 0b1110111, 0b1010000, 0b1010000};
+    const auto &glyph = model_.options().math == Math::Add ? plus : minus;
+    const int width = math ? 7 : TagDigits::Width, height = math ? 5 : TagDigits::Height;
+    const int x0 = left + (PlotFrame::TagWidth - width) / 2, y0 = centre - height / 2;
+    const uint32_t ink = palette_.tagInk(color);
+    const auto pixel = [&](int x, int y) { return math ? ((glyph[y] >> (6 - x)) & 1U) != 0 : TagDigits::ink(digit, x, y); };
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width;) {
+            if (!pixel(x, y)) { ++x; continue; }
             const int start = x;
-            while (x < TagDigits::Width && TagDigits::ink(digit, x, y)) ++x;
-            fill({area_.x1 + x0 + start, area_.y1 + y0 + y, area_.x1 + x0 + x - 1, area_.y1 + y0 + y}, palette_.tagInk(color));
+            while (x < width && pixel(x, y)) ++x;
+            fill({area_.x1 + x0 + start, area_.y1 + y0 + y, area_.x1 + x0 + x - 1, area_.y1 + y0 + y}, ink);
         }
     const int middle = (left + tip - 1) / 2, arrow = PlotFrame::ArrowHeight;
     if (zero < 0)

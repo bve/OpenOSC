@@ -37,6 +37,12 @@ int16_t means[3][MaximumWidth];
 } // namespace
 bool Model::projectTime(const scope::FrameView &frame, bool fresh, const ColumnCache *cache) {
     Source source(frame, options_, statistics_);
+    constexpr unsigned math = MathView::TraceIndex;
+    constexpr int DcLimit = 4096, AcLimit = 16384;
+    const bool removeDc = source.enabled(math) && options_.mathView.removeDc;
+    if (source.enabled(math)) axes_[math].configureMath(source.mathDivisionQ8(), options_.mathView, viewport_.height);
+    int64_t mathSum = 0;
+    uint32_t mathPoints = 0;
     // Columns reduced ahead (ColumnCache, while the display waited) for this frame and window.
     const unsigned ready = cache ? cache->ready(frame.metadata(), viewport_) : 0;
     for (unsigned c = 0; c < 3; ++c) {
@@ -44,7 +50,7 @@ bool Model::projectTime(const scope::FrameView &frame, bool fresh, const ColumnC
         trace.enabled = source.enabled(c);
         trace.clippedTop = trace.clippedBottom = false;
         trace.adcClipped = false;
-        trace.zero = axes_[c < 2 ? c : 0].origin;
+        trace.zero = axes_[c].origin;
     }
     const bool aggregate = viewport_.aggregates();
     // A Roll record keeps its envelope: Adaptive decides from the whole screen's noise, so a change of
@@ -120,7 +126,12 @@ bool Model::projectTime(const scope::FrameView &frame, bool fresh, const ColumnC
                 continue;
             }
             const auto &b = bucket[c];
-            const auto &axis = axes_[c < 2 ? c : 0];
+            const auto &axis = axes_[c];
+            const int limit = removeDc && c == math ? AcLimit : DcLimit;
+            if (removeDc && c == math) {
+                mathSum += b.sum;
+                mathPoints += b.count;
+            }
             if (options_.averaging > 1) {
                 const int32_t value = b.sum / b.count;
                 auto &average = storage_.averages[c][x];
@@ -129,13 +140,13 @@ bool Model::projectTime(const scope::FrameView &frame, bool fresh, const ColumnC
                 else if (fresh)
                     average += (value - average) / options_.averaging;
                 storage_.averageValid[c][x] = true;
-                out.first = out.a = out.b = out.last = axis.pixel(average);
+                out.first = out.a = out.b = out.last = axis.pixel(average, limit);
             } else if (options_.reduction==Reduction::Mean) {
-                out.first=out.a=out.b=out.last=axis.pixel(b.sum/b.count);
+                out.first=out.a=out.b=out.last=axis.pixel(b.sum/b.count, limit);
             } else {
-                if (adaptive) means[c][x] = axis.pixel(b.sum / b.count);
-                out = {axis.pixel(b.first), axis.pixel(b.lowAt <= b.highAt ? b.low : b.high),
-                       axis.pixel(b.lowAt <= b.highAt ? b.high : b.low), axis.pixel(b.last)};
+                if (adaptive) means[c][x] = axis.pixel(b.sum / b.count, limit);
+                out = {axis.pixel(b.first, limit), axis.pixel(b.lowAt <= b.highAt ? b.low : b.high, limit),
+                       axis.pixel(b.lowAt <= b.highAt ? b.high : b.low, limit), axis.pixel(b.last, limit)};
             }
             auto &trace = storage_.traces[c];
             if (c < 2)
@@ -149,6 +160,22 @@ bool Model::projectTime(const scope::FrameView &frame, bool fresh, const ColumnC
     for (unsigned c = 0; c < 3; ++c)
         storage_.traces[c].mean = options_.averaging > 1 || options_.reduction == Reduction::Mean;
     if (adaptive) adapt(excursion);
+    if (mathPoints) {
+        // Remove the visible mean in the projected columns. The extended mapping above retains
+        // headroom for an off-screen DC component until this shift is applied.
+        const auto &axis = axes_[math];
+        const int shift = axis.origin - axis.pixel(int32_t(mathSum / mathPoints), AcLimit);
+        const auto move = [&](int16_t y) { return int16_t(std::clamp(y + shift, -DcLimit, DcLimit)); };
+        auto &trace = storage_.traces[math];
+        trace.clippedTop = trace.clippedBottom = false;
+        for (unsigned x = 0; x < viewport_.width; ++x) {
+            auto &c = trace.columns[x];
+            if (c.first == Missing) continue;
+            c = {move(c.first), move(c.a), move(c.b), move(c.last)};
+            trace.clippedTop |= std::min(c.a, c.b) < 0;
+            trace.clippedBottom |= std::max(c.a, c.b) >= viewport_.height;
+        }
+    }
     screenSeries(frame, aggregate, source, bands);
     for (unsigned c = 0; c < 2; ++c)
         if (options_.peakHold && storage_.traces[c].enabled) {
@@ -174,6 +201,11 @@ bool Model::projectTime(const scope::FrameView &frame, bool fresh, const ColumnC
         }
     xyCount_ = 0;
     return true;
+}
+double Model::mathPerDivision() const {
+    const auto &m = metadata_.channels[0];
+    const double codes = axes_[MathView::TraceIndex].codesPerDivisionQ8 * 100.0 / (256 * options_.mathView.gainPercent);
+    return m.calibrated ? codes * m.voltsPerCode * m.probeNumerator / m.probeDenominator : codes;
 }
 void Model::adapt(const int32_t (&excursion)[2]) {
     const auto &screen = storage_.screen;

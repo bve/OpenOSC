@@ -66,6 +66,7 @@ struct Axis {
     // (issue #93: up to 500 times its own, 20 mV to 10 V; Q16 lost a quarter of the scale there).
     int64_t factor = 0;
     bool configure(const scope::ChannelMetadata &metadata, const ChannelOptions &options, unsigned height);
+    void configureMath(double divisionQ8, const MathView &options, unsigned height);
     // Whether a held record is drawn at the next capture's V/div (ChannelOptions::heldMillivoltsAtTip): a
     // calibrated record whose codes can be drawn at it; otherwise at its own.
     static bool held(const scope::ChannelMetadata &metadata, const ChannelOptions &options);
@@ -76,7 +77,7 @@ struct Axis {
     // its line is placed here; raw codes already carry it (500). The digital position that centres
     // this record's zero is then 1000 - basePermille.
     static int16_t base(const scope::ChannelMetadata &metadata);
-    int16_t pixel(int32_t codeQ8) const;
+    int16_t pixel(int32_t codeQ8, int limit = 4096) const;
     double code(int pixel) const;
 };
 } // namespace openosc::plot

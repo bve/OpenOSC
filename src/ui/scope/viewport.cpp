@@ -115,6 +115,9 @@ double heldMillivolts(const scope::ChannelMetadata &m, const ChannelOptions &o) 
     return double(o.heldMillivoltsAtTip) * m.probeDenominator / m.probeNumerator;
 }
 bool drawable(double scale) { return std::isfinite(scale) && scale >= 1 && scale <= 16777216; }
+int64_t axisFactor(unsigned height, unsigned gain, double scale) {
+    return std::llround(double(height - 1) * 4294967296.0 * gain / (800 * scale));
+}
 } // namespace
 bool Axis::held(const scope::ChannelMetadata &m, const ChannelOptions &o) {
     return o.heldMillivoltsAtTip > 0 && m.calibrated && m.probeNumerator && m.probeDenominator &&
@@ -138,22 +141,28 @@ bool Axis::configure(const scope::ChannelMetadata &m, const ChannelOptions &o, u
     origin = int16_t(int32_t(height - 1) * (basePermille + o.positionPermille - 500) / 1000);
     // The pixel transform is evaluated on projected points and extrema. From the unrounded codes per
     // division: a held V/div far finer than the record's own (a few Q8 codes a division) keeps its scale.
-    factor = std::llround(double(height - 1) * 4294967296.0 * o.gainPercent / (800 * scale));
+    factor = axisFactor(height, o.gainPercent, scale);
     if (o.invert)
         factor = -factor;
     return factor != 0;
+}
+void Axis::configureMath(double divisionQ8, const MathView &options, unsigned height) {
+    zeroQ8 = 0;
+    origin = int16_t(int(height - 1) * options.positionPermille / 1000);
+    codesPerDivisionQ8 = int32_t(std::lround(divisionQ8));
+    factor = axisFactor(height, options.gainPercent, divisionQ8);
 }
 int16_t Axis::base(const scope::ChannelMetadata &m) {
     // A calibrated record compensates its codes for the analog zero, so the zero's line has to be
     // added here. Raw codes already carry it: adding it again would move the trace twice.
     return m.calibrated ? int16_t(std::clamp<int>(m.analogPosition, 0, 160) * 1000 / 160) : 500;
 }
-int16_t Axis::pixel(int32_t raw) const {
+int16_t Axis::pixel(int32_t raw, int limit) const {
     int64_t offset;
     if (__builtin_mul_overflow(int64_t(raw) - zeroQ8, factor, &offset)) // Far off the plot either way.
-        return ((int64_t(raw) - zeroQ8 > 0) == (factor > 0)) ? -4096 : 4096;
+        return ((int64_t(raw) - zeroQ8 > 0) == (factor > 0)) ? -limit : limit;
     const int64_t value = int64_t(origin) - offset / (int64_t(1) << 32);
-    return int16_t(std::clamp<int64_t>(value, -4096, 4096));
+    return int16_t(std::clamp<int64_t>(value, -limit, limit));
 }
 double Axis::code(int y) const { return factor ? zeroQ8 / 256.0 + (origin - y) * 16777216.0 / double(factor) : 0; }
 } // namespace openosc::plot

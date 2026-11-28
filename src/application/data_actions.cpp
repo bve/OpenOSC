@@ -176,6 +176,10 @@ bool ApplicationController::channelShown(unsigned channel) {
 // settings at start-up, a new frame after RUN): it stays on a channel that is shown. The cards
 // and context follow at once, without waiting for a new sequence (a held frame keeps its own).
 bool ApplicationController::followShownChannel() {
+    if (mathSelected_ && (!view_.waveform().options().showsMath() || !channelShown(0) || !channelShown(1))) {
+        mathSelected_ = false;
+        dataRefresh_ = true;
+    }
     if (channelShown(selectedChannel_) || !channelShown(selectedChannel_ ^ 1)) return false;
     selectedChannel_ ^= 1;
     dataRefresh_ = true;

@@ -25,7 +25,7 @@ public:
     // The accent of a screen card when selected: the highlight, a channel's colour (the Scope's F1-F3)
     // or the theme's text colour (neutral). Resolved from the theme at palette(); a context's keys
     // always take the highlight, so channel colours never reach a menu, popup or the generator.
-    enum class Tint : uint8_t { Highlight, Channel1, Channel2, Neutral };
+    enum class Tint : uint8_t { Highlight, Channel1, Channel2, Neutral, Math };
     static uint32_t readable(uint32_t color, uint32_t fill); // `color`, or the contrasting ink when too faint on `fill`.
     static uint32_t ink(uint32_t fill);                      // The dark or light ink with the higher contrast.
     static uint32_t faded(uint32_t ink, uint32_t fill);      // A secondary mark on an accent fill: ink part-way to it.
@@ -83,7 +83,7 @@ private:
     bool bottom_ = false;
     uint32_t fills_[Count]{};
     uint32_t background_ = 0, border_ = 0, highlight_ = 0, foreground_ = 0, muted_ = 0;
-    uint32_t channels_[2]{}, neutral_ = 0;
+    uint32_t channels_[2]{}, neutral_ = 0, math_ = 0;
     uint32_t accent(unsigned index) const; // The selected card's fill.
     bool menuColors_ = false; // The context shows in menu_'s colours.
     MenuPalette menu_;

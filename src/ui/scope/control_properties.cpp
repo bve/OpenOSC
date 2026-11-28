@@ -49,6 +49,7 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
     case CursorAY: std::snprintf(text, capacity, "Cursor a level"); break;
     case CursorBY: std::snprintf(text, capacity, "Cursor b level"); break;
     case MathTrace: std::snprintf(text, capacity, "MATH"); break;
+    case MathCoupling: std::snprintf(text, capacity, "MATH coupling"); break;
     case Reference: std::snprintf(text, capacity, "Capture CH%u reference", view.number(channel)); break;
     case Clear: std::snprintf(text, capacity, "Clear history and reference"); break;
     case SampleReduction: std::snprintf(text, capacity, "Samples"); break;
@@ -69,7 +70,7 @@ void Controls::name(unsigned row, char *text, size_t capacity) const {
 unsigned Controls::choices(unsigned row) const {
     switch (row) {
     case Section: return unsigned(Group::Count);
-    case Channel: case FftSource: case FftScale: case CounterEstimate: case CounterTimed: return 2;
+    case Channel: case FftSource: case FftScale: case CounterEstimate: case CounterTimed: case MathCoupling: return 2;
     case View: case GridStyle: case Average: case FftWindow: return 4;
     case TraceStyle: case MathTrace: case TraceInterpolation: case SampleReduction: case CounterSource: case CounterAverage: return 3;
     case Persistence: return sizeof Persistences / sizeof *Persistences;
@@ -92,6 +93,7 @@ unsigned Controls::choice(unsigned row) const {
     case Average: return indexOf(o.averaging, Averages);
     case Zoom: return o.zoomOut > 1 ? choices(row) : indexOf(o.zoom, Zooms); // Below 1x: none of the list.
     case MathTrace: return unsigned(o.math);
+    case MathCoupling: return o.mathView.removeDc;
     case SampleReduction: return unsigned(o.reduction);
     case TraceInterpolation: return unsigned(o.interpolation);
     case FftSource: return o.spectrum.channel;
@@ -134,6 +136,7 @@ void Controls::choiceName(unsigned row, unsigned i, char *text, size_t capacity)
         else std::snprintf(text, capacity, "%s", i ? "" : "Off");
         break;
     case SampleReduction: pick(reductions, 3); break;
+    case MathCoupling: std::snprintf(text, capacity, "%s", i ? "Remove DC" : "DC"); break;
     case TraceInterpolation: pick(interpolations, 3); break;
     case FftWindow: pick(windows, 4); break;
     case FftScale: pick(scales, 2); break;

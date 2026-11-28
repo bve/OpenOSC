@@ -30,6 +30,7 @@ public:
         CursorAY,
         CursorBY,
         MathTrace,
+        MathCoupling,
         Reference,
         Clear,
         SampleReduction,

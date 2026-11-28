@@ -168,6 +168,10 @@ Captured on a ZT703S running OpenOSC. The Bode screens replay a recorded twin-T 
   The Trigger menu supports Edge, Pulse width, Runt and Rise/fall time. [Trigger setup](docs/SCOPE_TRIGGERS.md)
   Hold **F3** to set the trigger level to the signal midpoint and pretrigger to 50%. Pan with **F2**
 - Continuous Roll mode for slow timebases (200 ms/div and slower)
+- Enable addition or subtraction under **Analyze → Display → View → MATH**. With both inputs enabled,
+  tap **F1** or **F2** to cycle through CH1, CH2 and MATH. Up/Down adjusts the MATH scale on F1
+  and its vertical position on F2. The **MATH coupling** setting can remove the visible trace's mean.
+  **Home view** restores the default scale and centre.
 - Record memory from 64K to 512K points across enabled channels. The record overview shows the
   budget used for the displayed capture. A label such as `<512K` means the capture plan reserves part
   of that budget, for example as DMA headroom at the fastest sample rates. The prefix depends on the

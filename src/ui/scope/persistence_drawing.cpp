@@ -49,9 +49,7 @@ void Painter::persistence() {
     const bool infinite=bitmap.bits(); // One bit a pixel; a graded channel keeps four (GitHub #85).
     const unsigned wordPixels=infinite ? Persistence::InfinitePixelsPerWord : Persistence::FinitePixelsPerWord;
     const unsigned firstWord=left/wordPixels, endWord=(right+wordPixels-1)/wordPixels;
-    // Back to front as the traces: the other channel, the selected one, math (X-Y: one trail).
-    const unsigned front=model_.frontChannel(), order[3]={front^1,front,2};
-    for (unsigned c : order) {
+    for (unsigned c : model_.traceOrder()) {
         if (o.mode==Mode::XY && c!=0) continue;
         if (c<2 && (!o.channels[c].visible || bitmap.graded(c))) continue; // A density plane: Painter::density.
         if (c==2 && (o.math==Math::Off || !infinite)) continue;

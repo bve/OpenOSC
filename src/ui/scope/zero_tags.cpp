@@ -19,4 +19,18 @@ void ZeroTags::place(const int (&zero)[2], const bool (&shown)[2], int plotHeigh
     first = std::clamp(first, low, high - spacing);
     centre[upper] = first; centre[lower] = first + spacing;
 }
+int ZeroTags::mathCentre(int zero, int plotHeight, const bool (&shown)[2], const int (&centre)[2]) {
+    constexpr int half = PlotFrame::TagHeight / 2, spacing = PlotFrame::TagHeight + PlotFrame::TagGap;
+    const int top = -PlotFrame::Top + half + (zero < 0 ? PlotFrame::ArrowHeight : 0);
+    const int bottom = plotHeight - 1 + PlotFrame::Bottom - half - (zero >= plotHeight ? PlotFrame::ArrowHeight : 0);
+    const int ideal = std::clamp(zero, top, bottom);
+    int best = ideal, distance = plotHeight + PlotFrame::Top;
+    for (int y : {ideal, centre[0] - spacing, centre[0] + spacing, centre[1] - spacing, centre[1] + spacing}) {
+        if (y < top || y > bottom || std::abs(y - ideal) >= distance) continue;
+        if ((shown[0] && std::abs(y - centre[0]) < spacing) || (shown[1] && std::abs(y - centre[1]) < spacing)) continue;
+        best = y;
+        distance = std::abs(y - ideal);
+    }
+    return best;
+}
 } // namespace openosc::plot

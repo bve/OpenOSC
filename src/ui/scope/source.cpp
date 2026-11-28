@@ -25,9 +25,10 @@ Source::Source(const scope::FrameView &frame, const Options &options, Statistics
         const double ratio = c[1].voltsPerCode * c[1].probeNumerator * c[0].probeDenominator /
                              (c[0].voltsPerCode * c[0].probeNumerator * c[1].probeDenominator);
         compatible = std::isfinite(ratio) && ratio >= 1.0 / 16384 && ratio <= 16384 &&
-                     std::abs(c[1].zeroCode) <= 32768;
+                     std::abs(c[0].zeroCode) <= 32768 && std::abs(c[1].zeroCode) <= 32768;
         if (compatible) {
             ratioQ24_ = int64_t(std::llround(ratio * 16777216));
+            zero1Q8_ = int32_t(std::lround(c[0].zeroCode * 256));
             zero2Q8_ = int32_t(std::lround(c[1].zeroCode * 256));
         }
     } else if (compatible) {
@@ -35,9 +36,23 @@ Source::Source(const scope::FrameView &frame, const Options &options, Statistics
                      uint64_t(c[0].probeNumerator) * c[1].probeDenominator ==
                          uint64_t(c[1].probeNumerator) * c[0].probeDenominator;
     }
-    enabled_[2] = options.math != Math::Off && compatible;
+    enabled_[2] = options.showsMath() && compatible;
     if (enabled_[2])
         read_[0] = read_[1] = true;
+}
+int32_t Source::combine(int32_t first, int32_t second) const {
+    const int64_t b = int64_t(second - zero2Q8_) * ratioQ24_ / 16777216;
+    const int64_t value = first - zero1Q8_ + (options_.math == Math::Add ? b : -b);
+    return int32_t(std::clamp<int64_t>(value, -MathLimitQ8, MathLimitQ8));
+}
+double Source::mathDivisionQ8() const {
+    // Bound the sum or difference by the two ADC spans, including their recorded DC zeros.
+    const bool add = options_.math == Math::Add;
+    const int32_t low = combine(-32768, add ? -32768 : 32512);
+    const int32_t high = combine(32512, add ? 32512 : -32768);
+    // With DC removal, the visible mean can sit anywhere in this interval.
+    const int32_t reach = options_.mathView.removeDc ? high - low : std::max(std::abs(low), std::abs(high));
+    return std::max(1.0, reach / 3.75); // A small margin inside the four divisions on either side.
 }
 uint8_t Source::byteAt(uint32_t index, unsigned channel) const {
     uint32_t position = uint32_t(origin_ + index);
@@ -83,11 +98,7 @@ bool Source::sample(uint32_t index, int32_t (&v)[3]) {
             v[c] = int32_t(raw) * 256;
             ++statistics_.sourceReads;
         }
-    if (enabled_[2]) {
-        const int64_t second = (int64_t(v[1]) - zero2Q8_) * ratioQ24_ / 16777216;
-        v[2] = int32_t(std::clamp<int64_t>(int64_t(v[0]) + (options_.math == Math::Add ? second : -second),
-                                           -16777216, 16777216));
-    }
+    if (enabled_[2]) v[2] = combine(v[0], v[1]);
     return true;
 }
 } // namespace openosc::plot

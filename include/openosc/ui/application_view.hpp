@@ -49,7 +49,9 @@ public:
     const ui::DecodeTable &decodeTable() const { return host_.decodeTable(); }
     const ui::DecodeStrip &decodeStrip() const { return host_.decodeStrip(); }
     void scopeSettings(const scope::FrameMetadata &metadata, unsigned channel) { scope_.settings(metadata, channel); }
-    void scopeContext(unsigned channel, plot::Focus focus, bool panReverse = false) { scope_.context(channel, focus, panReverse); }
+    void scopeContext(unsigned channel, plot::Focus focus, bool panReverse = false, bool math = false) {
+        scope_.context(channel, focus, panReverse, math);
+    }
     // The generator note on the plot; captureHalved: DataAccess::generatorLoadsBus().
     void scopeGenerator(const generator::Snapshot &output, bool captureHalved) { scope_.generator(output, captureHalved); }
     void focusParameter(unsigned index) { host_.parameters().select(index); }

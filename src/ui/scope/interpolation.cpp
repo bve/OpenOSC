@@ -41,7 +41,10 @@ bool Source::interpolate(int64_t position,int32_t (&values)[3]) {
             if (!sample(first-3+i,sampleValues)) return false;
             for (unsigned c=0; c<3; ++c) sums[c]+=int64_t(sampleValues[c])*weights[i];
         }
-        for (unsigned c=0; c<3; ++c) values[c]=std::clamp<int64_t>(sums[c]/65536,-16777216,16777216);
+        for (unsigned c=0; c<3; ++c) {
+            const int32_t limit = c == MathView::TraceIndex ? MathLimitQ8 : 16777216;
+            values[c] = std::clamp<int64_t>(sums[c] / 65536, -limit, limit);
+        }
         return true;
     }
     int32_t next[3];
@@ -53,7 +56,8 @@ bool Source::interpolate(int64_t position,int32_t (&values)[3]) {
         for (unsigned c=0; c<3; ++c) {
             const double result=.5*((-t+2*t2-t3)*before[c]+(2-5*t2+3*t3)*values[c]+
                 (t+4*t2-3*t3)*next[c]+(-t2+t3)*after[c]);
-            values[c]=std::lround(std::clamp(result,-16777216.,16777216.));
+            const double limit = c == MathView::TraceIndex ? MathLimitQ8 : 16777216;
+            values[c] = std::lround(std::clamp(result, -limit, limit));
         }
     } else for (unsigned c=0; c<3; ++c) values[c]+=int64_t(next[c]-values[c])*fraction/65536;
     return true;

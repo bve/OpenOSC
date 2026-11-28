@@ -241,7 +241,7 @@ void ApplicationController::displayData(uint32_t now) {
             next.timebaseNs = request.timebaseNs; // The metadata keeps the running capture's until it restarts.
             const auto &model = view_.waveform().model();
             showTrigger(model.hasFrame() ? &model.metadata() : nullptr);
-            view_.scopeContext(selectedChannel_,focus_,prefs_.panReverse != 0);
+            view_.scopeContext(selectedChannel_,focus_,prefs_.panReverse != 0, mathSelected_);
             view_.scopeSettings(next,selectedChannel_);
             syncCursorFocus();
             syncZoomFocus(); // X-Y, FFT or Roll now: Back to the card Zoom & Pan came from.

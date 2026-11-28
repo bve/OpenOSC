@@ -255,6 +255,8 @@ private:
     bool followShownChannel();
     void panelKeys(uint32_t keys, uint32_t now, bool fine);
     void setScopeFocus(plot::Focus focus);
+    void cycleScopeTrace(plot::Focus focus);
+    void openMath();
     void syncCursorFocus();
     void openAnalyze(unsigned row);
     void enterCursors(uint32_t now);
@@ -579,6 +581,7 @@ private:
     uint32_t dataAt_ = 0, lastScopeSequence_ = 0, lastMeterSequence_ = 0;
     uint32_t meterBarAt_ = 0;
     unsigned selectedChannel_ = 0;
+    bool mathSelected_ = false;
     bool dataRefresh_ = true;
     generator::Snapshot lastGenerator_;
     DataStatus lastMeterStatus_ = DataStatus::NoData;

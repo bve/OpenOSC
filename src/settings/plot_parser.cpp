@@ -72,6 +72,14 @@ bool PlotJson::parse(JsonObjectConst object, plot::Options &output) {
         !flag(object, "peak_hold", o.peakHold) || !flag(object, "show_scale", o.showScale) ||
         !integer(object, "grid_brightness", o.gridBrightness)) // GitHub #86: absent in older themes (100).
         return false;
+    o.mathView = {};
+    if (object.containsKey("math_view")) {
+        if (!object["math_view"].is<JsonObjectConst>()) return false;
+        const auto input = object["math_view"].as<JsonObjectConst>();
+        if (!integer(input, "position_permille", o.mathView.positionPermille) ||
+            !integer(input, "gain_percent", o.mathView.gainPercent) || !flag(input, "remove_dc", o.mathView.removeDc))
+            return false;
+    }
     if (object.containsKey("fft")) {
         if (!object["fft"].is<JsonObjectConst>()) return false;
         const auto input=object["fft"].as<JsonObjectConst>();

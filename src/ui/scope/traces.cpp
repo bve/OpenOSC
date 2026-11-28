@@ -33,11 +33,15 @@ void Painter::traces() {
     if (model_.hasReference())
         trace(s.reference, palette_.reference, 160, 1, Style::Vectors, true);
     // Each layer back to front: the selected channel last, over the other.
-    const unsigned front = model_.frontChannel(), order[2] = {front ^ 1, front};
+    const auto order = model_.traceOrder();
     if (o.glow)
         for (const unsigned c : order)
-            if (!densityShown(c)) glow(c);
+            if (c < 2 && !densityShown(c)) glow(c);
     for (const unsigned c : order) {
+        if (c == MathView::TraceIndex) {
+            if (o.showsMath()) trace(s.traces[c], palette_.math, 220, 1, o.style);
+            continue;
+        }
         const auto &channel = o.channels[c];
         const uint32_t color = traceColor(c);
         if (o.peakHold)
@@ -47,13 +51,8 @@ void Painter::traces() {
         if (densityShown(c)) density(c);
         else trace(s.traces[c], color, channel.opacity, channel.width, o.style);
     }
-    if (o.math != Math::Off) {
-        trace(s.traces[2], palette_.math, 220, 1, o.style);
-        // The operation keeps its input order. Show each input's on-screen number.
-        const char label[] = {'M', 'A', 'T', 'H', ' ', char('0' + palette_.view.number(0)),
-                              o.math == Math::Add ? '+' : '-', char('0' + palette_.view.number(1)), '\0'};
-        text(s.traces[2].enabled ? label : "MATH N/A", 8, 3 + counterHeight_, palette_.math, 80);
-    }
+    if (o.showsMath() && !s.traces[MathView::TraceIndex].enabled)
+        text("MATH N/A", 8, 3 + counterHeight_, palette_.math, 80);
     if (model_.hasReference())
         text("REF", model_.viewport().width - 28, 3, palette_.reference, 28);
     if (o.averaging > 1)

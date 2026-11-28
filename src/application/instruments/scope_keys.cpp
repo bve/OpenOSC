@@ -8,6 +8,7 @@
 #include "openosc/ui/scope/view_zoom.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 
 namespace openosc {
 namespace {
@@ -28,8 +29,30 @@ void stepTimebase(ScopeRequest &request, uint32_t keys) {
 }
 void ApplicationController::setScopeFocus(plot::Focus focus) {
     focus_ = focus;
+    if (focus != plot::Focus::Scale && focus != plot::Focus::Position) mathSelected_ = false;
     view_.waveform().cursorFocus(focus == plot::Focus::Cursor ? cursors_.line() : plot::CursorLine::None);
-    view_.scopeContext(selectedChannel_, focus_, prefs_.panReverse != 0);
+    view_.scopeContext(selectedChannel_, focus_, prefs_.panReverse != 0, mathSelected_);
+}
+void ApplicationController::cycleScopeTrace(plot::Focus focus) {
+    if (focus_ != focus) { focus_ = focus; return; }
+    const auto &channelView = view_.channelView();
+    if (mathSelected_) {
+        mathSelected_ = false;
+        selectedChannel_ = channelView.input(0);
+    } else if (view_.waveform().options().showsMath() && channelShown(0) && channelShown(1) &&
+               channelView.slot(selectedChannel_) == 1) {
+        mathSelected_ = true;
+    } else if (channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
+}
+void ApplicationController::openMath() {
+    for (unsigned c = 0; c < 2; ++c) plotControls_.enabled[c] = channelShown(c);
+    plotControls_.options = view_.waveform().options();
+    plotControls_.view = view_.channelView();
+    plotControls_.channel = selectedChannel_;
+    plotControls_.open(plot::Controls::MathCoupling);
+    analyzeRow_ = ~0U;
+    sectionDirect_ = true;
+    openPanel(Panel::Display, ui::DisplayProperties(plotControls_), plotControls_.index(plot::Controls::MathCoupling));
 }
 // The active line has to be one that is drawn: follow every change of the cursor mode or view.
 void ApplicationController::syncCursorFocus() {
@@ -172,7 +195,8 @@ void ApplicationController::moveTrace(uint32_t keys, uint32_t now, bool fine) {
     }
     const auto change = focus_ == plot::Focus::Zoom // Pan only: no channel moves.
         ? plot::TraceMove::Change{false, plot::TraceMove::pan(options, horizontal, &model, false)}
-        : plot::TraceMove::apply(request, options, selectedChannel_, held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
+        : plot::TraceMove::apply(request, options, mathSelected_ ? plot::MathView::TraceIndex : selectedChannel_,
+                                 held, horizontal, axis(keys, Keypad::Up, Keypad::Down), fine,
                                  &model);
     if (change.request && !applyEdited(request, now)) view_.notify(Tooltip::Unavailable, "Finish data transfer first", now);
     if (change.view) {
@@ -246,6 +270,7 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
         const auto card = focus_ == plot::Focus::Zoom ? zoomReturn_ : focus_;
         if (card == plot::Focus::Trigger) { openTrigger(); return; }
         if (card == plot::Focus::Cursor) { openAnalyze(ui::ScopeActions::Cursors); return; }
+        if (mathSelected_) { openMath(); return; }
         openChannel();
         return;
     }
@@ -261,15 +286,8 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
     }
     holdKeys(keys, now);
     if (keys & Keypad::Relative) view_.scopeFooterPage(); // REL has no other Scope use; its hold is power.
-    // A second F1/F2 press changes the channel only to one that is shown (followShownChannel).
-    if (keys & Keypad::F1) {
-        if (focus_ == plot::Focus::Scale && channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
-        focus_ = plot::Focus::Scale;
-    }
-    if (keys & Keypad::F2) {
-        if (focus_ == plot::Focus::Position && channelShown(selectedChannel_ ^ 1)) selectedChannel_ ^= 1;
-        focus_ = plot::Focus::Position;
-    }
+    if (keys & Keypad::F1) cycleScopeTrace(plot::Focus::Scale);
+    if (keys & Keypad::F2) cycleScopeTrace(plot::Focus::Position);
     setScopeFocus(focus_);
     const uint32_t arrows = keys & Arrows;
     if (!arrows) return;
@@ -308,6 +326,24 @@ void ApplicationController::scopeKeys(uint32_t keys, uint32_t now, bool fine) {
 void ApplicationController::scaleKeys(uint32_t keys, uint32_t now) {
     const bool held = data_.scopeHeld();
     uint32_t steps = keys;
+    if (mathSelected_ && (steps & (Keypad::Up | Keypad::Down))) {
+        auto options = view_.waveform().options();
+        auto &gain = options.mathView.gainPercent;
+        const auto before = gain;
+        static constexpr uint16_t Gains[] = {1, 2, 3, 6, 12, 25, 50, 100, 200, 400, 800, 1600, 3200, 6400};
+        if ((steps & Keypad::Up) && gain > Gains[0])
+            gain = *std::prev(std::lower_bound(std::begin(Gains), std::end(Gains), gain));
+        if ((steps & Keypad::Down) && gain < Gains[std::size(Gains) - 1])
+            gain = *std::upper_bound(std::begin(Gains), std::end(Gains), gain);
+        if (gain != before) {
+            if (held) beginHeldView();
+            view_.waveform().configure(options);
+            if (!held) queuePlotSave(now);
+            dataRefresh_ = true;
+        }
+        steps &= ~uint32_t(Keypad::Up | Keypad::Down);
+        if (!steps) return;
+    }
     if (held && view_.waveform().options().mode == plot::Mode::Spectrum && (keys & (Keypad::Left | Keypad::Right))) {
         beginHeldView();
         auto view = view_.waveform().options();
@@ -373,7 +409,10 @@ bool ApplicationController::scopeHoldKeys(uint32_t holds, uint32_t now) {
     if (autoBusy() || data_.zeroBusy()) return true; // Taken: the stroke is spent, nothing happens.
     followShownChannel();
     syncCursorFocus();
-    if (holds & Keypad::F1) openProbe(now);
+    if (holds & Keypad::F1) {
+        if (mathSelected_) openMath();
+        else openProbe(now);
+    }
     else if (holds & Keypad::F2) resetView(now);
     else if (holds & Keypad::F3) triggerMidpoint(now, true); // Level 50 %, as on the factory firmware, and pretrigger 50 % (#123).
     else openShortcut(now);
@@ -430,6 +469,12 @@ bool ApplicationController::resetView(uint32_t now) {
     const bool held = data_.scopeHeld();
     if (held) beginHeldView();
     if (home && !centerChannels(now)) return false;
+    if (home) {
+        auto options = view_.waveform().options();
+        options.mathView = {};
+        view_.waveform().configure(options);
+        if (heldViewActive_) heldView_.mathView = {};
+    }
     homeZoom(now);
     view_.notify(Tooltip::Done, home ? "Home view" : "Zoom and pan reset", now);
     dataRefresh_ = true;

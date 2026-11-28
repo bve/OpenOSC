@@ -22,11 +22,15 @@ bool Options::valid() const {
             c.brightness < Brightness::LowestTrace || c.brightness > Brightness::Full)
             return false;
     const auto &c = cursors;
-    return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2;
+    return c.xA <= 1000 && c.xB <= 1000 && c.yA <= 1000 && c.yB <= 1000 && c.channel < 2 &&
+           mathView.positionPermille >= -1000 && mathView.positionPermille <= 2000 &&
+           mathView.gainPercent >= MathView::MinimumGain && mathView.gainPercent <= MathView::MaximumGain;
 }
 void Options::restoreHeldView(const Options &saved) {
     zoom = saved.zoom; zoomOut = saved.zoomOut; panPpb = saved.panPpb; heldTimebaseNs = saved.heldTimebaseNs;
     centerHeldTrigger = saved.centerHeldTrigger;
+    mathView.positionPermille = saved.mathView.positionPermille;
+    mathView.gainPercent = saved.mathView.gainPercent;
     for (unsigned c = 0; c < 2; ++c) {
         channels[c].gainPercent = saved.channels[c].gainPercent;
         channels[c].positionPermille = saved.channels[c].positionPermille;
@@ -36,7 +40,7 @@ void Options::restoreHeldView(const Options &saved) {
 bool Options::sameTransform(const Options &b) const {
     if (mode != b.mode || zoom != b.zoom || zoomOut != b.zoomOut || panPpb != b.panPpb || heldTimebaseNs != b.heldTimebaseNs ||
         lockTrigger != b.lockTrigger || centerHeldTrigger != b.centerHeldTrigger ||
-        averaging != b.averaging || math != b.math ||
+        averaging != b.averaging || math != b.math || !(mathView == b.mathView) ||
         reduction != b.reduction || interpolation != b.interpolation || !spectrum.same(b.spectrum))
         return false;
     for (unsigned i = 0; i < 2; ++i) {

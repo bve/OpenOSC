@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include "openosc/ui/scope/viewport.hpp"
 #include "openosc/ui/scope/persistence.hpp"
 #include "openosc/acquisition/analysis.hpp"
@@ -58,8 +59,13 @@ public:
     CursorLine cursorFocus() const { return cursorFocus_; }
     // The selected channel's trace is drawn over the other's (GitHub #81): a view choice, the
     // record, its channels and the projection stay as they are.
-    void frontChannel(unsigned channel) { frontChannel_ = channel & 1; }
+    void frontChannel(unsigned channel) { frontChannel_ = channel <= MathView::TraceIndex ? channel : 0; }
     unsigned frontChannel() const { return frontChannel_; }
+    std::array<unsigned, 3> traceOrder() const {
+        if (frontChannel_ == MathView::TraceIndex) return {0, 1, MathView::TraceIndex};
+        return {MathView::TraceIndex, frontChannel_ ^ 1, frontChannel_};
+    }
+    double mathPerDivision() const;
     bool captureReference(unsigned channel);
     void clearReference() { reference_ = false; }
     void clearHistory();
@@ -68,7 +74,7 @@ public:
     const Options &options() const { return options_; }
     const Viewport &viewport() const { return viewport_; }
     const scope::FrameMetadata &metadata() const { return metadata_; }
-    const Axis &axis(unsigned channel) const { return axes_[channel < 2 ? channel : 0]; }
+    const Axis &axis(unsigned channel) const { return axes_[channel <= MathView::TraceIndex ? channel : 0]; }
     const Storage &storage() const { return storage_; }
     const ScreenSeries &screen() const { return storage_.screen; }
     // Whether a trace's columns show an average now (HD, Adaptive's choice, or frame averaging,
@@ -111,7 +117,7 @@ private:
     scope::SpectrumStorage &spectrum_;
     Options options_;
     Viewport viewport_;
-    Axis axes_[2];
+    Axis axes_[3];
     scope::FrameMetadata metadata_;
     Statistics statistics_;
     unsigned xyCount_ = 0;

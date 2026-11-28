@@ -133,6 +133,9 @@ void Controls::adjust(unsigned row, int direction, bool fine) {
     case MathTrace:
         options.math = Math((unsigned(options.math) + 3 + direction) % 3);
         break;
+    case MathCoupling:
+        options.mathView.removeDc = !options.mathView.removeDc;
+        break;
     default:
         break;
     }

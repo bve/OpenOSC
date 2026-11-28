@@ -34,8 +34,9 @@ void ScopeScreen::settings(const scope::FrameMetadata &next, unsigned channel) {
     select(channel);
     cards();
 }
-void ScopeScreen::context(unsigned channel, plot::Focus focus, bool panReverse) {
+void ScopeScreen::context(unsigned channel, plot::Focus focus, bool panReverse, bool math) {
     if (channel_ != channel) valid_ = false;
+    mathSelected_ = math;
     select(channel);
     focus_ = focus; panReverse_ = panReverse;
     cards();
@@ -43,7 +44,7 @@ void ScopeScreen::context(unsigned channel, plot::Focus focus, bool panReverse) 
 }
 void ScopeScreen::select(unsigned channel) {
     channel_ = channel < 2 ? channel : 0;
-    host_.waveform().frontChannel(channel_);
+    host_.waveform().frontChannel(mathSelected_ ? plot::MathView::TraceIndex : channel_);
 }
 // The generator running beside the capture; while its DAC stream loads the bus, ", ADC max /2": the
 // next captures' maximum sample rate is halved (a held record stays as it was captured). A view away
@@ -86,18 +87,22 @@ void ScopeScreen::cards() {
     const auto &selected = shown.channels[channel_];
     const auto &view = host_.channelView(); // Each card names and tints its input by its on-screen slot.
     char scale[24], time[24], value[64], title[64], details[160];
-    const auto scaleValue = plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
-    plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 3); // The strip uses the same precision.
+    const bool mathReady = framed && model.storage().traces[plot::MathView::TraceIndex].enabled;
+    const auto scaleValue = mathSelected_ ? plot::ChannelScale{mathReady ? model.mathPerDivision() : 0, selected.calibrated ? "V" : "cnt"}
+        : plot::DisplayScale::channel(selected, framed ? model.options().channels[channel_] : plot::ChannelOptions{});
+    if (!mathSelected_ || mathReady) plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 3);
+    else std::snprintf(scale, sizeof scale, "--");
     const bool spectrum = widget.options().mode == plot::Mode::Spectrum;
     const double secondsPerDivision = framed && !spectrum
         ? plot::DisplayScale::secondsPerDivision(model.viewport(), shown) : shown.timebaseNs / 1e9;
     plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 3);
     char probe[24], next[48] = "";
     plot::DisplayScale::probe(selected, probe, sizeof probe);
-    std::snprintf(title, sizeof title, "Scale CH%u", view.number(channel_));
+    if (mathSelected_) std::snprintf(title, sizeof title, "Scale MATH");
+    else std::snprintf(title, sizeof title, "Scale CH%u", view.number(channel_));
     // Keep the value row at the plotted scale. A waiting record can still be on screen after its
     // range changes. Show the next setting in the title until a record at that scale arrives.
-    if (framed) {
+    if (framed && !mathSelected_) {
         const bool volts = plot::DisplayScale::voltsPending(shown, widget.options(), next_, channel_);
         const bool seconds = plot::DisplayScale::timePending(shown, widget.options(), next_);
         char pendingVolts[16] = "", pendingTime[16] = "";
@@ -115,20 +120,23 @@ void ScopeScreen::cards() {
                 std::snprintf(title, sizeof title, "Next %s", first);
         }
     }
-    std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", view.number(channel_), plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
+    const char *mathCoupling = widget.options().mathView.removeDc ? "AC" : "DC";
+    if (mathSelected_) std::snprintf(details, sizeof details, "MATH %s  %s %s", mathCoupling, scale, time);
+    else std::snprintf(details, sizeof details, "CH%u %s %s  %s %s%s%s", view.number(channel_), plot::DisplayScale::coupling(selected), probe, scale, time, *next ? "  " : "", next);
     // Keep the font fixed. A wide pair uses two significant digits, then coarser unit prefixes
     // if needed (for example, "500mcnt" becomes "0.5cnt").
     std::snprintf(value, sizeof value, "%s %s", scale, time);
     for (bool coarse : {false, true}) {
         if (Elements::textWidth(value, 11) <= ScreenLayout::ButtonWidth - 8) break;
-        plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 2, coarse);
+        if (!mathSelected_ || mathReady) plot::Format::quantity(scaleValue.perDivision, scaleValue.unit, scale, sizeof scale, 2, coarse);
         plot::Format::quantity(secondsPerDivision, "s", time, sizeof time, 2, coarse);
         std::snprintf(value, sizeof value, "%s %s", scale, time);
     }
     bar.item(0, title, value, *next, true);
     // F2 Position: the channel it moves, with its coupling and probe.
     const char *compactProbe = std::strcmp(probe, "x10000") == 0 ? "X10K" : probe;
-    std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
+    if (mathSelected_) std::snprintf(value, sizeof value, "MATH %s", mathCoupling);
+    else std::snprintf(value, sizeof value, "CH%u %s %s", view.number(channel_), plot::DisplayScale::coupling(selected), compactProbe);
     bar.item(1, "Position", value);
     static constexpr const char *modes[] = {"AUTO", "NORM", "SNGL"};
     static constexpr const char *types[] = {"Trigger", "Pulse width", "Runt", "Rise/Fall"};
@@ -147,8 +155,8 @@ void ScopeScreen::cards() {
     // the selected channel's, F3 Trigger the source channel's, F4 Analyze/Cursor neutral.
     using Tint = ParameterBar::Tint;
     const auto channelTint = [&](unsigned c) { return c > 1 ? Tint::Neutral : view.slot(c) ? Tint::Channel2 : Tint::Channel1; };
-    bar.tint(0, channelTint(channel_));
-    bar.tint(1, channelTint(channel_));
+    bar.tint(0, mathSelected_ ? Tint::Math : channelTint(channel_));
+    bar.tint(1, mathSelected_ ? Tint::Math : channelTint(channel_));
     bar.tint(2, channelTint(unsigned(model.triggerChannel())));
     bar.tint(3, Tint::Neutral);
     if (!host_.overlayActive()) bar.select(focus_ == plot::Focus::Zoom ? 3U : unsigned(focus_));

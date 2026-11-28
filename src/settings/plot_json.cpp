@@ -10,6 +10,12 @@ void PlotJson::encode(JsonObject root, const plot::Options &o) {
     root["style"] = styles[unsigned(o.style)];
     root["grid"] = grids[unsigned(o.grid)];
     root["math"] = math[unsigned(o.math)];
+    if (!(o.mathView == plot::MathView{})) {
+        auto mathView = root.createNestedObject("math_view");
+        mathView["position_permille"] = o.mathView.positionPermille;
+        mathView["gain_percent"] = o.mathView.gainPercent;
+        mathView["remove_dc"] = o.mathView.removeDc;
+    }
     static constexpr const char *reductions[]={"peak","mean","auto"};
     root["reduction"]=reductions[unsigned(o.reduction)];
     constexpr const char *interpolations[]={"linear","sinc","spline"};

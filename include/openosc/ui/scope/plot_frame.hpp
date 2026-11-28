@@ -26,5 +26,6 @@ static_assert(PlotFrame::TipWidth >= 2, "Room for the zero tag's tip");
 // around their middle and stay inside the margin's height; the tips still point at the exact zeros.
 struct ZeroTags {
     static void place(const int (&zero)[2], const bool (&shown)[2], int plotHeight, int (&centre)[2]);
+    static int mathCentre(int zero, int plotHeight, const bool (&shown)[2], const int (&centre)[2]);
 };
 } // namespace openosc::plot
