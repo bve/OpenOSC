@@ -32,8 +32,9 @@ struct OverviewGeometry {
 // rates keep: GitHub #131, #138: FrameMetadata::budgetShort), the same for every record of that plan, held
 // or not, whatever length each record ends with (a freeze in flight varies it by a few points): "<" does not
 // flicker in RUN. Without a budget (Roll, a loaded record), the frame's own
-// total. The exact count is Acquisition's Captured row (and WAV:PRE?). The strip shows which part is
-// on screen and where the trigger lies. It follows HOLD pan and zoom; it is not a capture progress bar.
+// total. The exact count is Acquisition's Captured row (and WAV:PRE?). The strip shows the view's
+// window and the record's pretrigger position. Records without pretrigger information use their
+// stored trigger when available. The window follows HOLD pan and zoom.
 // captionText(): that text for a geometry ("--" with no frame).
 class RecordOverview {
 public:

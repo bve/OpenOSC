@@ -81,7 +81,13 @@ OverviewGeometry OverviewGeometry::calculate(const scope::FrameMetadata &m, cons
         const auto end = analyzedFirst + std::min(analyzedPoints, m.samples - analyzedFirst);
         span(int64_t(analyzedFirst) << 16, int64_t(end) << 16, length, inside, g.analyzed, g.analyzedWidth);
     }
-    if (m.triggered && !m.rolling && m.triggerIndex < m.samples)
+    if (m.pretriggerKnown) {
+        // The capture rounds down to a whole point. Convert back to permille so a change in
+        // record length cannot move a fixed pretrigger across a pixel boundary.
+        const uint32_t intervals = m.samples - 1;
+        const uint32_t position = intervals ? (m.pretrigger * 1000 + intervals - 1) / intervals : 0;
+        g.trigger = std::min(inside - 1, int(int64_t(position) * inside / 1000));
+    } else if (m.triggered)
         g.trigger = std::min(inside - 1, int(((int64_t(m.triggerIndex) << 16) + 32768) * inside / length));
     return g;
 }
