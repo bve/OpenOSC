@@ -97,7 +97,7 @@ void Session::restart(Function function, uint64_t untilUs) {
     awaitUntilUs_ = untilUs;
     awaiting_ = true;
 }
-bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) {
+bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs, bool functionPending) {
     Result candidate;
     if (!Decoder::decode(packet, bytes, candidate)) {
         charge_.interrupt(); // A reading was lost: no interval across it.
@@ -113,8 +113,8 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     if (typeK_ || candidate.primary.quantity == Quantity::Temperature)
         candidate = asTemperature(candidate, temperatureSettings_, typeK_, mcuJunction());
     // The hold mode sees the packet in the context it settles (before HOLD's stop: a mode's cycle never
-    // freezes with the display): a packet ending the wait for a selected function counts, a local REL
-    // this packet's function change clears does not apply to it.
+    // freezes with the display). While a function command is in flight the hold window cannot use
+    // this reading. A local REL that this packet's function change clears does not apply to it.
     const auto function = Functions::identify(candidate);
     const bool known = function != Function::Unknown;
     const bool functionChanged = known && function_ != ~0U && (unsigned(function) != function_ || candidate.currentInput != functionCurrent_);
@@ -127,7 +127,8 @@ bool Session::accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs) 
     if (functionChanged) settle_.clear();
     if (!userHold_ && !candidate.packetHold && settle_.skip(candidate)) return true;
     shown_ = candidate;
-    detector_.observe(candidate, {relative_.active() && !functionChanged, candidate.packetHold, awaiting_ && !settles});
+    detector_.observe(candidate, {relative_.active() && !functionChanged, candidate.packetHold,
+                                  functionPending || (awaiting_ && !settles)});
     if (held()) {
         if (!frozen_) {
             held_ = candidate;

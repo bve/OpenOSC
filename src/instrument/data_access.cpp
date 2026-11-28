@@ -254,12 +254,14 @@ bool DataAccess::setDmmAuto(bool automatic) {
 }
 bool DataAccess::holdMeter(bool held) {
     if (!active_ || measurement_ != MeasurementMode::Multimeter) return false;
+    if (held && dmm_.functionPending(meter_.latest())) return false;
     if (!held && meter_.latest().packetHold && !requestDmmKey(dmm::KeyCommand::Action::ReleaseHold)) return false;
     if (!held) meter_.cancelHold();
     return meter_.hold(held);
 }
 bool DataAccess::armMeterHold() {
-    if (!active_ || measurement_ != MeasurementMode::Multimeter || meter_.userHeld()) return false;
+    if (!active_ || measurement_ != MeasurementMode::Multimeter || meter_.userHeld() ||
+        dmm_.functionPending(meter_.latest())) return false;
     return meter_.armHold(timeUs_);
 }
 bool DataAccess::relativeMeter(bool enabled) {

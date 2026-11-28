@@ -4,6 +4,10 @@
 
 namespace openosc {
 void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
+    constexpr uint32_t FunctionKeys = Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4;
+    const auto &meter = data_.meter();
+    const bool functionKey = keys & FunctionKeys;
+    const bool wasHeld = functionKey && meter.functionLockedByHold();
     // AUTO/RANGE is meterRangeKeys' (its own events, not the generic short press). A function without
     // ranges (diode, continuity, no reading yet; DataAccess::dmmRanged): the range keys are ignored,
     // nothing sent, nothing said.
@@ -27,7 +31,12 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
         return;
     }
     if (keys & Keypad::HoldSave) meterHoldKey(now);
-    const auto &meter = data_.meter();
+    if (!functionKey) return;
+    // A function press in the same key batch as HOLD still belongs to the held display.
+    if (wasHeld || meter.functionLockedByHold()) {
+        view_.notify(Tooltip::Unavailable, "Release HOLD to change function", now);
+        return;
+    }
     if ((keys & Keypad::F4) && meter.latest().sequence && !meter.latest().currentInput) {
         using F = dmm::Function;
         const auto current = meter.typeK() ? F::Temperature : dmm::Functions::identify(meter.latest());
@@ -44,7 +53,7 @@ void ApplicationController::meterKeys(uint32_t keys, uint32_t now) {
     if (keys & Keypad::F3) group = dmm::CommandGroup::Current;
     if (keys & Keypad::F4)
         group = meter.latest().currentInput ? dmm::CommandGroup::Milliamps : dmm::CommandGroup::Millivolts;
-    if ((keys & (Keypad::F1 | Keypad::F2 | Keypad::F3 | Keypad::F4)) && !meterCommand(data_.sendDmmGroup(group)))
+    if (!meterCommand(data_.sendDmmGroup(group)))
         view_.notify(Tooltip::Unavailable, "Measurement command busy", now);
 }
 // AUTO/RANGE qualified press (~50 ms): the factory's 20 20 (703S 08044274, 706S 08044BE4) opens the

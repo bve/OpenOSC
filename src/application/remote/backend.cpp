@@ -139,7 +139,10 @@ const dmm::Result &InstrumentBackend::meter() const {
     return reading_;
 }
 DataStatus InstrumentBackend::meterStatus() const { return application_.data_.meter().status(application_.data_.nowUs(),2000000); }
-bool InstrumentBackend::selectFunction(dmm::Function f) { return application_.meterCommand(application_.data_.selectDmmFunction(f)); }
+bool InstrumentBackend::selectFunction(dmm::Function f) {
+    return !application_.data_.meter().functionLockedByHold() &&
+           application_.meterCommand(application_.data_.selectDmmFunction(f));
+}
 dmm::TemperatureSettings InstrumentBackend::meterTemperature() const { return application_.prefs_.meter.temperature; }
 bool InstrumentBackend::meterTemperature(dmm::TemperatureSettings settings) {
     return application_.meterTemperatureSettings(settings, Board::milliseconds());

@@ -90,7 +90,7 @@ private:
 };
 class Session {
 public:
-    bool accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs);
+    bool accept(const uint8_t *packet, size_t bytes, uint64_t timestampUs, bool functionPending = false);
     bool hold(bool enabled);
     bool held() const { return userHold_ || latest_.packetHold; }
     bool userHeld() const { return userHold_; }
@@ -139,6 +139,7 @@ public:
     void rangeCommand() { detector_.restartWindow(); }
     const HoldDetector &holdCycle() const { return detector_; }
     bool holding() const { return frozen_ || detector_.captured(); } // Something other than the latest is shown.
+    bool functionLockedByHold() const { return held() || holding(); }
     const Statistics &statistics() const { return stats_; }
     const History &history() const { return history_; }
     const RelativeReading &relative() const { return relative_; }

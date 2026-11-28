@@ -53,6 +53,10 @@ public:
     // The UART stopped or failed: nothing more can be sent; everything ends without a status.
     void abandon();
     bool busy() const { return selector_.busy() || key_.busy() || range_.busy() || stroke_.active() || group_ == DataStatus::Busy; }
+    // A new HOLD needs a reading after any function command already sent.
+    bool functionPending(const Result &latest) const {
+        return selector_.busy() || group_ == DataStatus::Busy || !fresh(latest);
+    }
     DataStatus status() const {
         return operation_ == Operation::Key ? key_.status() : operation_ == Operation::Range ? range_.status() :
                operation_ == Operation::Group ? group_ : selector_.status();

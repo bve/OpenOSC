@@ -89,7 +89,7 @@ void DataAccess::poll(uint32_t now) {
             if (framer_.rejected() != rejected) meter_.interruptCharge(); // A packet failed its check: a reading lost.
             if (!framed) continue;
             watchdog_.packet(timeUs_);
-            if (meter_.accept(packet, sizeof packet, timeUs_)) {
+            if (meter_.accept(packet, sizeof packet, timeUs_, dmm_.functionPending(meter_.latest()))) {
                 status_ = meter_.latest().primary.status;
                 const auto &reading = meter_.live().primary.quantity == Quantity::Temperature ? meter_.live() : meter_.latest();
                 if (logger_.active()) logger_.append(reading, meter_.userHeld());
