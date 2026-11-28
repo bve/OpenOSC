@@ -10,6 +10,7 @@ public:
     explicit Bluetooth(Bridge &bridge) : bridge_(bridge) {}
     bool enable(bool on, const char *name, uint32_t passkey);
     bool enabled() const { return enabled_.load(); }
+    bool connected() const { return handle_.load() != BLE_HS_CONN_HANDLE_NONE; }
     void disconnect();
     void shutdown();
     void poll(uint32_t now);

@@ -199,7 +199,9 @@ class DataAccess : private calibration::ZeroInstrument, private generator::BusCl
     const DmmSessionRecorder &meterSession() const { return session_; }
     DmmSessionRecorder &meterSession() { return session_; }
     uint32_t scopeCaptures() const { return capture_.completed(); }
-    bool companionWindow() const { return capture_.state() != scope::FrameMailbox::State::Capturing; }
+    bool companionWindow(bool stopping) {
+        return capture_.state() != scope::FrameMailbox::State::Capturing || (stopping && stopCapture(false));
+    }
     // The newest frame a reader is given (acquireScope's rule): finite records and Roll snapshots
     // alike, once serviceScopeFrames accepted them (Auto, an edge, forced). Takes no lease.
     uint32_t scopeFrameSequence() const { return acceptedSequence_; }

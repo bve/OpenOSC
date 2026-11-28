@@ -262,7 +262,7 @@ void ApplicationController::serviceCompanion(uint32_t now, scpi::Engine &engine)
     if (shutdown_ != Shutdown::None || recoveryPending_) link.stop();
     auto &menu = rows();
     const auto previous = link.time(menu.now);
-    link.poll(now, link.engaged() && data_.companionWindow(), *usb_, engine);
+    link.poll(now, link.engaged() && data_.companionWindow(link.state() == companion::Link::State::Stopping), *usb_, engine);
     const bool nextSecond = link.time(now) != previous;
     menu.now = now;
     if (panel_ != Panel::Companion && menu.length) menu.clearPassword();

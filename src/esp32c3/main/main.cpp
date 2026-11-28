@@ -10,6 +10,7 @@
 #include "esp_system.h"
 #include "ota/boot.hpp"
 #include "ota/web_network.hpp"
+#include "sleep_timer.hpp"
 #include "watchdog.hpp"
 #include "swd/pins.h"
 #include "swd/swd_service.hpp"
@@ -21,7 +22,8 @@ namespace {
 constexpr gpio_num_t Receive = gpio_num_t(COMPANION_SWCLK), Transmit = gpio_num_t(COMPANION_SWDIO);
 constexpr gpio_num_t Recovery = gpio_num_t(COMPANION_RECOVERY);
 constexpr uart_port_t Uart = UART_NUM_1;
-constexpr uint32_t SleepGraceMs = 1250;
+// Keep the web admin reachable after a handoff while the STM32 reconnects.
+constexpr uint32_t ReconnectGraceMs = 120000;
 uint32_t milliseconds() { return esp_timer_get_time() / 1000; }
 [[noreturn]] void sleep() {
     gpio_reset_pin(Transmit);
@@ -80,14 +82,15 @@ public:
     }
     [[noreturn]] void run(Mode resume) {
         const auto boot = milliseconds();
+        uint32_t reconnectAt = boot;
+        uint32_t bridgeActivity = bridge_.activity();
+        SleepTimer sleepTimer(boot);
         bool initialized = resume != Mode::Off;
         bool linked = false;
         if (initialized) {
             if (!network_.initialize()) sleep();
             network_.mode(resume, boot);
-            lastUser_ = boot;
         }
-        uint32_t sleepAt = 0;
         for (;;) {
             Watchdog::feed();
             uint8_t input[128];
@@ -97,6 +100,17 @@ public:
                 if (available > 0) count += available;
             }
             auto now = milliseconds();
+            if (initialized) {
+                const auto activity = bridge_.activity();
+                if (activity != bridgeActivity) {
+                    bridgeActivity = activity;
+                    sleepTimer.activity(now);
+                }
+                sleepTimer.poll(now, network_.idle(), network_.apHasClients() || bluetooth_.connected() ||
+                                portal_.hasClients() || portal_.updating() || files_.active() || bridge_.session());
+                if (!sleepTimer.pending() && reply_.data[0] == uint8_t(Result::Sleeping)) haveReply_ = false;
+            }
+            bool sleepConfirmed = false;
             for (int i = 0; i < count; ++i) {
                 Frame frame;
                 if (!wire_.feed(input[i], frame)) continue;
@@ -105,8 +119,8 @@ public:
                     uint8_t encoded[Wire::Bytes];
                     const size_t size = Wire::encode(reply_, encoded);
                     uart_write_bytes(Uart, encoded, size);
-                    if (sleepAt && (reply_.command == Command::Sleep || reply_.data[0] == uint8_t(Result::Sleeping))) {
-                        sleepAt = now;
+                    if (sleepTimer.pending() && reply_.data[0] == uint8_t(Result::Sleeping)) {
+                        sleepConfirmed = true;
                         break;
                     }
                     continue;
@@ -118,10 +132,10 @@ public:
                         uart_set_pin(Uart, Transmit, Receive, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK)
                         sleep();
                     linked = initialized = true;
-                    lastUser_ = now;
+                    sleepTimer.activity(now);
                 }
                 if (frame.command == Command::EnterSwd) {
-                    if (!portal_.updating() && !frame.size && haveReply_ && reply_.command == Command::PrepareSwd &&
+                    if (!sleepTimer.pending() && !portal_.updating() && !frame.size && haveReply_ && reply_.command == Command::PrepareSwd &&
                         frame.sequence == uint8_t(reply_.sequence + 1u) && prepared_ && int32_t(now - prepared_) < 0) {
                         uart_driver_delete(Uart);
                         gpio_reset_pin(Transmit);
@@ -131,8 +145,9 @@ public:
                         startUart();
                         wire_ = {};
                         linked = haveReply_ = false;
-                        prepared_ = sleepAt = 0;
-                        lastUser_ = now = milliseconds();
+                        prepared_ = 0;
+                        reconnectAt = now = milliseconds();
+                        sleepTimer.activity(now);
                         break;
                     }
                     continue;
@@ -141,11 +156,10 @@ public:
                     reply_ = {frame.sequence, frame.command, 1, {uint8_t(Result::Ok)}};
                     const bool user = frame.command == Command::Status ? (frame.size == 1 && (frame.data[0] & UserActivity))
                                                                       : frame.command != Command::Exchange;
-                    if (user) lastUser_ = now;
-                    if (sleepAt || idle(now)) {
-                        reply_.data[0] = uint8_t(Result::Sleeping);
-                        if (!sleepAt) sleepAt = now + SleepGraceMs;
-                    } else if (handle(frame, now)) sleepAt = now + SleepGraceMs;
+                    if (frame.command == Command::Sleep && !frame.size) sleepTimer.request(now);
+                    else if (user) sleepTimer.activity(now);
+                    if (sleepTimer.pending()) reply_.data[0] = uint8_t(Result::Sleeping);
+                    else handle(frame, now);
                     haveReply_ = true;
                 }
             }
@@ -153,14 +167,14 @@ public:
                 if (uint32_t(now - boot) >= 2500) break;
                 continue;
             }
+            if (!linked && now - reconnectAt >= ReconnectGraceMs && !portal_.updating()) break;
             // Give the instrument time to fetch the sleep status. A continuous capture can defer
             // replies indefinitely, so the ESP still sleeps when the grace period expires.
-            if (sleepAt && int32_t(now - sleepAt) >= 0) break;
-            if (!sleepAt && idle(now)) sleepAt = now + SleepGraceMs;
+            if (sleepConfirmed || sleepTimer.due(now)) break;
             PortalRequest change;
             if (network_.receive(change)) {
                 apply(change, now);
-                lastUser_ = now;
+                sleepTimer.activity(now);
             }
             network_.poll(now);
             portal_.poll(network_.ipv4() != 0);
@@ -173,13 +187,6 @@ public:
     }
 
 private:
-    bool idle(uint32_t now) {
-        if (portal_.updating() || files_.active()) lastUser_ = now;
-        const uint32_t activity = bridge_.activity();
-        if (int32_t(activity - lastUser_) > 0) lastUser_ = activity;
-        return network_.idle() && int32_t(now - lastUser_) >= int32_t(network_.idle()) * 60000;
-    }
-
     void probe() {
         {
             SwdService service(bridge_, milliseconds());
@@ -242,17 +249,16 @@ private:
         case PortalRequest::Action::ApPassword: network_.setApPassword(request.password, now); break;
         }
     }
-    bool handle(const Frame &r, uint32_t now) {
+    void handle(const Frame &r, uint32_t now) {
         bool ok = true;
         switch (r.command) {
         case Command::Hello: bridge_.close(); status(false); break;
-        case Command::Sleep: return r.size == 0;
         case Command::Status: status(r.size == 1 && (r.data[0] & IncludeWifiSettings)); break;
         case Command::Mode:
             if (portal_.updating()) { ok = false; break; }
             if (r.size == 1 && r.data[0] == uint8_t(Mode::Station) && !*network_.ssid()) {
                 reply_.data[0] = uint8_t(Result::NoSavedNetwork);
-                return false;
+                return;
             }
             ok = r.size == 1 && network_.mode(Mode(r.data[0]), now);
             break;
@@ -293,7 +299,6 @@ private:
         default: ok = false; break;
         }
         if (!ok) reply_.data[0] = uint8_t(Result::Failed);
-        return false;
     }
     Bridge bridge_;
     Network network_{bridge_};
@@ -303,7 +308,7 @@ private:
     Wire wire_;
     Frame reply_{};
     bool haveReply_ = false;
-    uint32_t lastUser_ = 0, prepared_ = 0;
+    uint32_t prepared_ = 0;
 };
 }
 }

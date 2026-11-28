@@ -30,8 +30,8 @@ jobs:
         run: |
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" | jq -e -s '
             reduce (.[][] | select(.draft == false) | .assets[]) as $asset (
-              # Downloads recorded before the original v0.22.5 and v0.22.6 pre-releases were removed.
-              {total: 10, ZT703S: 4, ZT706S: 1};
+              # Recorded downloads from replaced pre-releases and superseded v0.22.5 assets.
+              {total: 29, ZT703S: 9, ZT706S: 4};
               .total += $asset.download_count |
               (($asset.name | capture("^OpenOSC-Firmware-(?<model>ZT703S|ZT706S)(?:-v[0-9]+[.][0-9]+[.][0-9]+)?[.]OSC$"; "i").model | ascii_upcase) // null) as $model |
               if $model then .[$model] += $asset.download_count else . end

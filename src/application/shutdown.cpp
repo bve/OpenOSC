@@ -10,6 +10,9 @@
 #include "openosc/platform/recovery_request.hpp"
 #include "openosc/ui/editors/confirmation.hpp"
 #include "openosc/usb/instrument_usb.hpp"
+#if defined(__arm__)
+#include "openosc/companion/link.hpp"
+#endif
 
 namespace openosc {
 void ApplicationController::confirmShutdown(ShutdownAction action) {
@@ -48,7 +51,15 @@ public:
     // USB first: the unconfirmed 360 MHz guard's "stopped" (one attempt) is written without a host, while
     // the volume is still mounted (BootGuard).
     void stopInstruments() override { if (a_.usb_) a_.usb_->stop(); a_.stopBootGuard(); a_.data_.beginShutdown(); }
-    bool instrumentsStopped() override { return a_.data_.shutdownReady(); }
+    bool instrumentsStopped() override {
+#if defined(__arm__)
+        // The module keeps its supply through a restart or entry to Recovery.
+        const auto &link = companion::link();
+        if (a_.shutdownSequence_.action() != ShutdownAction::PowerOff &&
+            (link.active() || link.state() == companion::Link::State::Stopping)) return false;
+#endif
+        return a_.data_.shutdownReady();
+    }
     void cancelRecorders() override {
         a_.data_.scopeRecorder().cancel(true); a_.data_.meterLogger().cancel(true); // Out of time: the .TMPs stay.
         a_.data_.meterSession().cancel(true);

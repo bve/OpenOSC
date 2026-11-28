@@ -8,12 +8,21 @@
 #include "ota/web_network.hpp"
 #include "portal_page.hpp"
 #include "freertos/task.h"
+#include "lwip/sockets.h"
 #include <cstring>
 #include <iterator>
 
 namespace openosc::companion {
 using web::field;
 using web::number;
+esp_err_t Portal::connect(httpd_handle_t server, int) {
+    ++static_cast<Portal *>(httpd_get_global_user_ctx(server))->clients_;
+    return ESP_OK;
+}
+void Portal::disconnect(httpd_handle_t server, int socket) {
+    --static_cast<Portal *>(httpd_get_global_user_ctx(server))->clients_;
+    close(socket);
+}
 esp_err_t Portal::request(httpd_req_t *req) { return static_cast<Portal *>(req->user_ctx)->serve(req); }
 esp_err_t Portal::redirect(httpd_req_t *req, httpd_err_code_t) {
     wifi_mode_t mode;
@@ -125,6 +134,14 @@ void Portal::poll(bool up) {
     config.lru_purge_enable = true;
     config.recv_wait_timeout = 4;
     config.stack_size = 6144;
+    config.keep_alive_enable = true;
+    config.keep_alive_idle = 15;
+    config.keep_alive_interval = 5;
+    config.keep_alive_count = 3;
+    config.global_user_ctx = this;
+    config.global_user_ctx_free_fn = [](void *) {};
+    config.open_fn = connect;
+    config.close_fn = disconnect;
     if (httpd_start(&server_, &config) != ESP_OK) return;
     for (const char *path : Paths) {
         httpd_uri_t route{};

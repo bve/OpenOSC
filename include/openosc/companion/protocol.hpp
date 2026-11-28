@@ -25,6 +25,7 @@ enum StatusRequest : uint8_t { UserActivity = 1, IncludeWifiSettings = 128 };
 // password follows it. The network name still occupies the remainder of the status.
 static_assert(NetworkNameOffset + 2 + PasswordBytes + ApNameBytes <= Payload);
 inline constexpr uint8_t IdleMinutes[] = {0, 1, 5, 15, 30};
+inline constexpr uint8_t DefaultIdleMinutes = 15;
 inline bool idleValid(uint8_t value) {
     for (auto minutes : IdleMinutes) if (value == minutes) return true;
     return false;

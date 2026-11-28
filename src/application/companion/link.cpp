@@ -8,6 +8,10 @@
 #include <new>
 
 namespace openosc::companion {
+namespace {
+constexpr char SleepUnconfirmed[] = "Wireless module did not confirm sleep";
+}
+
 Link &link() {
 #if OPENOSC_BOARD == 706
     // The external generator leaves room in SRAM4 for the wireless state.
@@ -37,6 +41,7 @@ bool Link::workDue(uint32_t now) const {
            exchangeDue(now) || fileDue(now);
 }
 bool Link::deferCapture(uint32_t now) {
+    if (state_ == State::Stopping) return true;
     return captureWindow_.defer(now, workDue(now), (session_ && !reject_) || (status_.flags & Flag::FileRequest));
 }
 
@@ -128,7 +133,11 @@ void Link::exchange(const Frame &frame, InstrumentUsb &usb) {
 void Link::accept(const Frame &frame, uint32_t now, InstrumentUsb &usb) {
     captureWindow_.release();
     pending_ = {};
-    if (frame.command == Command::Sleep) { finish(usb, State::Off, "Companion asleep"); return; }
+    if (frame.command == Command::Sleep) {
+        const bool sleeping = frame.data[0] == uint8_t(Result::Ok) || frame.data[0] == uint8_t(Result::Sleeping);
+        finish(usb, sleeping ? State::Off : State::Unavailable, sleeping ? "Companion asleep" : SleepUnconfirmed);
+        return;
+    }
     if (frame.data[0] == uint8_t(Result::Sleeping)) { finish(usb, State::Off, "Companion asleep after inactivity"); return; }
     if (frame.data[0] != uint8_t(Result::Ok)) {
         if (frame.command == Command::Network || frame.command == Command::Scan) loadingNetworks_ = false;
@@ -250,7 +259,7 @@ void Link::serviceTransfer(uint32_t now, InstrumentUsb &usb) {
     }
     if (fetching_ && int32_t(now - deadline_) >= 0) {
         if (++tries_ >= (pending_ == Command::Hello ? 3u : 2u)) {
-            finish(usb, pending_ == Command::Sleep ? State::Off : State::Unavailable, "Companion link timed out");
+            finish(usb, State::Unavailable, pending_ == Command::Sleep ? SleepUnconfirmed : "Companion link timed out");
             return;
         }
         fetching_ = false;

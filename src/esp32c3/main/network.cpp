@@ -34,7 +34,7 @@ int bound(int type, uint16_t port) {
 }
 bool retry() { return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR; }
 
-void configureDebugSocket(int fd) {
+void configureClientSocket(int fd) {
     const int enabled = 1, idle = 6, interval = 2, probes = 3;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof enabled);
     // Reclaim the connection after a lost Wi-Fi link, even if the peer cannot send a FIN.
@@ -65,7 +65,7 @@ bool Network::initialize() {
     wifi_init_config_t defaults = WIFI_INIT_CONFIG_DEFAULT();
     return esp_wifi_init(&defaults) == ESP_OK &&
         esp_wifi_set_storage(WIFI_STORAGE_RAM) == ESP_OK &&
-        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, event, this) == ESP_OK;
+        esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, event, this) == ESP_OK;
 }
 
 bool Network::start(wifi_mode_t value) {
@@ -142,7 +142,20 @@ bool Network::scan() {
     if (!scanning_ && mode_ == Mode::Off) wifiOff();
     return scanning_;
 }
-void Network::event(void *context, esp_event_base_t, int32_t, void *) { static_cast<Network *>(context)->scanDone_ = true; }
+void Network::event(void *context, esp_event_base_t, int32_t id, void *) {
+    auto &network = *static_cast<Network *>(context);
+    switch (id) {
+    case WIFI_EVENT_SCAN_DONE: network.scanDone_ = true; break;
+    case WIFI_EVENT_AP_STOP: network.apClients_ = false; break;
+    case WIFI_EVENT_AP_STACONNECTED:
+    case WIFI_EVENT_AP_STADISCONNECTED: {
+        wifi_sta_list_t stations{};
+        network.apClients_ = esp_wifi_ap_get_sta_list(&stations) == ESP_OK && stations.num > 0;
+        break;
+    }
+    default: break;
+    }
+}
 uint32_t Network::ipv4() const {
     auto *iface = mode_ == Mode::Station ? sta_ : mode_ == Mode::AccessPoint ? ap_ : nullptr;
     esp_netif_ip_info_t ip{};
@@ -245,7 +258,7 @@ void Network::serveTcp(uint32_t now) {
     if (client_ < 0 && listener_ >= 0) {
         client_ = accept(listener_, nullptr, nullptr);
         if (client_ >= 0 && (fcntl(client_, F_SETFL, O_NONBLOCK) != 0 || !bridge_.open(Owner::Tcp, now))) release(client_);
-        if (client_ >= 0 && debug_) configureDebugSocket(client_);
+        if (client_ >= 0) configureClientSocket(client_);
     }
     if (client_ < 0) return;
     if (!bridge_.active(Owner::Tcp)) { release(client_); return; }

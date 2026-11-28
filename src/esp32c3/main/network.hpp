@@ -45,6 +45,7 @@ public:
     uint32_t passkey() const { return passkey_; }
     bool tcp() const { return tcp_; }
     uint8_t idle() const { return idle_; }
+    bool apHasClients() const { return mode_ == Mode::AccessPoint && apClients_.load(); }
     void useDebugPort(bool enabled);
     bool setTcp(bool value);
     bool setIdle(uint8_t value);
@@ -68,9 +69,9 @@ private:
     uint8_t commandsStorage_[2 * sizeof(PortalRequest)]{};
     Mode mode_ = Mode::Off;
     bool up_ = false, sntp_ = false, tcp_ = false, scanning_ = false, dnsOffered_ = false, debug_ = false;
-    std::atomic<bool> scanDone_{false};
+    std::atomic<bool> scanDone_{false}, apClients_{false};
     std::atomic<uint8_t> wifiPower_{DefaultWifiPower};
-    uint8_t idle_ = 5;
+    uint8_t idle_ = DefaultIdleMinutes;
     unsigned count_ = 0;
     uint32_t joiningUntil_ = 0, passkey_ = 0;
     char name_[ApNameBytes + 1]{}, ssid_[SsidBytes + 1]{}, password_[PasswordBytes + 1]{};
